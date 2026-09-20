@@ -104,3 +104,29 @@ Release 会包含 amd64 / arm64 的 `DUI-node`、`xbctl` 以及 `SHA256SUMS`。
 面板一键安装和 `xbctl upgrade` 默认读取 GitHub 的 latest Release。
 
 > 从 v0.1.1 及更早的旧命名版本迁移到 `DUI-node` 时，请先执行一次新版安装脚本的 `upgrade` 动作完成目录、二进制和 systemd 服务迁移；迁移完成后后续版本继续使用 `xbctl upgrade`。
+
+## DUI-Gateway
+
+`gateway/` 提供独立的加密 API 中间层，参考 JC 现有中间件的调用方式实现：
+
+```text
+前端 / 用户 → HTTPS → DUI-Gateway → 真实 DBoard 后端
+```
+
+普通 API 路径使用 AES-CBC + PKCS7 加密后通过 `X-IV` 头传输；订阅和支付通知路径支持直通。真实后端地址只保存在 Gateway 服务端配置中。
+
+安装示例：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/gateway/install.sh | \
+  sudo bash -s -- install \
+  --backend 'https://backend.example.com'
+```
+
+详细说明见 `gateway/README.md`。
+
+Gateway 使用独立的 `gateway-v*` prerelease，不会改变 Node 的 GitHub `latest` Release：
+
+```bash
+./scripts/release-gateway.sh gateway-v0.1.0
+```
