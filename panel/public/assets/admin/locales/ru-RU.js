@@ -881,7 +881,7 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "server_ws_enable": {
         "title": "Включить связь через WebSocket",
         "description": "При включении узлы будут связываться с панелью через WebSocket для снижения задержки.",
-        "supported_clients": "Клиенты, поддерживающие WebSocket: Xboard Node"
+        "supported_clients": "Клиенты, поддерживающие WebSocket: DUI-node"
       },
       "server_ws_url": {
         "title": "URL WebSocket",
@@ -2791,19 +2791,19 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "notes": "Заметки",
       "notesPlaceholder": "Необязательные заметки о сервере",
       "isActive": "Включить сервер",
-      "isActiveDescription": "Отключённые серверы не используются xboard-node.",
+      "isActiveDescription": "Отключённые серверы не используются DUI-node.",
       "cancel": "Отмена",
       "submit": "Сохранить",
       "update": "Обновить"
     },
     "token": {
       "title": "Токен сервера",
-      "description": "Этот токен используется xboard-node для аутентификации. Храните его в безопасности.",
+      "description": "Этот токен используется DUI-node для аутентификации. Храните его в безопасности.",
       "show": "Показать токен",
       "hide": "Скрыть токен",
       "reset": "Сбросить токен",
       "resetConfirm": "Сбросить токен?",
-      "resetDescription": "Старый токен будет немедленно аннулирован. xboard-node потребует перенастройки.",
+      "resetDescription": "Старый токен будет немедленно аннулирован. DUI-node потребует перенастройки.",
       "copy": "Копировать",
       "copied": "Токен скопирован",
       "copiedInline": "Скопировано!",
@@ -2813,8 +2813,8 @@ window.XBOARD_TRANSLATIONS['ru-RU'] = {
       "createdHint": "Токен создан. Вы можете просмотреть его в любое время на странице сервера."
     },
     "install": {
-      "title": "Установить xboard-node",
-      "description": "Выполните эту команду на целевом сервере, чтобы установить xboard-node в режиме machine mode и подключить его к текущей записи сервера.",
+      "title": "Установить DUI-node",
+      "description": "Выполните эту команду на целевом сервере, чтобы установить DUI-node в режиме machine mode и подключить его к текущей записи сервера.",
       "copy": "Копировать команду установки",
       "copied": "Команда установки скопирована",
       "copiedInline": "Скопировано!",

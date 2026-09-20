@@ -16,9 +16,9 @@ gh auth status >/dev/null
 VERSION="$VERSION" make build-all
 
 sha256sum \
-  xboard-node-linux-amd64 \
+  DUI-node-linux-amd64 \
   xbctl-linux-amd64 \
-  xboard-node-linux-arm64 \
+  DUI-node-linux-arm64 \
   xbctl-linux-arm64 > SHA256SUMS
 gh release create "$VERSION" \
   --repo shini74744/DBoard \
@@ -26,8 +26,8 @@ gh release create "$VERSION" \
   --title "DBoard $VERSION" \
   --generate-notes \
   --latest \
-  xboard-node-linux-amd64 \
+  DUI-node-linux-amd64 \
   xbctl-linux-amd64 \
-  xboard-node-linux-arm64 \
+  DUI-node-linux-arm64 \
   xbctl-linux-arm64 \
   SHA256SUMS

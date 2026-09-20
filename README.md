@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/node/install
   sudo bash -s -- --mode machine --panel http://203.0.113.10:8888 --token TOKEN --machine-id 1
 ```
 
-安装器从 DBoard 的 GitHub Release 下载与 CPU 架构对应的 `xboard-node` 和 `xbctl`。
+安装器从 DBoard 的 GitHub Release 下载与 CPU 架构对应的 `DUI-node` 和 `xbctl`。
 
 ## 双内核说明
 
@@ -100,5 +100,7 @@ panel/public/assets/admin/
 ./scripts/release-node.sh v0.1.0
 ```
 
-Release 会包含 amd64 / arm64 的 `xboard-node`、`xbctl` 以及 `SHA256SUMS`。
+Release 会包含 amd64 / arm64 的 `DUI-node`、`xbctl` 以及 `SHA256SUMS`。
 面板一键安装和 `xbctl upgrade` 默认读取 GitHub 的 latest Release。
+
+> 从 v0.1.1 及更早的旧命名版本迁移到 `DUI-node` 时，请先执行一次新版安装脚本的 `upgrade` 动作完成目录、二进制和 systemd 服务迁移；迁移完成后后续版本继续使用 `xbctl upgrade`。

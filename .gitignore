@@ -16,10 +16,10 @@ storage/framework/sessions/*
 storage/framework/views/*
 
 # Build outputs
-xboard-node
-xboard-node-linux-*
-xbctl
-xbctl-linux-*
+/DUI-node
+/DUI-node-linux-*
+/xbctl
+/xbctl-linux-*
 *.exe
 
 # Editors / OS

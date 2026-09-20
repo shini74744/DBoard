@@ -8,16 +8,25 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-APP_NAME="xboard-node"
-INSTALL_ROOT="/etc/xboard-node"
+APP_NAME="DUI-node"
+INSTALL_ROOT="/etc/DUI-node"
 BACKUP_DIR="${INSTALL_ROOT}/backups"
 INSTALL_META="${INSTALL_ROOT}/install-meta.json"
 CONFIG_FILE="${INSTALL_ROOT}/config.yml"
 CREDENTIALS_FILE="${INSTALL_ROOT}/credentials.env"
-BINARY_PATH="/usr/local/bin/xboard-node"
-SERVICE_NAME="xboard-node.service"
+BINARY_PATH="/usr/local/bin/DUI-node"
+SERVICE_NAME="DUI-node.service"
 SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
 CLI_PATH="/usr/local/bin/xbctl"
+
+# One-time migration support for installations created before the DUI-node rename.
+LEGACY_INSTALL_ROOT="/etc/xboard-node"
+LEGACY_CONFIG_FILE="$LEGACY_INSTALL_ROOT/config.yml"
+LEGACY_CREDENTIALS_FILE="$LEGACY_INSTALL_ROOT/credentials.env"
+LEGACY_BINARY_PATH="/usr/local/bin/xboard-node"
+LEGACY_SERVICE_NAME="xboard-node.service"
+LEGACY_SERVICE_PATH="/etc/systemd/system/$LEGACY_SERVICE_NAME"
+LEGACY_DETECTED=0
 INSTALLER_COPY_PATH="${INSTALL_ROOT}/install.sh"
 CLI_BINARY_SOURCE=""
 DEFAULT_HEALTH_PORT=65530
@@ -95,8 +104,8 @@ load_health_port_from_config() {
 rollback_install() {
     log_warn "Rolling back installation"
     if [ -n "$BACKUP_PATH" ] && [ -d "$BACKUP_PATH" ]; then
-        if [ -f "$BACKUP_PATH/xboard-node" ]; then
-            install -m 755 "$BACKUP_PATH/xboard-node" "$BINARY_PATH"
+        if [ -f "$BACKUP_PATH/DUI-node" ]; then
+            install -m 755 "$BACKUP_PATH/DUI-node" "$BINARY_PATH"
         else
             rm -f "$BINARY_PATH"
         fi
@@ -139,6 +148,11 @@ rollback_install() {
     else
         systemctl disable "$SERVICE_NAME" >/dev/null 2>&1 || true
     fi
+    if [ "$LEGACY_DETECTED" -eq 1 ] && [ -f "$LEGACY_SERVICE_PATH" ]; then
+        systemctl daemon-reload || true
+        systemctl enable "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
+        systemctl restart "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
+    fi
     log_warn "Rollback complete"
 }
 
@@ -160,7 +174,7 @@ trap cleanup_tmp EXIT
 usage() {
     cat <<'HELP'
 
-  xboard-node Installer
+  DUI-node Installer
 
   ACTIONS:
     install      Install or reconcile the configured deployment (default)
@@ -187,13 +201,13 @@ usage() {
     --node-type, -T     Explicit node type for node mode
     --kernel, -k        singbox or xray (default: singbox)
     --version           Release version or latest (default: latest)
-    --binary            Use a local xboard-node binary path instead of downloading
+    --binary            Use a local DUI-node binary path instead of downloading
     --xbctl-binary      Use a local xbctl binary path instead of downloading
     --health-port       Local health port (default: 65530, use 0 to disable)
     --gomemlimit        Runtime GOMEMLIMIT value, e.g. 256MiB
     --gogc              Runtime GOGC value, e.g. 50
     --force-reconfigure Overwrite an existing install even if mode/target changed
-    --purge             With uninstall, delete /etc/xboard-node too
+    --purge             With uninstall, delete /etc/DUI-node too
     --yes, -y           Non-interactive confirmation for destructive operations
 
   EXAMPLES:
@@ -399,6 +413,34 @@ ensure_dirs() {
     chmod 700 "$INSTALL_ROOT"
 }
 
+migrate_legacy_layout() {
+    if [ -d "$INSTALL_ROOT" ] || [ ! -d "$LEGACY_INSTALL_ROOT" ]; then
+        return
+    fi
+
+    LEGACY_DETECTED=1
+    log_step "Migrating legacy node layout to DUI-node"
+    mkdir -p "$INSTALL_ROOT"
+    cp -a "$LEGACY_INSTALL_ROOT/." "$INSTALL_ROOT/"
+
+    if [ -f "$CONFIG_FILE" ]; then
+        sed -i "s#$LEGACY_INSTALL_ROOT#$INSTALL_ROOT#g" "$CONFIG_FILE"
+    fi
+}
+
+cleanup_legacy_layout() {
+    if [ "$LEGACY_DETECTED" -ne 1 ]; then
+        return
+    fi
+
+    systemctl stop "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
+    systemctl disable "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
+    rm -f "$LEGACY_SERVICE_PATH" "$LEGACY_BINARY_PATH"
+    rm -rf "$LEGACY_INSTALL_ROOT"
+    systemctl daemon-reload || true
+    log_info "Legacy node layout migrated to DUI-node"
+}
+
 validate_positive_int() {
     local label="$1"
     local value="$2"
@@ -469,12 +511,12 @@ select_binary_source() {
         echo "$BINARY_SOURCE"
         return
     fi
-    if [ -f "./xboard-node" ]; then
-        echo "./xboard-node"
+    if [ -f "./DUI-node" ]; then
+        echo "./DUI-node"
         return
     fi
-    if [ -f "./xboard-node-linux-${ARCH}" ]; then
-        echo "./xboard-node-linux-${ARCH}"
+    if [ -f "./DUI-node-linux-${ARCH}" ]; then
+        echo "./DUI-node-linux-${ARCH}"
         return
     fi
     echo ""
@@ -490,14 +532,14 @@ resolve_download_url() {
 }
 
 stage_binary() {
-    local staged="$TMP_DIR/xboard-node"
+    local staged="$TMP_DIR/DUI-node"
     local local_src
     local_src=$(select_binary_source)
     if [ -n "$local_src" ]; then
         log_step "Using local binary: ${local_src}"
         cp "$local_src" "$staged"
     else
-        resolve_download_url "xboard-node-linux-${ARCH}"
+        resolve_download_url "DUI-node-linux-${ARCH}"
         log_step "Downloading binary: ${DOWNLOAD_URL}"
         if ! curl -fsSL "$DOWNLOAD_URL" -o "$staged"; then
             log_error "Failed to download binary from ${DOWNLOAD_URL}"
@@ -591,7 +633,7 @@ render_config() {
 render_service() {
     cat >"$TMP_DIR/${SERVICE_NAME}" <<EOF_UNIT
 [Unit]
-Description=Xboard Node Backend
+Description=DUI-node Backend
 Documentation=https://github.com/shini74744/DBoard
 After=network-online.target
 Wants=network-online.target
@@ -617,7 +659,7 @@ backup_existing_state() {
     BACKUP_PATH="${BACKUP_DIR}/$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$BACKUP_PATH"
     if [ -x "$BINARY_PATH" ]; then
-        cp "$BINARY_PATH" "$BACKUP_PATH/xboard-node"
+        cp "$BINARY_PATH" "$BACKUP_PATH/DUI-node"
     fi
     if [ -x "$CLI_PATH" ]; then
         cp "$CLI_PATH" "$BACKUP_PATH/xbctl"
@@ -643,11 +685,14 @@ stop_existing_service() {
     if [ -f "$SERVICE_PATH" ] || systemctl is-active "$SERVICE_NAME" >/dev/null 2>&1; then
         systemctl stop "$SERVICE_NAME" >/dev/null 2>&1 || true
     fi
+    if [ -f "$LEGACY_SERVICE_PATH" ] || systemctl is-active "$LEGACY_SERVICE_NAME" >/dev/null 2>&1; then
+        systemctl stop "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
+    fi
 }
 
 install_staged_files() {
     stop_existing_service
-    install -m 755 "$TMP_DIR/xboard-node" "$BINARY_PATH"
+    install -m 755 "$TMP_DIR/DUI-node" "$BINARY_PATH"
     install -m 600 "$TMP_DIR/config.yml" "$CONFIG_FILE"
     install -m 600 "$TMP_DIR/credentials.env" "$CREDENTIALS_FILE"
     install -m 644 "$TMP_DIR/install-meta.json" "$INSTALL_META"
@@ -704,6 +749,7 @@ start_service() {
 
 perform_install() {
     validate_install_request
+    migrate_legacy_layout
     detect_current_state
     require_reconfigure_confirmation
     TMP_DIR=$(mktemp -d)
@@ -715,6 +761,7 @@ perform_install() {
     backup_existing_state
     install_staged_files
     start_service
+    cleanup_legacy_layout
 
     log_info "Installation succeeded"
     log_info "Service: ${SERVICE_NAME}"
@@ -727,6 +774,7 @@ perform_install() {
 }
 
 perform_upgrade() {
+    migrate_legacy_layout
     detect_current_state
     if [ "$CURRENT_STATE" = "fresh" ]; then
         log_warn "No existing install found; falling back to install"
@@ -739,7 +787,7 @@ perform_upgrade() {
     stage_xbctl
     render_service
     backup_existing_state
-    install -m 755 "$TMP_DIR/xboard-node" "$BINARY_PATH"
+    install -m 755 "$TMP_DIR/DUI-node" "$BINARY_PATH"
     install -m 755 "$TMP_DIR/xbctl" "$CLI_PATH"
     ln -sf "$CLI_PATH" /usr/bin/xbctl 2>/dev/null || true
     install -m 644 "$TMP_DIR/${SERVICE_NAME}" "$SERVICE_PATH"
@@ -750,6 +798,7 @@ perform_upgrade() {
         show_recent_logs
         return 1
     fi
+    cleanup_legacy_layout
     log_info "Upgrade succeeded"
 }
 
@@ -789,7 +838,7 @@ perform_uninstall() {
 perform_status() {
     detect_current_state
     echo
-    echo -e "${BOLD}xboard-node install status${NC}"
+    echo -e "${BOLD}DUI-node install status${NC}"
     echo "  state:   ${CURRENT_STATE}"
     if [ -f "$INSTALL_META" ]; then
         echo "  meta:    ${INSTALL_META}"

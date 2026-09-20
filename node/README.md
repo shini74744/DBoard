@@ -1,4 +1,4 @@
-# xboard-node
+# DUI-node
 
 DBoard node backend. Supports `sing-box` / `xray-core` dual kernels.
 
@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/node/install
 ```
 
 The panel URL may be an IP plus port, for example `http://203.0.113.10:8888`.
-The installer downloads `xboard-node` and `xbctl` from the latest DBoard GitHub Release.
+The installer downloads `DUI-node` and `xbctl` from the latest DBoard GitHub Release.
 
 ## xbctl
 
