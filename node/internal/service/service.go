@@ -540,7 +540,12 @@ func (s *Service) handleWSEvent(ctx context.Context, event controlplane.Event) {
 			return
 		}
 		newConfigHash := computeConfigHash(event.Config)
-		if newConfigHash == s.lastConfigHash {
+		// Only suppress an identical snapshot when that exact configuration is
+		// actually running. lastConfigHash tracks the latest desired snapshot,
+		// which may have failed during Reload/Start. Treating desired == applied
+		// can strand a node forever after one failed apply because subsequent WS
+		// full-sync messages carry the same hash.
+		if newConfigHash == s.lastConfigHash && s.isConfigApplied(newConfigHash) {
 			return
 		}
 		if err := validateNodeRuntime(s.cfg, s.kernel.Protocols(), event.Config, s.cert.TLSCert()); err != nil {
@@ -608,7 +613,10 @@ func (s *Service) pullViaAPIAsync(ctx context.Context) {
 		return
 	}
 
-	currentConfigHash := s.lastConfigHash
+	// Compare REST snapshots against the successfully applied configuration,
+	// not merely the latest desired hash. A failed Reload/Start must remain
+	// retryable on the next poll.
+	appliedConfigHash := s.successfullyAppliedConfigHash()
 	certChanged := s.cert.CertRenewed()
 
 	go func() {
@@ -625,7 +633,7 @@ func (s *Service) pullViaAPIAsync(ctx context.Context) {
 		if snapshot.Config != nil {
 			result.config = snapshot.Config
 			result.configHash = computeConfigHash(snapshot.Config)
-			if result.configHash == currentConfigHash && !certChanged {
+			if result.configHash == appliedConfigHash && !certChanged {
 				result.config = nil
 			}
 		}
@@ -901,6 +909,20 @@ func subtractUsers(base, delta []model.UserSpec) []model.UserSpec {
 		}
 	}
 	return out
+}
+
+// successfullyAppliedConfigHash returns the hash of the configuration that is
+// actually running in the kernel. The desired snapshot (lastConfig/lastConfigHash)
+// is intentionally separate so a failed apply can be retried.
+func (s *Service) successfullyAppliedConfigHash() string {
+	if s.kernel == nil || !s.kernel.IsRunning() || s.appliedState.Config == nil {
+		return ""
+	}
+	return computeConfigHash(s.appliedState.Config)
+}
+
+func (s *Service) isConfigApplied(hash string) bool {
+	return hash != "" && s.successfullyAppliedConfigHash() == hash
 }
 
 // applyChanges applies config changes to the kernel. User-only changes are

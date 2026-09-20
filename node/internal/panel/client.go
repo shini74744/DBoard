@@ -217,15 +217,12 @@ func (c *Client) userPath() string {
 
 // GetConfig fetches node configuration. Returns nil if not modified (304).
 func (c *Client) GetConfig() (*NodeConfig, error) {
-	resp, err := c.doRequest("GET", c.configPath(), nil, c.configETag)
+	resp, err := c.doRequest("GET", c.configPath(), nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("get config: %w", err)
 	}
 	defer drainAndClose(resp.Body)
 
-	if resp.StatusCode == http.StatusNotModified {
-		return nil, nil
-	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, body)
@@ -247,9 +244,6 @@ func (c *Client) GetConfig() (*NodeConfig, error) {
 		return nil, fmt.Errorf("invalid config: missing protocol")
 	}
 
-	if etag := resp.Header.Get("ETag"); etag != "" {
-		c.configETag = etag
-	}
 	return &cfg, nil
 }
 

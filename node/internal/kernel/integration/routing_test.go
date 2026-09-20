@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"bufio"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -110,6 +111,53 @@ func TestSniffedHTTPKeywordAndRegexp(t *testing.T) {
 		})
 	}
 }
+func TestSniffedTLSKeywordRoute(t *testing.T) {
+	for _, core := range []string{"xray", "singbox"} {
+		t.Run(core, func(t *testing.T) {
+			match, other := newExit(t, "match"), newExit(t, "other")
+			n := nodeWithExits(t, match, other)
+			n.CustomRouteRules = []model.CustomRouteRule{
+				{Match: model.RouteMatch{Domains: []string{"keyword:ipleak"}}, Action: model.RouteAction{Type: "route", Target: "match"}},
+				{Action: model.RouteAction{Type: "route", Target: "other"}},
+			}
+			_, addr := launchSpec(t, core, n, t.TempDir())
+
+			sendHello := func(serverName string) {
+				t.Helper()
+				beforeMatch, beforeOther := match.connects.Load(), other.connects.Load()
+				c, _, err := authControl(addr, 1, "198.18.0.1:443")
+				if err != nil {
+					t.Fatal(err)
+				}
+				tc := tls.Client(c, &tls.Config{
+					ServerName: serverName,
+					MinVersion: tls.VersionTLS12,
+				})
+				_ = tc.SetDeadline(time.Now().Add(750 * time.Millisecond))
+				_ = tc.Handshake()
+				_ = tc.Close()
+
+				deadline := time.Now().Add(time.Second)
+				for time.Now().Before(deadline) &&
+					match.connects.Load() == beforeMatch &&
+					other.connects.Load() == beforeOther {
+					time.Sleep(10 * time.Millisecond)
+				}
+				if strings.Contains(serverName, "ipleak") {
+					if match.connects.Load() <= beforeMatch || other.connects.Load() != beforeOther {
+						t.Fatalf("TLS SNI %s did not route to keyword member", serverName)
+					}
+				} else if other.connects.Load() <= beforeOther || match.connects.Load() != beforeMatch {
+					t.Fatalf("TLS SNI %s did not use fallback route", serverName)
+				}
+			}
+
+			sendHello("www.ipleak.net")
+			sendHello("www.example.net")
+		})
+	}
+}
+
 func TestReloadMembershipAndInvalidConfigRollback(t *testing.T) {
 	for _, core := range []string{"xray", "singbox"} {
 		t.Run(core, func(t *testing.T) {

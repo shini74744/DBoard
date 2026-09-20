@@ -2,6 +2,7 @@ package panel
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -54,35 +55,31 @@ func TestGetConfig_Success(t *testing.T) {
 	}
 }
 
-func TestGetConfig_NotModified(t *testing.T) {
+func TestGetConfig_AlwaysFetchesFullSnapshot(t *testing.T) {
 	callCount := 0
 	ts, client := newTestServer(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
-		if callCount == 1 {
-			w.Header().Set("ETag", `"etag-1"`)
-			json.NewEncoder(w).Encode(NodeConfig{Protocol: "shadowsocks"})
-			return
+		if got := r.Header.Get("If-None-Match"); got != "" {
+			t.Errorf("config polling must not send If-None-Match, got %q", got)
 		}
-		if r.Header.Get("If-None-Match") != `"etag-1"` {
-			t.Errorf("expected If-None-Match header, got %q", r.Header.Get("If-None-Match"))
-		}
-		w.WriteHeader(http.StatusNotModified)
+		w.Header().Set("ETag", fmt.Sprintf("\"etag-%d\"", callCount))
+		json.NewEncoder(w).Encode(NodeConfig{
+			Protocol:   "shadowsocks",
+			ServerPort: 1000 + callCount,
+		})
 	})
 	defer ts.Close()
 
-	// First call — get config
-	cfg, err := client.GetConfig()
-	if err != nil || cfg == nil {
-		t.Fatalf("first GetConfig: err=%v cfg=%v", err, cfg)
+	first, err := client.GetConfig()
+	if err != nil || first == nil {
+		t.Fatalf("first GetConfig: err=%v cfg=%v", err, first)
 	}
-
-	// Second call — should be 304
-	cfg, err = client.GetConfig()
-	if err != nil {
-		t.Fatalf("second GetConfig: %v", err)
+	second, err := client.GetConfig()
+	if err != nil || second == nil {
+		t.Fatalf("second GetConfig: err=%v cfg=%v", err, second)
 	}
-	if cfg != nil {
-		t.Error("expected nil config for 304")
+	if first.ServerPort == second.ServerPort || callCount != 2 {
+		t.Fatalf("expected two full snapshots, first=%d second=%d calls=%d", first.ServerPort, second.ServerPort, callCount)
 	}
 }
 

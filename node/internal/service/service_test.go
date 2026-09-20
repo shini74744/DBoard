@@ -8,6 +8,7 @@ import (
 
 	"github.com/shini74744/DBoard/node/internal/cert"
 	"github.com/shini74744/DBoard/node/internal/config"
+	"github.com/shini74744/DBoard/node/internal/controlplane"
 	"github.com/shini74744/DBoard/node/internal/kernel"
 	"github.com/shini74744/DBoard/node/internal/limiter"
 	"github.com/shini74744/DBoard/node/internal/model"
@@ -18,10 +19,12 @@ type fakeKernel struct {
 	running bool
 
 	startErr  error
+	reloadErr error
 	updateErr error
 	addErr    error
 
 	startCalls  int
+	reloadCalls int
 	updateCalls int
 	addCalls    int
 	removeCalls int
@@ -50,7 +53,8 @@ func (f *fakeKernel) Stop()           { f.running = false }
 func (f *fakeKernel) IsRunning() bool { return f.running }
 func (f *fakeKernel) Reload(nodeConfig *model.NodeSpec, users []model.UserSpec, tls kernel.TLSCert) error {
 	_, _, _ = nodeConfig, users, tls
-	return nil
+	f.reloadCalls++
+	return f.reloadErr
 }
 func (f *fakeKernel) AddUsers(users []model.UserSpec) (int, error) {
 	f.addCalls++
@@ -107,6 +111,65 @@ func newTestService(k *fakeKernel) *Service {
 	k.SetSpeedLimitFunc(s.speedTracker.GetLimiter)
 	k.SetDeviceLimitFunc(s.limiter.GetDeviceLimitByUUID)
 	return s
+}
+
+func TestHandleWSEventRetriesSameConfigAfterFailedApply(t *testing.T) {
+	k := &fakeKernel{
+		running:   true,
+		reloadErr: errors.New("reload failed"),
+		startErr:  errors.New("restart failed"),
+	}
+	s := newTestService(k)
+	s.cfg = &config.Config{Kernel: config.KernelConfig{Type: "singbox"}}
+
+	oldConfig := &model.NodeSpec{Protocol: "vless", ServerPort: 10001}
+	newConfig := &model.NodeSpec{Protocol: "vless", ServerPort: 10002}
+	users := []model.UserSpec{{ID: 1, UUID: "11111111-1111-1111-1111-111111111111"}}
+
+	s.lastConfig = oldConfig
+	s.lastConfigHash = computeConfigHash(oldConfig)
+	s.lastUsers = users
+	s.lastUserHash = computeUserHash(users)
+	s.appliedState.Config = oldConfig
+	s.appliedState.Users = users
+
+	event := controlplane.Event{Type: controlplane.EventSyncConfig, Config: newConfig}
+	s.handleWSEvent(context.Background(), event)
+
+	if k.reloadCalls != 1 || k.startCalls != 1 {
+		t.Fatalf("first apply calls reload=%d start=%d, want 1/1", k.reloadCalls, k.startCalls)
+	}
+	if s.lastConfigHash != computeConfigHash(newConfig) {
+		t.Fatal("desired config hash was not updated")
+	}
+	if s.isConfigApplied(computeConfigHash(newConfig)) {
+		t.Fatal("failed config must not be marked as successfully applied")
+	}
+
+	// The panel sends the same full snapshot again. Before this regression fix
+	// lastConfigHash caused an early return here, permanently stranding the
+	// runtime on the previous configuration.
+	s.handleWSEvent(context.Background(), event)
+
+	if k.reloadCalls != 2 || k.startCalls != 2 {
+		t.Fatalf("retry calls reload=%d start=%d, want 2/2", k.reloadCalls, k.startCalls)
+	}
+}
+
+func TestSuccessfullyAppliedConfigHashRequiresRunningKernel(t *testing.T) {
+	k := &fakeKernel{running: false}
+	s := newTestService(k)
+	cfg := &model.NodeSpec{Protocol: "vless", ServerPort: 10001}
+	s.appliedState.Config = cfg
+
+	if got := s.successfullyAppliedConfigHash(); got != "" {
+		t.Fatalf("hash=%q, want empty while kernel is stopped", got)
+	}
+
+	k.running = true
+	if got, want := s.successfullyAppliedConfigHash(), computeConfigHash(cfg); got != want {
+		t.Fatalf("hash=%q, want %q", got, want)
+	}
 }
 
 func TestApplyUserUpdatePreparesLimiterBeforeKernelUpdate(t *testing.T) {

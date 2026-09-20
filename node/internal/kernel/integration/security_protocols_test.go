@@ -76,6 +76,118 @@ func TestSS2022Interoperability(t *testing.T) {
 		}
 	}
 }
+func TestRealityVisionInboundToSS2022Outbound(t *testing.T) {
+	if !releaseUTLS {
+		t.Skip("Reality requires release build tag with_utls")
+	}
+	for _, core := range []string{"xray", "singbox"} {
+		t.Run(core, func(t *testing.T) {
+			cert := selfSigned(t)
+			pair, err := tls.X509KeyPair(cert.CertPEM, cert.KeyPEM)
+			if err != nil {
+				t.Fatal(err)
+			}
+			target, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{
+				Certificates:     []tls.Certificate{pair},
+				MinVersion:       tls.VersionTLS13,
+				CurvePreferences: []tls.CurveID{tls.X25519},
+				NextProtos:       []string{"h2", "http/1.1"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer target.Close()
+			go func() {
+				for {
+					c, err := target.Accept()
+					if err != nil {
+						return
+					}
+					go func(c net.Conn) {
+						defer c.Close()
+						c.SetDeadline(time.Now().Add(3 * time.Second))
+						io.Copy(io.Discard, c)
+					}(c)
+				}
+			}()
+
+			const size = 32
+			key := make([]byte, size)
+			if _, err := rand.Read(key); err != nil {
+				t.Fatal(err)
+			}
+			serverKey := base64.StdEncoding.EncodeToString(key)
+			userKey := make([]byte, size)
+			copy(userKey, userID)
+			method := "2022-blake3-aes-256-gcm"
+
+			ssPeer := anotherCore(t, "xray")
+			ssNode := &model.NodeSpec{
+				Protocol: "shadowsocks", ListenIP: "127.0.0.1",
+				ServerPort: freePort(t), Cipher: method, ServerKey: serverKey,
+				CustomRouteRules: []model.CustomRouteRule{{Action: model.RouteAction{Type: "direct"}}},
+			}
+			if err := ssPeer.Start(ssNode, []model.UserSpec{{ID: 1, UUID: userID}}, kernel.TLSCert{}); err != nil {
+				t.Fatal(err)
+			}
+			defer ssPeer.Stop()
+
+			secret, err := ecdh.X25519().GenerateKey(rand.Reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			realityNode := &model.NodeSpec{
+				Protocol: "vless", ListenIP: "127.0.0.1", ServerPort: freePort(t),
+				Network: "tcp", TLS: 2, Flow: "xtls-rprx-vision",
+				TLSSettings: map[string]any{
+					"private_key": base64.RawURLEncoding.EncodeToString(secret.Bytes()),
+					"short_id":    "abcd", "server_name": "localhost", "dest": target.Addr().String(),
+				},
+				CustomOutbounds: []model.OutboundConfig{{
+					Tag: "ss-out", Protocol: "shadowsocks",
+					Settings: map[string]any{
+						"server": "127.0.0.1", "server_port": ssNode.ServerPort,
+						"method":   method,
+						"password": serverKey + ":" + base64.StdEncoding.EncodeToString(userKey),
+					},
+				}},
+				CustomRouteRules: []model.CustomRouteRule{{
+					Action: model.RouteAction{Type: "route", Target: "ss-out"},
+				}},
+			}
+			server := anotherCore(t, core)
+			if err := server.Start(realityNode, []model.UserSpec{{ID: 1, UUID: userID}}, kernel.TLSCert{}); err != nil {
+				t.Fatal(err)
+			}
+			defer server.Stop()
+
+			if core == "xray" {
+				probeKey := target.Addr().String() + " localhost 2"
+				until := time.Now().Add(10 * time.Second)
+				for time.Now().Before(until) {
+					if v, ok := reality.GlobalPostHandshakeRecordsLens.Load(probeKey); ok {
+						if _, done := v.([]int); done {
+							break
+						}
+					}
+					time.Sleep(20 * time.Millisecond)
+				}
+			}
+
+			testGatewayEcho(t, "singbox", model.OutboundConfig{
+				Tag: "reality-node", Protocol: "vless",
+				Settings: map[string]any{
+					"server": "127.0.0.1", "server_port": realityNode.ServerPort,
+					"uuid": userID, "flow": "xtls-rprx-vision", "network": "tcp",
+					"tls_mode": "reality", "server_name": "localhost",
+					"public_key": base64.RawURLEncoding.EncodeToString(secret.PublicKey().Bytes()),
+					"short_id":   "abcd", "fingerprint": "chrome",
+				},
+			})
+		})
+	}
+}
+
 func TestRealityInteroperability(t *testing.T) {
 	if !releaseUTLS {
 		t.Skip("Reality requires release build tag with_utls")

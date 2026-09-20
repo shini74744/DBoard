@@ -63,9 +63,11 @@ class UniProxyController extends Controller
         ];
 
         $eTag = sha1(json_encode($response));
-        if (str_contains($request->header('If-None-Match', ''), $eTag)) {
-            return response(null, 304);
-        }
+
+        // Always return the full node config. The node compares its own
+        // normalized config hash before Reload(). A 304 here can strand a
+        // node on an old runtime config if a previous apply failed after the
+        // HTTP client had already cached the newer ETag.
         return response($response)->header('ETag', "\"{$eTag}\"");
     }
 

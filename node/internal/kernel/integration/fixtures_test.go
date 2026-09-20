@@ -21,6 +21,7 @@ type mockExit struct {
 	down     atomic.Bool
 	delay    atomic.Int64
 	probes   atomic.Int64
+	connects atomic.Int64
 	mu       sync.Mutex
 	closers  []io.Closer
 }
@@ -86,6 +87,7 @@ func readAddress(r io.Reader) ([]byte, error) {
 	return append(typ, rest...), err
 }
 func (p *mockExit) handle(c net.Conn) {
+	p.connects.Add(1)
 	defer c.Close()
 	c.SetDeadline(time.Now().Add(20 * time.Second))
 	head := make([]byte, 2)
