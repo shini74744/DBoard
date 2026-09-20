@@ -1,0 +1,38 @@
+# Binaries
+/xboard-node
+/xboard-node-linux-*
+*.exe
+
+# Config files (may contain secrets)
+config.yml
+
+# Generated sing-box config
+singbox.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+vendor/
+config.json
+benchmark/
+# Keep patched dependencies reproducible; never rely on a modified Go module cache.
+/third_party/*
+!/third_party/sing/
+!/third_party/sing-box/
+!/third_party/XBOARD_PATCHES.md
+bench-results
+internal/kernel/singbox/config_bench_test.go
+internal/kernel/xray/config_bench_test.go
+internal/service/service_bench_test.go
+internal/tracker/tracker_bench_test.go
+cmd/xboard-node-bench-compare
+cmd/xboard-node-bench
+.env

@@ -1,0 +1,29 @@
+# Secrets and runtime data
+.env
+.env.*
+!*.example
+config.yml
+*.log
+*.sqlite
+*.sqlite3
+
+# Dependencies and caches
+vendor/
+node_modules/
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+
+# Build outputs
+xboard-node
+xboard-node-linux-*
+xbctl
+xbctl-linux-*
+*.exe
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
