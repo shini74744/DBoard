@@ -447,3 +447,52 @@ Docker 镜像由独立 GitHub Actions workflow 发布，不会改变 DUI-node �
 ## License
 
 DBoard 保留并遵循所使用上游项目及依赖的原始许可证。
+
+---
+
+# 交互式安装器说明
+
+推荐入口：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/install.sh)
+```
+
+主菜单：
+
+```text
+1. 安装/更新 独立版
+2. 安装/更新 Docker 版
+3. 仅安装 DUI-Gateway
+4. 查看 DBoard 状态
+0. 退出
+```
+
+安装器的核心行为：
+
+- 自动创建并复用 `/opt/dboard/shared`。
+- 已检测到 `INSTALLED=1|true` 时，只做升级和 migration，不重新初始化或清空数据库。
+- 独立版切换到 Docker 版时，会停用 native systemd 服务，防止重启后抢占端口。
+- Docker 版切换到独立版时，会先停止 DBoard Compose，再启动 native 服务。
+- 两种模式切换时自动调整 `.env` 中的 Redis 地址，但 Redis RDB 与 SQLite 仍保留在同一数据目录。
+- Docker 版优先拉取 GHCR 镜像；镜像不可用时自动从 GitHub main 构建。
+- DUI-Gateway 默认不安装，交互时由用户选择。
+- 安装器不会自动删除 `/opt/dboard/shared`。
+
+常用非交互参数：
+
+```bash
+# 独立版 + SQLite
+bash install.sh --mode native --database sqlite --admin admin@example.com --no-gateway --yes
+
+# Docker 版 + SQLite
+bash install.sh --mode docker --database sqlite --admin admin@example.com --no-gateway --yes
+
+# 单独安装 Gateway
+bash install.sh --mode gateway --gateway-backend http://127.0.0.1:7001 --gateway-port 3939 --yes
+
+# 查看状态
+bash install.sh --mode status
+```
+
+如果需要 MySQL/PostgreSQL 或自定义外部 Redis，建议使用交互安装或手工部署；官方自动化路径以 SQLite + Redis 8.4.2 为基准。

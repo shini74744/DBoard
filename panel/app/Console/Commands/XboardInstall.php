@@ -100,7 +100,9 @@ class XboardInstall extends Command
             $envConfig['APP_KEY'] = 'base64:' . base64_encode(Encrypter::generateKey('AES-256-CBC'));
             $isReidsValid = false;
             while (!$isReidsValid) {
-                // 判断是否为Docker环境
+                // Docker can use the embedded Unix-socket Redis. Native installers
+                // may pass ENABLE_REDIS=true + REDIS_HOST/REDIS_PORT to avoid an
+                // unnecessary interactive prompt while keeping manual installs intact.
                 $useBuiltinRedis = $isDocker && ($enableRedis || confirm(label: '是否启用Docker内置的Redis', default: true, yes: '启用', no: '不启用'));
                 if ($useBuiltinRedis) {
                     $envConfig['REDIS_HOST'] = '/data/redis.sock';
@@ -109,9 +111,17 @@ class XboardInstall extends Command
                     $isReidsValid = true;
                     break;
                 }
-                $envConfig['REDIS_HOST'] = text(label: '请输入Redis地址', default: '127.0.0.1', required: true);
-                $envConfig['REDIS_PORT'] = text(label: '请输入Redis端口', default: '6379', required: true);
-                $envConfig['REDIS_PASSWORD'] = text(label: '请输入redis密码(默认: null)', default: '');
+
+                $usePresetRedis = !$isDocker && $enableRedis && getenv('REDIS_HOST');
+                if ($usePresetRedis) {
+                    $envConfig['REDIS_HOST'] = getenv('REDIS_HOST');
+                    $envConfig['REDIS_PORT'] = getenv('REDIS_PORT') ?: '6379';
+                    $envConfig['REDIS_PASSWORD'] = getenv('REDIS_PASSWORD') ?: '';
+                } else {
+                    $envConfig['REDIS_HOST'] = text(label: '请输入Redis地址', default: '127.0.0.1', required: true);
+                    $envConfig['REDIS_PORT'] = text(label: '请输入Redis端口', default: '6379', required: true);
+                    $envConfig['REDIS_PASSWORD'] = text(label: '请输入redis密码(默认: null)', default: '');
+                }
                 $redisConfig = [
                     'client' => 'phpredis',
                     'default' => [
@@ -128,6 +138,10 @@ class XboardInstall extends Command
                 } catch (\Exception $e) {
                     // 连接失败，输出错误消息
                     $this->error("redis连接失败：" . $e->getMessage());
+                    if ($usePresetRedis) {
+                        $this->error("自动配置的 Redis 不可用，请检查服务后重试。");
+                        return;
+                    }
                     $this->info("请重新输入REDIS配置");
                     $enableRedis = false;
                     sleep(1);

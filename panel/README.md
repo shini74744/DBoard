@@ -1,106 +1,109 @@
-# Xboard
+# DBoard Panel
 
-<div align="center">
+这里是 DBoard 面板源码目录。
 
-[![Telegram](https://img.shields.io/badge/Telegram-Channel-blue)](https://t.me/XboardOfficial)
-![PHP](https://img.shields.io/badge/PHP-8.2+-green.svg)
-![MySQL](https://img.shields.io/badge/MySQL-5.7+-blue.svg)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+DBoard 面板基于 Laravel 12 + Octane，包含管理后台编译资源、插件系统、节点管理、出站规则、路由规则和负载均衡等定制。
 
-</div>
+> 完整安装、升级、Docker、独立部署、DUI-node、DUI-Gateway、备份与迁移说明统一维护在仓库根目录 [README.md](../README.md)。
 
-## 📖 Introduction
+## 部署方式
 
-Xboard is a modern panel system built on Laravel 11, focusing on providing a clean and efficient user experience.
+正式支持两种方式：
 
-## ✨ Features
+1. **独立版**：宿主机运行 PHP / Swoole / Redis / systemd。
+2. **Docker 版**：使用 DBoard 自己的 Docker 镜像。
 
-- 🚀 Built with Laravel 12 + Octane for significant performance gains
-- 🎨 Redesigned admin interface (React + Shadcn UI)
-- 📱 Modern user frontend (Vue3 + TypeScript)
-- 🐳 Ready-to-use Docker deployment solution
-- 🎯 Optimized system architecture for better maintainability
+两种方式共用同一个持久数据根目录：
 
-## 🚀 Quick Start
-
-```bash
-git clone -b compose --depth 1 https://github.com/cedar2025/Xboard && \
-cd Xboard && \
-docker compose run -it --rm \
-    -e ENABLE_SQLITE=true \
-    -e ENABLE_REDIS=true \
-    -e ADMIN_ACCOUNT=admin@demo.com \
-    xboard php artisan xboard:install && \
-docker compose up -d
+```text
+/opt/dboard/shared
 ```
 
-> After installation, visit: http://SERVER_IP:7001  
-> ⚠️ Make sure to save the admin credentials shown during installation
+不要把生产数据库、Redis RDB、插件运行数据或 `.env` 放进源码目录作为迁移依据。
 
-## 📖 Documentation
+## Docker 镜像
 
-### 🔄 Upgrade Notice
-> 🚨 **Important:** This version involves significant changes. Please strictly follow the upgrade documentation and backup your database before upgrading. Note that upgrading and migration are different processes, do not confuse them.
+项目镜像：
 
-### Development Guides
-- [Plugin Development Guide](./docs/en/development/plugin-development-guide.md) - Complete guide for developing XBoard plugins
-
-### Deployment Guides
-- [Deploy with 1Panel](./docs/en/installation/1panel.md)
-- [Deploy with Docker Compose](./docs/en/installation/docker-compose.md)
-- [Deploy with aaPanel](./docs/en/installation/aapanel.md)
-- [Deploy with aaPanel + Docker](./docs/en/installation/aapanel-docker.md) (Recommended)
-
-### Migration Guides
-- [Migrate from v2board dev](./docs/en/migration/v2board-dev.md)
-- [Migrate from v2board 1.7.4](./docs/en/migration/v2board-1.7.4.md)
-- [Migrate from v2board 1.7.3](./docs/en/migration/v2board-1.7.3.md)
-
-## 🛠️ Tech Stack
-
-- Backend: Laravel 11 + Octane
-- Admin Panel: React + Shadcn UI + TailwindCSS
-- User Frontend: Vue3 + TypeScript + NaiveUI
-- Deployment: Docker + Docker Compose
-- Caching: Redis + Octane Cache
-
-## 📷 Preview
-![Admin Preview](./docs/images/admin.png)
-
-![User Preview](./docs/images/user.png)
-
-## ⚠️ Disclaimer
-
-This project is for learning and communication purposes only. Users are responsible for any consequences of using this project.
-
-## ❤️ Support The Project
-
-If this project has helped you, donations are appreciated. They help support ongoing maintenance and would make me very happy.
-
-TRC20: `TLypStEWsVrj6Wz9mCxbXffqgt5yz3Y4XB`
-
-## 🌟 Maintenance Notice
-
-This project is currently under light maintenance. We will:
-- Fix critical bugs and security issues
-- Review and merge important pull requests
-- Provide necessary updates for compatibility
-
-However, new feature development may be limited.
-
-## 🔔 Important Notes
-
-1. Restart required after modifying admin path:
-```bash
-docker compose restart
+```text
+ghcr.io/shini74744/dboard:latest
 ```
 
-2. For aaPanel installations, restart the Octane daemon process
+`Dockerfile` 直接复制本目录源码进行构建，不会再 clone 或替换为 cedar2025/Xboard。
 
-## 🤝 Contributing
+镜像当前包含：
 
-Issues and Pull Requests are welcome to help improve the project.
+- PHP 8.3
+- Swoole 6.2.x
+- Redis 8.4.2
+- Laravel Octane
+- Horizon
+- WorkerMan WebSocket
+- Scheduler
+- Caddy
 
-## 📈 Star History
+默认 Compose：
 
-[![Stargazers over time](https://starchart.cc/cedar2025/Xboard.svg)](https://starchart.cc/cedar2025/Xboard)
+```text
+compose.sample.yaml
+```
+其它模板：
+
+- `compose.host.sample.yaml`
+- `compose.1panel.sample.yaml`
+- `compose.split.sample.yaml`
+
+本地构建：
+
+```bash
+cd ..
+./scripts/build-docker.sh dboard:local
+```
+
+## 手工安装依赖
+
+开发或独立部署时：
+
+```bash
+composer install --no-dev --prefer-dist --optimize-autoloader
+```
+
+底层兼容安装命令仍然保留：
+
+```bash
+php artisan xboard:install
+```
+
+命令名保留 `xboard:*` 是为了兼容原有升级链路和插件生态，不代表部署的是上游 Cedar XBoard。
+
+## 数据库
+
+默认推荐 SQLite：
+
+```text
+/opt/dboard/shared/data/database.sqlite
+```
+
+同时仍支持 MySQL 与 PostgreSQL。
+
+Redis 推荐并在官方部署中固定为：
+
+```text
+Redis 8.4.2
+```
+
+不要把 Redis 8.4.2 的 RDB 随意降级交给 Redis 7.x 读取。
+
+## 管理后台资源
+
+已验证的管理后台编译产物位于：
+
+```text
+public/assets/admin/
+```
+
+当前仓库保留的是可直接部署的编译资源。若重新构建前端，请确保 DBoard 的 DUI-node、路由、出站和负载均衡相关改动仍然存在。
+
+## 上游与许可证
+
+DBoard 基于 XBoard 进行二次开发。上游版权、依赖许可证及原始 License 要求继续保留并遵守。
