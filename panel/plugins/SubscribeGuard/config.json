@@ -1,0 +1,125 @@
+{
+  "name": "订阅守卫",
+  "code": "subscribe_guard",
+  "version": "1.0.4",
+  "description": "拦截浏览器、爬虫和非订阅客户端访问订阅链接，支持 CDN/反代真实 IP、IP 白名单、Laravel 日志、去重日志和后台日志查看。",
+  "author": "修正",
+  "type": "feature",
+  "require": {
+    "xboard": ">=1.0.0"
+  },
+  "config": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "label": "启用拦截",
+      "description": "关闭后插件不再拦截订阅请求。"
+    },
+    "allow_unknown_user_agent": {
+      "type": "boolean",
+      "default": false,
+      "label": "允许未知 UA",
+      "description": "默认禁止无法识别为订阅客户端的 User-Agent。"
+    },
+    "trusted_proxies": {
+      "type": "json",
+      "default": [
+        "127.0.0.1",
+        "::1"
+      ],
+      "label": "可信代理/CDN IP",
+      "description": "只有直接连接来源命中该列表时才允许读取真实 IP 请求头。默认仅信任本机反向代理，不要使用 *。"
+    },
+    "ip_headers": {
+      "type": "json",
+      "default": [
+        "CF-Connecting-IP",
+        "True-Client-IP",
+        "X-Azure-ClientIP",
+        "X-Azure-SocketIP",
+        "Fly-Client-IP",
+        "Fastly-Client-IP",
+        "X-Vercel-Forwarded-For",
+        "X-Original-Forwarded-For",
+        "X-Forwarded-For",
+        "Forwarded",
+        "X-Real-IP",
+        "X-Client-IP",
+        "X-Cluster-Client-IP"
+      ],
+      "label": "真实 IP 请求头",
+      "description": "按顺序读取 CDN/反代传递的真实客户端 IP。"
+    },
+    "ip_whitelist": {
+      "type": "json",
+      "default": [],
+      "label": "IP 白名单",
+      "description": "白名单 IP 不受 UA 拦截。支持单 IP 与 CIDR，例如 1.2.3.4、10.0.0.0/8。"
+    },
+    "allowed_user_agents": {
+      "type": "json",
+      "default": [
+        "clash",
+        "clash-verge",
+        "clashmeta",
+        "clashmetaforandroid",
+        "flclash",
+        "stash",
+        "sing-box",
+        "sfm",
+        "hiddify",
+        "v2rayn",
+        "v2rayng",
+        "nekobox",
+        "shadowrocket",
+        "quantumult",
+        "surge",
+        "loon",
+        "surfboard",
+        "sagernet",
+        "passwall",
+        "ssrplus"
+      ],
+      "label": "允许的订阅客户端 UA 关键词",
+      "description": "命中任一关键词即允许访问订阅。大小写不敏感。"
+    },
+    "blocked_user_agents": {
+      "type": "json",
+      "default": [
+        "mozilla",
+        "chrome",
+        "safari",
+        "firefox",
+        "edge",
+        "opera",
+        "msie",
+        "trident",
+        "bot",
+        "spider",
+        "crawler",
+        "curl",
+        "wget",
+        "python-requests",
+        "go-http-client",
+        "httpclient",
+        "scrapy",
+        "axios",
+        "postman"
+      ],
+      "label": "禁止的浏览器/爬虫 UA 关键词",
+      "description": "命中任一关键词且未命中允许列表时返回 404。大小写不敏感。"
+    },
+    "log_dedup_ttl": {
+      "type": "number",
+      "default": 300,
+      "label": "日志去重时间（秒）",
+      "description": "相同 IP、UA、路径、原因在该时间内只记录一次日志。"
+    },
+    "max_log_entries": {
+      "type": "number",
+      "default": 1000,
+      "label": "最多保留日志条数",
+      "description": "后台日志文件最多保留的拦截记录数量。"
+    }
+  }
+}

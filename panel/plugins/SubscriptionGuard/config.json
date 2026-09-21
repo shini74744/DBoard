@@ -1,0 +1,97 @@
+{
+  "name": "订阅防共享",
+  "code": "subscription_guard",
+  "version": "1.0.2",
+  "description": "记录订阅拉取日志，检测多IP共享订阅行为，自动封禁并重置订阅",
+  "author": "修正",
+  "type": "feature",
+  "require": {
+    "xboard": ">=1.0.0"
+  },
+  "config": {
+    "max_unique_ips": {
+      "type": "string",
+      "default": "5",
+      "label": "最大独立IP数",
+      "description": "时间窗口内允许的最大独立IP/网段数量，只有超过该数量才判定为滥用"
+    },
+    "time_window_hours": {
+      "type": "string",
+      "default": "24",
+      "label": "检测时间窗口(小时)",
+      "description": "统计独立IP的时间窗口，单位为小时"
+    },
+    "action_mode": {
+      "type": "string",
+      "default": "auto_ban",
+      "label": "处罚模式",
+      "description": "auto_ban=自动封禁+重置订阅, alert_only=仅通知管理员, reset_only=仅重置订阅不封禁"
+    },
+    "enable_subnet_grouping": {
+      "type": "boolean",
+      "default": false,
+      "label": "启用子网合并",
+      "description": "开启后 IPv4 按 /24、IPv6 按 /64 合并计数，降低动态地址导致的误判"
+    },
+    "ip_whitelist": {
+      "type": "text",
+      "default": "",
+      "label": "IP白名单",
+      "description": "不计入滥用检测的IP列表，每行一个IP或CIDR，如 192.168.1.0/24"
+    },
+    "enable_telegram_notify": {
+      "type": "boolean",
+      "default": true,
+      "label": "Telegram通知",
+      "description": "检测到滥用时是否通过Telegram通知管理员"
+    },
+    "rate_limit_seconds": {
+      "type": "string",
+      "default": "60",
+      "label": "拉取频率限制(秒)",
+      "description": "同一IP在此时间内重复拉取不重复记录，0为不限制"
+    },
+    "log_retention_days": {
+      "type": "string",
+      "default": "30",
+      "label": "日志保留天数",
+      "description": "自动清理超过此天数的拉取日志"
+    },
+    "exclude_admin": {
+      "type": "boolean",
+      "default": true,
+      "label": "排除管理员",
+      "description": "管理员和员工账号不受共享检测限制"
+    },
+    "ban_reason": {
+      "type": "string",
+      "default": "订阅共享滥用 - 检测到多IP拉取",
+      "label": "封禁备注",
+      "description": "自动封禁时写入用户备注的内容"
+    },
+    "trust_cdn_headers": {
+      "type": "boolean",
+      "default": true,
+      "label": "信任 CDN 真实IP头",
+      "description": "仅当直接连接来源命中受信代理列表时，才读取 CF-Connecting-IP 等 CDN 真实IP头"
+    },
+    "cdn_real_ip_headers": {
+      "type": "string",
+      "default": "CF-Connecting-IP,True-Client-IP,Fastly-Client-IP,X-Azure-ClientIP",
+      "label": "CDN 真实IP头顺序",
+      "description": "多个请求头用英文逗号分隔，按顺序优先读取"
+    },
+    "trusted_proxy_ips": {
+      "type": "text",
+      "default": "127.0.0.1\n::1",
+      "label": "受信代理IP/CIDR",
+      "description": "允许提供真实IP请求头的直接代理IP/CIDR。默认仅信任本机反向代理；不要配置为任意来源"
+    },
+    "proxy_real_ip_headers": {
+      "type": "string",
+      "default": "X-Forwarded-For,X-Real-IP,Forwarded",
+      "label": "通用代理真实IP头顺序",
+      "description": "多个请求头用英文逗号分隔，仅对受信代理生效"
+    }
+  }
+}
