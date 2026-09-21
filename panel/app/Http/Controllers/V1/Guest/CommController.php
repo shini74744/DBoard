@@ -13,6 +13,7 @@ class CommController extends Controller
     public function config()
     {
         $data = [
+            'frontend_theme' => admin_setting('frontend_theme', 'Xboard'),
             'tos_url' => admin_setting('tos_url'),
             'is_email_verify' => (int) admin_setting('email_verify', 0) ? 1 : 0,
             'is_invite_force' => (int) admin_setting('invite_force', 0) ? 1 : 0,

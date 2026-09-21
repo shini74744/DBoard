@@ -11,6 +11,39 @@ use Illuminate\Support\Facades\DB;
 
 class StatController extends Controller
 {
+    public function getDailyTraffic(Request $request)
+    {
+        $days = (int) ($request->validate([
+            'days' => 'sometimes|integer|min:1|max:90',
+        ])['days'] ?? 30);
+        $today = now()->startOfDay();
+        $start = $today->copy()->subDays($days - 1);
+
+        $records = StatUser::query()
+            ->where('user_id', $request->user()->id)
+            ->where('record_type', 'd')
+            ->whereBetween('record_at', [$start->timestamp, $today->copy()->endOfDay()->timestamp])
+            ->selectRaw('record_at, SUM(u) as upload, SUM(d) as download')
+            ->groupBy('record_at')
+            ->get()
+            ->keyBy(fn ($row) => $row->record_at);
+
+        $daily = [];
+        for ($day = $today->copy(); $day->gte($start); $day->subDay()) {
+            $row = $records->get($day->timestamp);
+            $upload = (int) ($row->upload ?? 0);
+            $download = (int) ($row->download ?? 0);
+            $daily[] = [
+                'date' => $day->toDateString(),
+                'u' => $upload,
+                'd' => $download,
+                'total' => $upload + $download,
+            ];
+        }
+
+        return $this->success($daily)->header('Cache-Control', 'private, no-store');
+    }
+
     public function getTrafficLog(Request $request)
     {
         $startDate = now()->startOfMonth()->timestamp;

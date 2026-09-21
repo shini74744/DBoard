@@ -78,6 +78,7 @@ class UserRoute
             $router->get('/knowledge/getCategory', [KnowledgeController::class, 'getCategory']);
             // Stat
             $router->get('/stat/getTrafficLog', [StatController::class, 'getTrafficLog']);
+            $router->get('/stat/getDailyTraffic', [StatController::class, 'getDailyTraffic']);
         });
     }
 }

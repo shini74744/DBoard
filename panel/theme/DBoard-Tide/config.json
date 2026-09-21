@@ -1,0 +1,33 @@
+{
+  "name": "DBoard 潮汐 · 青绿海岸",
+  "description": "DBoard 用户前端主题，支持浅色与深色模式",
+  "version": "1.0.0",
+  "images": "",
+  "configs": [
+    {
+      "label": "主题色",
+      "placeholder": "选择主题颜色",
+      "field_name": "theme_color",
+      "field_type": "select",
+      "select_options": {
+        "default": "默认绿色",
+        "blue": "蓝色",
+        "black": "黑色",
+        "darkblue": "深蓝色"
+      },
+      "default_value": "blue"
+    },
+    {
+      "label": "背景图片 URL",
+      "placeholder": "可选",
+      "field_name": "background_url",
+      "field_type": "input"
+    },
+    {
+      "label": "自定义页脚 HTML",
+      "placeholder": "可选",
+      "field_name": "custom_html",
+      "field_type": "textarea"
+    }
+  ]
+}

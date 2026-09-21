@@ -13,6 +13,7 @@ class CommController extends Controller
     public function config()
     {
         $data = [
+            'frontend_theme' => admin_setting('frontend_theme', 'Xboard'),
             'is_telegram' => (int)admin_setting('telegram_bot_enable', 0),
             'telegram_discuss_link' => admin_setting('telegram_discuss_link'),
             'stripe_pk' => admin_setting('stripe_pk_live'),

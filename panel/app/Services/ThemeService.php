@@ -15,7 +15,7 @@ class ThemeService
     private const USER_THEME_DIR = '/storage/theme/';
     private const CONFIG_FILE = 'config.json';
     private const SETTING_PREFIX = 'theme_';
-    private const SYSTEM_THEMES = ['Xboard', 'v2board'];
+    private const SYSTEM_THEMES = ['Xboard', 'v2board', 'DBoard-Tide', 'DBoard-Copper', 'DBoard-Iris'];
 
     public function __construct()
     {

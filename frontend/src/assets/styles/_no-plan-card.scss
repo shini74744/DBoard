@@ -1,0 +1,166 @@
+/*
+  公共样式：无权限提示卡片 / 没有套餐提示卡片
+  适用范围：Dashboard、DocDetail（v-html 注入也可生效）
+*/
+
+.dashboard-card.stats-card.no-plan-card {
+  border-color: #ff9800;
+  box-shadow: 0 4px 10px rgba(255, 152, 0, 0.15);
+  background: linear-gradient(145deg, rgba(255, 152, 0, 0.05) 0%, rgba(255, 152, 0, 0.1) 100%);
+  padding: 20px;
+  overflow: hidden;
+  position: relative;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+}
+
+.dashboard-card.stats-card.no-plan-card::before {
+  content: '';
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(255, 152, 0, 0.08);
+  z-index: 0;
+}
+
+.dashboard-card.stats-card.no-plan-card::after {
+  content: '';
+  position: absolute;
+  bottom: -30px;
+  left: -30px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: rgba(255, 152, 0, 0.05);
+  z-index: 0;
+}
+
+.no-plan-content {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  position: relative;
+  z-index: 1;
+  flex-wrap: wrap;
+}
+
+.no-plan-icon {
+  background-color: rgba(255, 152, 0, 0.15);
+  color: #ff9800;
+  width: 80px;
+  height: 80px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 12px rgba(255, 152, 0, 0.1);
+  flex-shrink: 0;
+  transform: rotate(-5deg);
+  transition: all 0.3s ease;
+}
+
+/* DocDetail 的 v-html 中图标为空，使用 emoji 兜底；Dashboard 内含 SVG 时不匹配 :empty */
+.no-plan-icon:empty::before {
+  content: '🛒';
+  font-size: 36px;
+  line-height: 1;
+}
+
+.no-plan-message {
+  flex: 1;
+}
+
+.no-plan-title {
+  color: #ff9800;
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+  line-height: 1.4;
+}
+
+.no-plan-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.action-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.action-button.primary {
+  background-color: var(--theme-color);
+  color: #fff;
+  border: none;
+  box-shadow: 0 4px 10px rgba(var(--theme-color-rgb), 0.3);
+}
+
+.action-button.primary:hover {
+  background-color: var(--primary-color-hover, var(--theme-color));
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(var(--theme-color-rgb), 0.4);
+}
+
+.action-button.secondary {
+  background-color: transparent;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.action-button.secondary:hover {
+  background-color: rgba(var(--theme-color-rgb), 0.08);
+  color: var(--theme-color);
+  border-color: var(--theme-color);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(var(--theme-color-rgb), 0.2);
+}
+
+/* 入场动画（可选） */
+@keyframes cardFadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.card-animate {
+  animation: cardFadeUp 0.35s ease both;
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+  .no-plan-content {
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+  }
+  .no-plan-icon {
+    width: 65px;
+    height: 65px;
+    transform: none;
+  }
+  .no-plan-title {
+    font-size: 1.1rem;
+    margin-bottom: 12px;
+  }
+  .no-plan-actions {
+    justify-content: center;
+  }
+  .action-button {
+    padding: 8px 15px;
+    min-width: 120px;
+    justify-content: center;
+  }
+}
