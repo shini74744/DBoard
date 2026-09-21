@@ -1,121 +1,294 @@
 # DBoard
 
-DBoard 是当前定制版 Xboard 面板与 Xboard-Node 的独立源码仓库。
+DBoard 是基于 XBoard 持续二次开发的面板项目，配套 **DUI-node** 节点程序与可选的 **DUI-Gateway** API 加密中间层。
 
-本仓库以单仓库方式保存面板与节点程序，不包含原项目的 Git 历史，也不包含运行环境中的密钥、数据库、日志或 `.env`。
+本仓库提供两种正式部署方式：
 
-## 目录结构
+- **独立版（Native）**：PHP / Swoole / Redis / systemd 直接运行在宿主机。
+- **Docker 版**：使用预构建 DBoard 镜像运行，适合快速部署与标准化交付。
+
+两种方式共用同一套持久数据结构，因此可以在独立版与 Docker 版之间迁移。
+
+## 项目结构
 
 ```text
 DBoard/
-├── panel/   # Xboard 面板后端、管理后台静态资源及主题
-└── node/    # Xboard-Node、双内核兼容层与测试
+├── panel/        # DBoard 面板、Dockerfile、Compose 示例
+├── node/         # DUI-node、xbctl、Xray / sing-box 双内核
+├── gateway/      # DUI-Gateway 加密 API 中间层
+├── deploy/       # 部署与持久数据说明
+├── scripts/      # 构建、发布、数据目录初始化工具
+└── install.sh    # 交互式总安装器
 ```
 
-## 当前主要改动
-
-- 出站规则管理与 VMess / VLESS / Trojan / Shadowsocks 链接解析。
-- 结构化路由规则，支持域名、IP/CIDR、来源、网络及协议条件。
-- Xray 与 sing-box 双内核通用的出站、路由和负载均衡。
-- 负载均衡支持随机、轮询、最低延迟、最低负载和 Fallback。
-- GeoSite / GeoIP 统一规则处理以及 IPv4 / IPv6。
-- 管理后台路由、出站与负载均衡 UI。
-- Telegram 管理通知、套餐快照字段继承等面板定制。
-
-
-## 服务器安装
-
-管理后台生成的一键命令继续使用当前面板地址，可直接使用 `IP:端口`，不要求配置域名。
+## 推荐安装方式
+新机器推荐直接执行交互式安装器：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/node/install.sh | \
-  sudo bash -s -- --mode machine --panel http://203.0.113.10:8888 --token TOKEN --machine-id 1
+bash <(curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/install.sh)
 ```
 
-安装器从 DBoard 的 GitHub Release 下载与 CPU 架构对应的 `DUI-node` 和 `xbctl`。
-
-## 双内核说明
-
-面板的结构化 Outbound / RouteRule / Balancer 使用统一模型，由 Node 分别编译到 Xray 和 sing-box。
-
-标准化管理功能不会因为配置了负载均衡而自动切换内核。内核原生的 raw custom config 仍然属于高级逃生口，不保证跨内核通用。
-
-`node/third_party/` 中包含本项目为并发安全与兼容性修正过的 sing / sing-box 固定版本源码。它们由 `node/go.mod` 的 replace 指令引用，因此是可复现构建所必需的源码，不应删除。
-
-## 构建 Node
-
-```bash
-cd node
-make build
-```
-
-完整测试：
-
-```bash
-cd node
-go test ./...
-```
-
-正式构建会启用项目 Makefile 中定义的 uTLS、QUIC、WireGuard 等标签。
-
-## 面板
-
-面板后端位于 `panel/`，依赖 PHP 8.2+、Composer、Redis 等 Xboard 运行依赖。
-
-```bash
-cd panel
-composer install --no-dev --optimize-autoloader
-```
-
-管理后台当前保留的是已经修改并验证过的编译产物：
+安装器会引导选择：
 
 ```text
-panel/public/assets/admin/
+1. 独立版安装
+2. Docker 版安装
+3. 是否安装 DUI-Gateway
+4. 面板初始化
+5. 服务启动与状态检查
 ```
 
-当前工作源码中没有完整的管理后台 React/TypeScript 原始工程，因此该目录不能被描述为完整的前端源码工程。后端与 Node 源码完整可继续开发、测试和构建。
+> 安装脚本不会把数据库、密钥或运行日志提交到 GitHub。
 
-## 安全
+## 独立版还是 Docker 版
 
-仓库不会提交：
+| 项目 | 独立版 | Docker 版 |
+|---|---|---|
+| 推荐场景 | 高频二开、调试、生产运维 | 快速部署、标准化交付 |
+| PHP/Swoole | 宿主机安装 | 镜像内置 |
+| Redis | 宿主机 Redis 8.4.2 | 镜像内置 Redis 8.4.2 |
+| 进程管理 | systemd | Supervisor |
+| 反向代理 | 1Panel/OpenResty/Nginx/Caddy | 容器内 Caddy + 可选宿主反代 |
+| 持久数据 | `/opt/dboard/shared` | `/opt/dboard/shared` |
+| 升级代码 | release + current 软链接 | 拉取新镜像 |
+| 排错 | 最直接 | 多一层容器 |
+当前持续开发和生产调试阶段更推荐 **独立版**；需要给第三方快速部署时推荐 **Docker 版**。
 
-- `.env`
-- 生产数据库
-- Laravel / 服务运行日志
-- Node 的生产 `config.yml`
-- GitHub Token、面板 Token、Telegram Token 等运行密钥
-- 构建出来的可执行文件
+---
 
-部署时请从示例配置创建自己的配置文件，不要把生产密钥写入 Git。
+# 唯一持久数据目录
 
-## 验证
-
-2026-09-20 的双内核版本已执行 Node 完整测试、真实 TCP/UDP 集成测试、Reality/SS2022 跨内核互通测试，以及面板端兼容性和浏览器回归测试。
-
-## 发布 Node
-
-构建机安装并登录 GitHub CLI 后，可发布新的 Node 二进制：
-
-```bash
-./scripts/release-node.sh v0.1.0
-```
-
-Release 会包含 amd64 / arm64 的 `DUI-node`、`xbctl` 以及 `SHA256SUMS`。
-面板一键安装和 `xbctl upgrade` 默认读取 GitHub 的 latest Release。
-
-> 从 v0.1.1 及更早的旧命名版本迁移到 `DUI-node` 时，请先执行一次新版安装脚本的 `upgrade` 动作完成目录、二进制和 systemd 服务迁移；迁移完成后后续版本继续使用 `xbctl upgrade`。
-
-## DUI-Gateway
-
-`gateway/` 提供独立的加密 API 中间层，参考 JC 现有中间件的调用方式实现：
+无论使用哪种部署方式，DBoard 都把：
 
 ```text
-前端 / 用户 → HTTPS → DUI-Gateway → 真实 DBoard 后端
+/opt/dboard/shared
 ```
 
-普通 API 路径使用 AES-CBC + PKCS7 加密后通过 `X-IV` 头传输；订阅和支付通知路径支持直通。真实后端地址只保存在 Gateway 服务端配置中。
+定义为唯一持久数据目录。
 
-安装示例：
+标准结构：
+
+```text
+/opt/dboard/shared/
+├── .env
+├── data/
+│   └── database.sqlite
+├── redis/
+│   └── dump.rdb
+├── plugins/
+├── storage/
+│   ├── app/
+│   ├── backup/
+│   ├── logs/
+│   └── theme/
+└── public-theme/
+```
+其中：
+
+- `data/database.sqlite`：用户、订单、套餐、节点、机器、设置、插件记录、路由、出站、负载均衡等永久业务数据。
+- `redis/dump.rdb`：Redis 队列、缓存和部分运行状态。
+- `.env`：生产配置与密钥。
+- `plugins/`：安装的插件文件。
+- `storage/app/`：插件及应用运行数据。
+- `public-theme/`、`storage/theme/`：主题数据。
+- `storage/logs/`：日志，可保留用于排错。
+
+以下内容**不属于持久数据**，可以重新生成：
+
+```text
+vendor/
+storage/framework/
+storage/tmp/
+Octane / WorkerMan PID 文件
+编译视图与普通缓存
+```
+
+详细说明见 [deploy/PERSISTENT_DATA.md](deploy/PERSISTENT_DATA.md)。
+
+---
+
+# 独立版部署
+## 推荐环境
+
+自动安装优先支持并测试：
+
+- Ubuntu 24.04 LTS x86_64 / arm64
+- root 权限
+- systemd
+
+核心运行环境：
+
+| 组件 | 要求 |
+|---|---|
+| PHP | 8.2+，推荐 8.3 |
+| Swoole | 6.2.x |
+| Redis | **8.4.2** |
+| Composer | 2.x |
+| SQLite | 默认数据库 |
+| Web Server | OpenResty / Nginx / Caddy 均可 |
+
+PHP 至少需要：
+
+```text
+bcmath curl mbstring mysql opcache pcntl redis
+sqlite3 xml zip openssl sodium fileinfo
+```
+
+> Redis 版本不要随意降级。Redis 8.4.2 生成的 RDB 可能无法被 Redis 7.x 读取。
+## 独立版运行结构
+
+```text
+OpenResty / Nginx / Caddy
+          │
+          ├── DBoard Octane       127.0.0.1:7001
+          └── WebSocket /ws       127.0.0.1:8076
+
+DBoard
+├── dboard-octane.service
+├── dboard-horizon.service
+├── dboard-ws.service
+├── dboard-scheduler.service
+└── dboard-redis.service          127.0.0.1:6379
+```
+
+程序采用 release 目录：
+
+```text
+/opt/dboard/releases/<version-or-time>/app
+/opt/dboard/current -> 当前 release
+/opt/dboard/shared  -> 唯一持久数据
+```
+
+因此升级程序和业务数据彼此分离。
+
+## 常用状态检查
+
+```bash
+systemctl status dboard-octane
+systemctl status dboard-horizon
+systemctl status dboard-ws
+systemctl status dboard-scheduler
+systemctl status dboard-redis
+```
+查看日志：
+
+```bash
+journalctl -u dboard-octane -f
+journalctl -u dboard-horizon -f
+journalctl -u dboard-ws -f
+journalctl -u dboard-scheduler -f
+```
+
+---
+
+# Docker 版部署
+
+## Docker 环境
+
+宿主机只需要：
+
+- Linux x86_64 / arm64
+- Docker Engine
+- Docker Compose V2
+- 至少开放面板入口端口（默认 7001）
+
+官方项目镜像：
+
+```text
+ghcr.io/shini74744/dboard:latest
+```
+
+镜像直接从本仓库 `panel/` 源码构建，不再下载或替换成 cedar2025/Xboard 源码。
+
+镜像包含：
+
+```text
+PHP 8.3
+Swoole 6.2.x
+Redis 8.4.2
+Octane
+Horizon
+WorkerMan
+Scheduler
+Caddy
+```
+## Docker Compose
+
+默认单容器部署示例：
+
+```text
+panel/compose.sample.yaml
+```
+
+其它示例：
+
+- `compose.host.sample.yaml`：host network。
+- `compose.1panel.sample.yaml`：接入 1Panel Docker network。
+- `compose.split.sample.yaml`：Web / Horizon / WS / Scheduler / Redis 拆分部署。
+
+所有 Compose 示例默认绑定：
+
+```text
+DBOARD_DATA_DIR=/opt/dboard/shared
+```
+
+可以通过环境变量改变位置，但生产环境建议保持默认路径。
+
+本地构建镜像：
+
+```bash
+./scripts/build-docker.sh dboard:local
+```
+
+GitHub Actions 会从 `panel/Dockerfile` 构建 amd64 / arm64 镜像并发布到 GHCR。
+---
+
+# 面板初始化
+
+底层初始化命令仍保持 XBoard 兼容命令名：
+
+```bash
+php artisan xboard:install
+```
+
+这是为了兼容现有升级逻辑和上游生态，并不代表运行的是上游 XBoard。
+
+初始化过程可选择：
+
+- SQLite（推荐，最容易备份与迁移）
+- MySQL
+- PostgreSQL
+- Redis
+- 管理员账号
+
+使用 SQLite 时，数据库最终位于：
+
+```text
+/opt/dboard/shared/data/database.sqlite
+```
+
+---
+
+# DUI-Gateway（可选）
+
+DUI-Gateway 用于在前端与真实 DBoard API 之间增加一层加密路径中间件：
+
+```text
+浏览器 / 前端
+      ↓ HTTPS
+DUI-Gateway
+      ↓
+DBoard 后端
+```
+它适合需要隐藏真实 API 路径或隐藏真实后端入口的部署，但不是 DBoard 必需组件。
+
+默认监听：
+
+```text
+127.0.0.1:3939
+```
+
+手动安装示例：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/gateway/install.sh | \
@@ -123,10 +296,154 @@ curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/gateway/inst
   --backend 'https://backend.example.com'
 ```
 
-详细说明见 `gateway/README.md`。
+安装器会自动生成 AES key，也可以通过 `--aes-key` 指定。
 
-Gateway 使用独立的 `gateway-v*` prerelease，不会改变 Node 的 GitHub `latest` Release：
+注意：
+
+- AES 层主要用于隐藏路径，不能替代 HTTPS。
+- 前端需要知道 AES key，因此不要把它当作不可泄露的认证密钥。
+- Gateway 应继续放在 HTTPS 反向代理之后。
+
+完整说明见 [gateway/README.md](gateway/README.md)。
+
+---
+
+# DUI-node
+DBoard 的节点程序独立于面板部署。
+
+Machine Mode 示例：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/node/install.sh | \
+  sudo bash -s -- \
+  --mode machine \
+  --panel https://panel.example.com \
+  --token TOKEN \
+  --machine-id 1
+```
+
+安装器会从 DBoard GitHub Release 下载对应架构的：
+
+```text
+DUI-node
+xbctl
+```
+
+Node 支持 Xray / sing-box 双内核，并对结构化 Outbound、Route Rule 和 Balancer 做统一转换。
+
+详细说明见 [node/README.md](node/README.md)。
+
+---
+
+# 端口建议
+
+| 端口 | 用途 | 是否建议公网开放 |
+|---|---|---|
+| 7001 | DBoard HTTP 上游 | 仅需要直连时 |
+| 8076 | WebSocket 内部端口 | 否，建议通过 `/ws` 反代 |
+| 6379 | Redis | **禁止公网开放** |
+| 3939 | DUI-Gateway 默认端口 | 否，建议反代 |
+| 80/443 | Web / TLS | 是 |
+生产环境建议只公开 80/443，内部服务绑定 127.0.0.1。
+
+---
+
+# 备份、恢复与迁移
+
+DBoard 的迁移边界只有：
+
+```text
+/opt/dboard/shared
+```
+
+但**不要在 SQLite 和 Redis 正在写入时直接 tar 整个目录**。
+
+正确备份流程：
+
+1. 使用 SQLite online backup 生成一致性数据库副本。
+2. 对 Redis 执行 BGSAVE。
+3. 等待 RDB 落盘完成。
+4. 校验 SQLite `PRAGMA integrity_check`。
+5. 使用 `redis-check-rdb` 校验 RDB。
+6. 打包 `.env`、数据库、Redis、插件、storage 与主题。
+7. 保存 DBoard commit、PHP、Swoole、Redis 版本信息和 SHA256。
+
+恢复新机器时：
+
+```text
+安装运行环境
+→ 恢复 /opt/dboard/shared
+→ 修复文件所有者
+→ 启动 DBoard
+→ 检查 migration / API / 节点心跳
+```
+
+因为独立版与 Docker 版使用同一数据布局，所以可以跨部署方式迁移。
+---
+
+# 开发与构建
+
+Panel：
+
+```bash
+cd panel
+composer install --no-dev --optimize-autoloader
+```
+
+管理后台已验证的编译产物位于：
+
+```text
+panel/public/assets/admin/
+```
+
+Node：
+
+```bash
+cd node
+make build
+go test ./...
+```
+
+发布 Node：
+
+```bash
+./scripts/release-node.sh v0.1.0
+```
+
+发布 Gateway：
 
 ```bash
 ./scripts/release-gateway.sh gateway-v0.1.0
 ```
+
+Docker 镜像由独立 GitHub Actions workflow 发布，不会改变 DUI-node 的 latest Release 逻辑。
+## 主要定制
+
+- 出站规则管理与 VMess / VLESS / Trojan / Shadowsocks 链接解析。
+- 结构化路由规则，支持域名、IP/CIDR、来源、网络及协议条件。
+- Xray 与 sing-box 双内核通用的出站、路由和负载均衡。
+- 负载均衡支持随机、轮询、最低延迟、最低负载与 Fallback。
+- GeoSite / GeoIP 统一规则处理及 IPv4 / IPv6。
+- 管理后台路由、出站与负载均衡 UI。
+- Telegram 管理通知、套餐快照字段继承等面板定制。
+- DUI-node Machine Mode 与 WebSocket 实时通信。
+- 可选 DUI-Gateway 加密 API 中间层。
+
+## 安全
+
+仓库不会提交：
+
+- 生产 `.env`
+- SQLite / MySQL / PostgreSQL 生产数据
+- Redis RDB
+- SSL 私钥
+- Node Token / 面板 Token
+- Telegram Token
+- 支付密钥
+- 生产日志
+
+生产密钥只能保存在服务器持久数据目录或密钥管理系统中，不应进入 Git。
+
+## License
+
+DBoard 保留并遵循所使用上游项目及依赖的原始许可证。
