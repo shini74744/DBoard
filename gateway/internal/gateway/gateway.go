@@ -91,7 +91,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		routeKind = "payment-notify"
 
 	default:
-		http.NotFound(w, r)
+		writeNotFound(w)
 		return
 	}
 
@@ -225,6 +225,12 @@ func hasPathPrefix(p, prefix string) bool {
 		return false
 	}
 	return p == prefix || strings.HasPrefix(p, prefix+"/")
+}
+
+func writeNotFound(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = io.WriteString(w, `{"error":"路径未找到"}`)
 }
 
 func joinPath(a, b string) string {

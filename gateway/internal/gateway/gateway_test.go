@@ -195,3 +195,35 @@ func TestOriginAllowlist(t *testing.T) {
 		t.Fatalf("cors=%q", rr2.Header().Get("Access-Control-Allow-Origin"))
 	}
 }
+
+func TestDisabledPassthroughUsesLegacyJSON404(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("disabled passthrough unexpectedly reached backend: %s", r.URL.Path)
+	}))
+	defer backend.Close()
+
+	cfg := testConfig(t, backend.URL)
+	cfg.SubscriptionPrefix = ""
+	cfg.BackendSubscriptionPrefix = ""
+	cfg.AllowedPaymentNotifyPaths = nil
+	g := New(cfg, "test")
+
+	for _, raw := range []string{
+		"/sub/token123",
+		"/api/v1/guest/payment/notify/Test/uuid",
+		"/anything",
+	} {
+		req := httptest.NewRequest(http.MethodGet, raw, nil)
+		rr := httptest.NewRecorder()
+		g.ServeHTTP(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("%s status=%d", raw, rr.Code)
+		}
+		if rr.Body.String() != `{"error":"路径未找到"}` {
+			t.Fatalf("%s body=%q", raw, rr.Body.String())
+		}
+		if got := rr.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+			t.Fatalf("%s content-type=%q", raw, got)
+		}
+	}
+}

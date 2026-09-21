@@ -62,19 +62,23 @@ func Load(envFile string) (Config, error) {
 		return Config{}, err
 	}
 
+	subscriptionRaw := envAllowEmpty("SUBSCRIPTION_PREFIX", "/s")
+	backendSubscriptionRaw := envAllowEmpty("BACKEND_SUBSCRIPTION_PREFIX", subscriptionRaw)
+	paymentNotifyRaw := envAllowEmpty("ALLOWED_PAYMENT_NOTIFY_PATHS", "/api/v1/guest/payment/notify")
+
 	cfg := Config{
 		Port:                      port,
 		BackendAPIURL:             backend,
 		PathPrefix:                cleanPrefix(envOr("PATH_PREFIX", "/dui/gw")),
 		APIPrefix:                 cleanPrefix(envOr("API_PREFIX", "/api/v1")),
-		SubscriptionPrefix:        cleanPrefix(envOr("SUBSCRIPTION_PREFIX", "/s")),
-		BackendSubscriptionPrefix: cleanPrefix(envOr("BACKEND_SUBSCRIPTION_PREFIX", envOr("SUBSCRIPTION_PREFIX", "/s"))),
+		SubscriptionPrefix:        optionalPrefix(subscriptionRaw),
+		BackendSubscriptionPrefix: optionalPrefix(backendSubscriptionRaw),
 		CORSOrigin:                strings.TrimSpace(envOr("CORS_ORIGIN", "*")),
 		AllowedOrigins:            splitCSV(envOr("ALLOWED_ORIGINS", "*")),
 		RequestTimeout:            time.Duration(timeoutMS) * time.Millisecond,
 		EnableLogging:             boolEnv("ENABLE_LOGGING", false),
 		DebugMode:                 boolEnv("DEBUG_MODE", false),
-		AllowedPaymentNotifyPaths: splitCSV(envOr("ALLOWED_PAYMENT_NOTIFY_PATHS", "/api/v1/guest/payment/notify")),
+		AllowedPaymentNotifyPaths: splitCSV(paymentNotifyRaw),
 		AESKey:                    key,
 	}
 	if cfg.Port < 1 || cfg.Port > 65535 {
@@ -128,6 +132,13 @@ func envOr(k, def string) string {
 	return def
 }
 
+func envAllowEmpty(k, def string) string {
+	if v, ok := os.LookupEnv(k); ok {
+		return strings.TrimSpace(v)
+	}
+	return def
+}
+
 func intEnv(k string, def int) (int, error) {
 	raw := envOr(k, strconv.Itoa(def))
 	v, err := strconv.Atoi(raw)
@@ -158,6 +169,14 @@ func splitCSV(v string) []string {
 		}
 	}
 	return out
+}
+
+func optionalPrefix(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" || v == "-" || strings.EqualFold(v, "off") || strings.EqualFold(v, "none") {
+		return ""
+	}
+	return cleanPrefix(v)
 }
 
 func cleanPrefix(v string) string {

@@ -46,7 +46,15 @@ AES key 支持 16 / 24 / 32 UTF-8 字节。
 - `SUBSCRIPTION_PREFIX`，默认 `/s`
 - `ALLOWED_PAYMENT_NOTIFY_PATHS`，默认 `/api/v1/guest/payment/notify`
 
-其它未加密路径默认返回 404。
+如需兼容只允许加密 API 的旧中间件，可设置：
+
+```env
+SUBSCRIPTION_PREFIX=off
+BACKEND_SUBSCRIPTION_PREFIX=off
+ALLOWED_PAYMENT_NOTIFY_PATHS=
+```
+
+此时其它未加密路径统一返回 `{"error":"路径未找到"}` 和 HTTP 404。
 
 ## 安装
 
