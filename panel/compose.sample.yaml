@@ -9,8 +9,8 @@
 # For aaPanel native (openresty on host) users that prefer host networking:
 # use compose.host.sample.yaml.
 services:
-  xboard:
-    image: ghcr.io/cedar2025/xboard:latest
+  dboard:
+    image: ghcr.io/shini74744/dboard:latest
     restart: unless-stopped
     ports:
       - "7001:7001"

@@ -1,13 +1,7 @@
-# Split deployment for K8s users or operators who want to scale, restart and
-# limit each process independently. The single image is reused across services
-# by overriding the command and disabling the supervisor programs that are not
-# relevant to that role.
-#
-# Topology:
-#   caddy        ──┬─→ web        (HTTP)        :7001 → octane :7001
-#                  └─→ ws-server  (WebSocket)   /api/v2/server/ws → :8076
-#   horizon      (queue worker, no public port)
-#   redis        (state)
+# Advanced split deployment.
+# The same DBoard image is reused for each application role.
+# Redis is pinned to 8.4.2 so the RDB format stays compatible with the
+# standalone/native deployment.
 services:
   caddy:
     image: caddy:2-alpine
@@ -21,7 +15,7 @@ services:
       - ./.docker/caddy/Caddyfile.split:/etc/caddy/Caddyfile:ro
 
   web:
-    image: ghcr.io/cedar2025/xboard:latest
+    image: ghcr.io/shini74744/dboard:latest
     restart: unless-stopped
     depends_on:
       - redis
@@ -34,41 +28,62 @@ services:
       - ${DBOARD_DATA_DIR:-/opt/dboard/shared}/storage/backup:/www/storage/backup
       - ${DBOARD_DATA_DIR:-/opt/dboard/shared}/public-theme:/www/public/theme
       - ${DBOARD_DATA_DIR:-/opt/dboard/shared}/plugins:/www/plugins
-    environment:
+    environment: &external-redis-env
       docker: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      ENABLE_REDIS: "false"
       ENABLE_CADDY: "false"
+      ENABLE_SCHEDULER: "false"
       ENABLE_HORIZON: "false"
       ENABLE_WS_SERVER: "false"
 
   horizon:
-    image: ghcr.io/cedar2025/xboard:latest
+    image: ghcr.io/shini74744/dboard:latest
     restart: unless-stopped
     depends_on:
       - redis
     volumes: *shared-volumes
     environment:
-      docker: "true"
-      ENABLE_CADDY: "false"
+      <<: *external-redis-env
       ENABLE_WEB: "false"
-      ENABLE_WS_SERVER: "false"
+      ENABLE_HORIZON: "true"
 
   ws-server:
-    image: ghcr.io/cedar2025/xboard:latest
+    image: ghcr.io/shini74744/dboard:latest
     restart: unless-stopped
     depends_on:
       - redis
     volumes: *shared-volumes
     environment:
-      docker: "true"
-      ENABLE_CADDY: "false"
+      <<: *external-redis-env
       ENABLE_WEB: "false"
-      ENABLE_HORIZON: "false"
+      ENABLE_WS_SERVER: "true"
       WS_HOST: "0.0.0.0"
+  scheduler:
+    image: ghcr.io/shini74744/dboard:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+    volumes: *shared-volumes
+    environment:
+      <<: *external-redis-env
+      ENABLE_WEB: "false"
+      ENABLE_SCHEDULER: "true"
 
   redis:
-    image: redis:7-alpine
+    image: redis:8.4.2-alpine
     restart: unless-stopped
-    command: redis-server --unixsocket /data/redis.sock --unixsocketperm 777 --save 900 1 --save 300 10 --save 60 10000
+    command:
+      - redis-server
+      - --save
+      - "900"
+      - "1"
+      - --save
+      - "300"
+      - "10"
+      - --save
+      - "60"
+      - "10000"
     volumes:
       - ${DBOARD_DATA_DIR:-/opt/dboard/shared}/redis:/data
-
