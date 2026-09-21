@@ -26,11 +26,14 @@ services:
     depends_on:
       - redis
     volumes: &shared-volumes
-      - ./.env:/www/.env
-      - ./.docker/.data/:/www/.docker/.data
-      - ./storage/logs:/www/storage/logs
-      - ./storage/theme:/www/storage/theme
-      - ./plugins:/www/plugins
+      - ${DBOARD_DATA_DIR:-/opt/dboard/shared}/.env:/www/.env
+      - ${DBOARD_DATA_DIR:-/opt/dboard/shared}/data:/www/.docker/.data
+      - ${DBOARD_DATA_DIR:-/opt/dboard/shared}/storage/logs:/www/storage/logs
+      - ${DBOARD_DATA_DIR:-/opt/dboard/shared}/storage/theme:/www/storage/theme
+      - ${DBOARD_DATA_DIR:-/opt/dboard/shared}/storage/app:/www/storage/app
+      - ${DBOARD_DATA_DIR:-/opt/dboard/shared}/storage/backup:/www/storage/backup
+      - ${DBOARD_DATA_DIR:-/opt/dboard/shared}/public-theme:/www/public/theme
+      - ${DBOARD_DATA_DIR:-/opt/dboard/shared}/plugins:/www/plugins
     environment:
       docker: "true"
       ENABLE_CADDY: "false"
@@ -67,7 +70,5 @@ services:
     restart: unless-stopped
     command: redis-server --unixsocket /data/redis.sock --unixsocketperm 777 --save 900 1 --save 300 10 --save 60 10000
     volumes:
-      - redis-data:/data
+      - ${DBOARD_DATA_DIR:-/opt/dboard/shared}/redis:/data
 
-volumes:
-  redis-data:
