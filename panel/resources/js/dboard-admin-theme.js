@@ -11,7 +11,7 @@
       if (!response.ok) return;
       const payload = await response.json();
       const theme = payload?.data?.frontend_theme;
-      if (themes.has(theme)) root.dataset.dboardTheme = theme;
+      if (typeof theme === 'string') root.dataset.dboardTheme = themes.has(theme) ? theme : 'Xboard';
     } catch (_) {
       // The server-rendered theme remains available when a refresh fails.
     } finally {
