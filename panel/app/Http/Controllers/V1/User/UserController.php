@@ -96,6 +96,8 @@ class UserController extends Controller
                 'banned',
                 'remind_expire',
                 'remind_traffic',
+                'remind_telegram',
+                'navigation_hidden',
                 'expired_at',
                 'balance',
                 'commission_balance',
@@ -142,11 +144,29 @@ class UserController extends Controller
                 'uuid',
                 'device_limit',
                 'speed_limit',
-                'next_reset_at'
+                'next_reset_at',
+                'created_at'
             ])
             ->first();
         if (!$user) {
             return $this->fail([400, __('The user does not exist')]);
+        }
+        if ($user->plan_id && $user->expired_at) {
+            // Use the current plan's latest completed purchase or renewal as its
+            // cycle start. Migrated accounts without orders use account creation.
+            $order = Order::where('user_id', $request->user()->id)
+                ->where('plan_id', $user->plan_id)
+                ->where('status', Order::STATUS_COMPLETED)
+                ->whereIn('type', [Order::TYPE_NEW_PURCHASE, Order::TYPE_RENEWAL, Order::TYPE_UPGRADE])
+                ->whereNotIn('period', [Plan::PERIOD_ONETIME, Plan::PERIOD_RESET_TRAFFIC])
+                ->orderByDesc('id')
+                ->first(['paid_at', 'created_at']);
+            $startedAt = (int) ($order?->paid_at ?: $order?->getRawOriginal('created_at'));
+            if ($startedAt <= 0 || $startedAt >= (int) $user->expired_at) {
+                $startedAt = (int) $user->getRawOriginal('created_at');
+            }
+            $user['subscription_started_at'] = $startedAt > 0 && $startedAt < (int) $user->expired_at
+                ? $startedAt : null;
         }
         if ($user->plan_id) {
             $user['plan'] = Plan::find($user->plan_id);
@@ -176,8 +196,26 @@ class UserController extends Controller
     {
         $updateData = $request->only([
             'remind_expire',
-            'remind_traffic'
+            'remind_traffic',
+            'remind_telegram'
         ]);
+
+        if ($request->has('navigation_hidden')) {
+            $hidden = json_decode((string) $request->input('navigation_hidden'), true);
+            $allowed = ['shop', 'invite', 'docs', 'tickets', 'nodes', 'orders', 'traffic', 'wallet', 'profile'];
+            if (!is_array($hidden) || !array_is_list($hidden) || count($hidden) > count($allowed)) {
+                return $this->fail([422, '导航设置无效']);
+            }
+            foreach ($hidden as $item) {
+                if (!is_string($item) || !in_array($item, $allowed, true)) {
+                    return $this->fail([422, '导航设置无效']);
+                }
+            }
+            if (count(array_unique($hidden)) !== count($hidden)) {
+                return $this->fail([422, '导航设置无效']);
+            }
+            $updateData['navigation_hidden'] = $hidden;
+        }
 
         $user = $request->user();
         try {

@@ -59,6 +59,7 @@ import { ref, onMounted, watch, nextTick, onBeforeUnmount, computed, reactive, o
 import { useRoute, useRouter } from 'vue-router';
 
 import { INVITE_CONFIG, SHOP_CONFIG, NAVIGATION_CONFIG } from '@/utils/baseConfig';
+import { useNavigationPreferences } from '@/composables/useNavigationPreferences';
 
 import IconDashboard from '@/components/icons/IconDashboard.vue';
 
@@ -237,7 +238,19 @@ export default {
 
     };
 
-    const navItems = getNavItems();
+    const { hiddenItems, loadNavigationPreferences } = useNavigationPreferences();
+    const navItems = computed(() => getNavItems().filter(item =>
+      item.name === 'Dashboard' || item.name === 'More' || !hiddenItems.value.includes(item.i18nKey)
+    ));
+
+    watch(navItems, () => {
+      if (!isComponentMounted.value) return;
+      nextTick(() => {
+        const index = findIndexByRouteName(route.name);
+        currentIndex.value = index;
+        updateSliderPosition(index, false);
+      });
+    });
 
 
 
@@ -392,7 +405,7 @@ export default {
 
         const activeNavName = route.meta.activeNav;
 
-        const activeIndex = navItems.findIndex(item => item.name === activeNavName);
+        const activeIndex = navItems.value.findIndex(item => item.name === activeNavName);
 
 
 
@@ -406,9 +419,9 @@ export default {
 
 
 
-      const index = navItems.findIndex(item => item.name === routeName);
+      const index = navItems.value.findIndex(item => item.name === routeName);
 
-      return index !== -1 ? index : 0;
+      return index !== -1 ? index : navItems.value.findIndex(item => item.name === 'More');
     };
 
 
@@ -517,7 +530,7 @@ export default {
 
           const activeNavName = route.meta.activeNav;
 
-          const indexByActiveNav = navItems.findIndex(item => item.name === activeNavName);
+          const indexByActiveNav = navItems.value.findIndex(item => item.name === activeNavName);
 
           if (indexByActiveNav !== -1) {
 
@@ -621,6 +634,7 @@ export default {
 
     onMounted(() => {
 
+      loadNavigationPreferences().catch(error => console.error('Failed to load navigation settings:', error));
       isComponentMounted.value = true;
 
 
@@ -662,7 +676,7 @@ export default {
 
             const activeNavName = route.meta.activeNav;
 
-            const indexByActiveNav = navItems.findIndex(item => item.name === activeNavName);
+            const indexByActiveNav = navItems.value.findIndex(item => item.name === activeNavName);
 
             if (indexByActiveNav !== -1) {
 

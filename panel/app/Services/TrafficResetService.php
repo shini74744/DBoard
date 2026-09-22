@@ -34,7 +34,7 @@ class TrafficResetService
   public function performReset(User $user, string $triggerSource = TrafficResetLog::SOURCE_MANUAL): bool
   {
     try {
-      return DB::transaction(function () use ($user, $triggerSource) {
+      $result = DB::transaction(function () use ($user, $triggerSource) {
         $oldUpload = $user->u ?? 0;
         $oldDownload = $user->d ?? 0;
         $oldTotal = $oldUpload + $oldDownload;
@@ -64,6 +64,10 @@ class TrafficResetService
         HookManager::call('traffic.reset.after', $user);
         return true;
       });
+      if ($result && $triggerSource === TrafficResetLog::SOURCE_MANUAL) {
+        UserTelegramNotifier::user($user, 'telegram_user_notify_manual_reset', '🔄 管理员已手动重置您的套餐流量。');
+      }
+      return $result;
     } catch (\Exception $e) {
       Log::error(__('traffic_reset.reset_failed'), [
         'user_id' => $user->id,

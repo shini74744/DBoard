@@ -9,6 +9,7 @@ use App\Http\Controllers\V2\Admin\Server\RouteController;
 use App\Http\Controllers\V2\Admin\Server\RuleSetController;
 use App\Http\Controllers\V2\Admin\Server\ManageController;
 use App\Http\Controllers\V2\Admin\Server\MachineController;
+use App\Http\Controllers\V2\Admin\Server\AdminGroupController;
 use App\Http\Controllers\V2\Admin\OrderController;
 use App\Http\Controllers\V2\Admin\UserController;
 use App\Http\Controllers\V2\Admin\StatController;
@@ -20,6 +21,8 @@ use App\Http\Controllers\V2\Admin\KnowledgeController;
 use App\Http\Controllers\V2\Admin\PaymentController;
 use App\Http\Controllers\V2\Admin\SystemController;
 use App\Http\Controllers\V2\Admin\ThemeController;
+use App\Http\Controllers\V2\Admin\ShopPromotionController;
+use App\Http\Controllers\V2\Admin\TelegramCampaignController;
 use App\Http\Controllers\V2\Admin\TrafficResetController;
 use Illuminate\Contracts\Routing\Registrar;
 
@@ -37,11 +40,21 @@ class AdminRoute
             ], function ($router) {
                 $router->get('/fetch', [ConfigController::class, 'fetch']);
                 $router->post('/save', [ConfigController::class, 'save']);
+                $router->get('/userTelegram', [ConfigController::class, 'getUserTelegramSettings']);
+                $router->post('/userTelegram', [ConfigController::class, 'saveUserTelegramSettings']);
                 $router->get('/getEmailTemplate', [ConfigController::class, 'getEmailTemplate']);
                 $router->get('/getThemeTemplate', [ConfigController::class, 'getThemeTemplate']);
                 $router->post('/setTelegramWebhook', [ConfigController::class, 'setTelegramWebhook']);
                 $router->post('/testSendMail', [ConfigController::class, 'testSendMail']);
             });
+
+            $router->get('/shop-promotion/fetch', [ShopPromotionController::class, 'fetch']);
+            $router->post('/shop-promotion/save', [ShopPromotionController::class, 'save']);
+            $router->get('/notification-center/options', [TelegramCampaignController::class, 'options']);
+            $router->post('/notification-center/preview', [TelegramCampaignController::class, 'preview']);
+            $router->get('/notification-center/fetch', [TelegramCampaignController::class, 'fetch']);
+            $router->post('/notification-center/create', [TelegramCampaignController::class, 'create']);
+            $router->post('/notification-center/cancel', [TelegramCampaignController::class, 'cancel']);
 
             // Mail Templates
             $router->group([
@@ -77,6 +90,7 @@ class AdminRoute
                 'prefix' => 'server/route'
             ], function ($router) {
                 $router->get('/fetch', [RouteController::class, 'fetch']);
+                $router->post('/sort', [RouteController::class, 'sort']);
                 $router->post('/parse', [RouteController::class, 'parse']);
                 $router->post('/save', [RouteController::class, 'save']);
                 $router->post('/drop', [RouteController::class, 'drop']);
@@ -89,6 +103,15 @@ class AdminRoute
                 $router->post('/resolve-url', [RuleSetController::class, 'resolveUrl']);
                 $router->post('/resolve-many', [RuleSetController::class, 'resolveMany']);
             });
+            // 后台服务器和节点列表分组（独立于用户权限组）
+            $router->group([
+                'prefix' => 'server/admin-group'
+            ], function ($router) {
+                $router->get('/fetch', [AdminGroupController::class, 'fetch']);
+                $router->post('/save', [AdminGroupController::class, 'save']);
+                $router->post('/syncMembers', [AdminGroupController::class, 'syncMembers']);
+                $router->post('/drop', [AdminGroupController::class, 'drop']);
+            });
             // 节点管理接口
             $router->group([
                 'prefix' => 'server/manage'
@@ -96,6 +119,7 @@ class AdminRoute
                 $router->get('/getNodes', [ManageController::class, 'getNodes']);
                 $router->post('/update', [ManageController::class, 'update']);
                 $router->post('/save', [ManageController::class, 'save']);
+                $router->post('/setGroup', [ManageController::class, 'setGroup']);
                 $router->post('/drop', [ManageController::class, 'drop']);
                 $router->post('/copy', [ManageController::class, 'copy']);
                 $router->post('/sort', [ManageController::class, 'sort']);
@@ -111,7 +135,9 @@ class AdminRoute
                 'prefix' => 'server/machine'
             ], function ($router) {
                 $router->get('/fetch', [MachineController::class, 'fetch']);
+                $router->post('/sort', [MachineController::class, 'sort']);
                 $router->post('/save', [MachineController::class, 'save']);
+                $router->post('/setGroup', [MachineController::class, 'setGroup']);
                 $router->post('/drop', [MachineController::class, 'drop']);
                 $router->post('/resetToken', [MachineController::class, 'resetToken']);
                 $router->get('/getToken', [MachineController::class, 'getToken']);

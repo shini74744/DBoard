@@ -77,6 +77,13 @@ class ConfigSave extends FormRequest
         'telegram_notify_register' => 'boolean',
         'telegram_notify_new_order' => 'boolean',
         'telegram_notify_renewal' => 'boolean',
+        'telegram_user_notify_node_name' => 'boolean',
+        'telegram_user_notify_node_rate' => 'boolean',
+        'telegram_user_notify_node_new' => 'boolean',
+        'telegram_user_notify_node_offline' => 'boolean',
+        'telegram_user_notify_manual_reset' => 'boolean',
+        'telegram_node_offline_reminders' => 'integer|min:1|max:10',
+        'telegram_node_offline_interval' => 'integer|min:5|max:1440',
         // app
         'windows_version' => '',
         'windows_download_url' => '',

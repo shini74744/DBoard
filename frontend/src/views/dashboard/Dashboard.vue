@@ -11,6 +11,9 @@
             <IconMail :size="16"/>
             <span>{{ userStats.userEmail }}</span>
           </p>
+          <button class="theme-note-button" type="button" :aria-expanded="!!revealedThemeMessage"
+                  @click="revealThemeMessage">{{ $t('dashboard.themeNoteAction') }}</button>
+          <p v-if="revealedThemeMessage" class="theme-note-message" role="status">{{ revealedThemeMessage }}</p>
         </div>
       </div>
 
@@ -144,7 +147,7 @@
               </div>
               <div class="info-item">
                 <span class="info-label">{{ $t('dashboard.expiryDate') }}</span>
-                <span class="info-value status-value" :class="expiryStatusClass">
+                <span class="info-value expiry-value" :class="{'is-permanent': userStats.isRemainingDaysPermanent}" :style="expiryHueStyle">
                   {{
                     userPlan.isExpireDatePermanent ? $t('dashboard.permanent') : (userPlan.expireDate || $t('dashboard.none'))
                   }}
@@ -491,14 +494,9 @@
         </template>
 
         <template v-else>
-          <div class="stats-card"
-               :class="{
-              'card-animate': !loading.userStats,
-              'healthy-card': trafficStatus === 'healthy',
-              'warning-card': trafficStatus === 'warning',
-              'danger-card': trafficStatus === 'danger'
-            }"
-               style="animation-delay: 0.5s">
+          <div class="stats-card usage-gradient-card"
+               :class="{'card-animate': !loading.userStats}"
+               :style="[trafficHueStyle, {animationDelay: '0.5s'}]">
             <div class="stats-icon">
               <IconTransferVertical :size="32"/>
             </div>
@@ -516,14 +514,12 @@
             </div>
           </div>
 
-          <div class="stats-card daily-usage-trigger"
+          <div class="stats-card daily-usage-trigger usage-gradient-card"
                :class="{
               'card-animate': !loading.userStats,
-              'healthy-card': expiryStatus === 'healthy',
-              'warning-card': expiryStatus === 'warning',
-              'danger-card': expiryStatus === 'danger'
+              'permanent-card': userStats.isRemainingDaysPermanent
             }"
-               style="animation-delay: 0.6s"
+               :style="[expiryHueStyle, {animationDelay: '0.6s'}]"
                role="button" tabindex="0" :aria-label="$t('dashboard.viewDailyUsage')"
                @click="showDailyTraffic = true"
                @keydown.enter.prevent="showDailyTraffic = true"
@@ -880,6 +876,8 @@ export default {
     const qrCodeLoading = ref(true);
     const showDailyTraffic = ref(false);
     const trafficBytes = ref({total: 0, remaining: 0});
+    const subscriptionPeriod = ref({start: 0, expires: 0});
+    const nowMs = ref(Date.now());
     const showImportSubscription = ref(DASHBOARD_CONFIG.showImportSubscription)
 
     const languageChangedSignal = inject('languageChangedSignal', ref(0));
@@ -923,6 +921,18 @@ export default {
       userEmail: '',
       isRemainingDaysPermanent: false
     });
+    const revealedThemeMessage = ref('');
+    const revealThemeMessage = () => {
+      if (revealedThemeMessage.value) { revealedThemeMessage.value = ''; return; }
+      const name = document.documentElement.dataset.brandTheme;
+      const notes = {
+        'DBoard-Tide': 'themeNoteTide',
+        'DBoard-Copper': 'themeNoteCopper',
+        'DBoard-Iris': 'themeNoteIris',
+        'DBoard-Glass': 'themeNoteGlass'
+      };
+      revealedThemeMessage.value = t(`dashboard.${notes[name] || 'themeNoteDefault'}`);
+    };
     const userBalance = ref('0.00');
     const currencySymbol = ref('$');
     const hasPlan = ref(true);
@@ -1160,22 +1170,17 @@ export default {
       }
     };
 
-    const expiryStatus = computed(() => {
-      if (userStats.isRemainingDaysPermanent || !hasPlan.value) return 'neutral';
-      const days = Number(userStats.remainingDays);
-      if (!Number.isFinite(days)) return 'neutral';
-      if (days <= 7) return 'danger';
-      if (days <= 30) return 'warning';
-      return 'healthy';
+    const clampRatio = (value) => Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+    const trafficRatio = computed(() => trafficBytes.value.total > 0
+      ? clampRatio(trafficBytes.value.remaining / trafficBytes.value.total) : 0);
+    const expiryRatio = computed(() => {
+      if (userStats.isRemainingDaysPermanent) return 1;
+      const {start, expires} = subscriptionPeriod.value;
+      if (start <= 0 || expires <= start) return 0;
+      return clampRatio((expires * 1000 - nowMs.value) / ((expires - start) * 1000));
     });
-    const expiryStatusClass = computed(() => 'status-' + expiryStatus.value);
-    const trafficStatus = computed(() => {
-      if (!hasPlan.value || trafficBytes.value.total <= 0) return 'neutral';
-      const ratio = trafficBytes.value.remaining / trafficBytes.value.total;
-      if (ratio <= 0.15) return 'danger';
-      if (ratio <= 0.35) return 'warning';
-      return 'healthy';
-    });
+    const trafficHueStyle = computed(() => ({'--usage-hue': String(Math.round(120 * trafficRatio.value))}));
+    const expiryHueStyle = computed(() => ({'--usage-hue': String(Math.round(120 * expiryRatio.value))}));
     const isExpiringSoon = computed(() => {
       if (userStats.isRemainingDaysPermanent) return false;
       const days = Number(userStats.remainingDays);
@@ -1280,6 +1285,11 @@ export default {
         if (response.data) {
           allowNewPeriod.value = response.data.allow_new_period;
           const subscribe = response.data;
+          nowMs.value = Date.now();
+          subscriptionPeriod.value = {
+            start: Number(subscribe.subscription_started_at) || 0,
+            expires: Number(subscribe.expired_at) || 0
+          };
           if (subscribe.plan && subscribe.plan.name) {
             userPlan.value.name = subscribe.plan.name;
           }
@@ -1661,6 +1671,7 @@ export default {
 
     const refreshSubscription = () => {
       if (document.hidden) return;
+      nowMs.value = Date.now();
       fetchUserInfo(true);
       fetchSubscribe(true);
     };
@@ -1824,14 +1835,15 @@ export default {
     });
 
     return {
+      revealedThemeMessage,
+      revealThemeMessage,
       userStats,
       userBalance,
       currencySymbol,
       userPlan,
       showDailyTraffic,
-      expiryStatus,
-      expiryStatusClass,
-      trafficStatus,
+      expiryHueStyle,
+      trafficHueStyle,
       clientConfig,
       notices,
       loading,
@@ -1949,10 +1961,34 @@ export default {
       color: var(--secondary-text-color);
       font-size: 14px;
     }
+
+    .theme-note-button {
+      margin-top: 14px;
+      padding: 7px 12px;
+      border: 1px solid rgba(var(--theme-color-rgb), .36);
+      border-radius: 999px;
+      background: rgba(var(--theme-color-rgb), .08);
+      color: var(--theme-color);
+      font-size: 13px;
+      font-weight: 600;
+      transition: transform .2s ease, background .2s ease;
+      &:hover { transform: translateY(-2px); background: rgba(var(--theme-color-rgb), .14); }
+      &:focus-visible { outline: 2px solid var(--theme-color); outline-offset: 2px; }
+    }
+    .theme-note-message {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-left: 3px solid var(--theme-color);
+      border-radius: 8px;
+      background: rgba(var(--theme-color-rgb), .07);
+      color: var(--card-text-color);
+      animation: fadeIn .25s ease both;
+    }
   }
 
   .dashboard-card {
     background-color: var(--card-bg-color);
+    color: var(--text-color);
     border-radius: 12px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
     padding: 20px;
@@ -2136,14 +2172,6 @@ export default {
       .stats-icon, .stats-info {
         position: relative;
         z-index: 1;
-      }
-
-      &.warning-card .water-progress {
-        background-color: rgba(255, 152, 0, 0.15);
-      }
-
-      &.danger-card .water-progress {
-        background-color: rgba(244, 67, 54, 0.15);
       }
 
       @keyframes wave {
@@ -3161,36 +3189,6 @@ export default {
 }
 
 
-.stats-card.warning-card {
-  border-color: #ff9800;
-  box-shadow: 0 4px 10px rgba(255, 152, 0, 0.15);
-
-  .stats-icon {
-    background-color: rgba(255, 152, 0, 0.1);
-    color: #ff9800;
-  }
-
-  .stats-value {
-    color: #ff9800;
-  }
-}
-
-.stats-card.danger-card {
-  border-color: #f44336;
-  box-shadow: 0 4px 10px rgba(244, 67, 54, 0.15);
-
-  .stats-icon {
-    background-color: rgba(244, 67, 54, 0.1);
-    color: #f44336;
-  }
-
-  .stats-value {
-    color: #f44336;
-  }
-}
-
-
-
 
 .skeleton-card {
   width: 100%;
@@ -3923,23 +3921,6 @@ export default {
   }
 }
 
-.subscription-card .status-value {
-  width: fit-content;
-  padding: 3px 8px;
-  border-radius: 7px;
-  white-space: nowrap;
-}
-.subscription-card .status-healthy { color: #116848; background: rgba(27, 153, 104, .12); }
-.subscription-card .status-warning { color: #935300; background: rgba(245, 158, 11, .16); }
-.subscription-card .status-danger { color: #b42318; background: rgba(239, 68, 68, .14); }
-:global(body.dark-theme) .subscription-card .status-healthy { color: #78d8ae; }
-:global(body.dark-theme) .subscription-card .status-warning { color: #ffd08a; }
-:global(body.dark-theme) .subscription-card .status-danger { color: #ff9990; }
-.stats-card.healthy-card { border-color: rgba(27, 153, 104, .48); }
-.stats-card.healthy-card .stats-value,
-.stats-card.healthy-card .stats-icon { color: #16815b; }
-:global(body.dark-theme) .stats-card.healthy-card .stats-value,
-:global(body.dark-theme) .stats-card.healthy-card .stats-icon { color: #78d8ae; }
 .stats-card.daily-usage-trigger { cursor: pointer; }
 .stats-card.daily-usage-trigger:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(0, 0, 0, .12); }
 .stats-card.daily-usage-trigger:focus-visible { outline: 3px solid var(--theme-color); outline-offset: 3px; }
@@ -3951,34 +3932,59 @@ export default {
 <style lang="scss">
 @use '@/assets/styles/no-plan-card' as *;
 
-.stats-card.warning-card {
-  border-color: #ff9800 !important;
-  box-shadow: 0 4px 10px rgba(255, 152, 0, 0.15) !important;
+.dashboard-container .subscription-card .subscription-info .info-item .info-value.expiry-value {
+  color: hsl(var(--usage-hue) 76% 34%);
+}
+
+body.dark-theme .dashboard-container .subscription-card .subscription-info .info-item .info-value.expiry-value {
+  color: hsl(var(--usage-hue) 82% 69%);
+}
+
+.dashboard-container .subscription-card .subscription-info .info-item .info-value.expiry-value.is-permanent {
+  color: #a4770c;
+}
+
+body.dark-theme .dashboard-container .subscription-card .subscription-info .info-item .info-value.expiry-value.is-permanent {
+  color: #f6d36e;
+}
+
+.dashboard-container .stats-grid .stats-card.usage-gradient-card {
+  --usage-accent: hsl(var(--usage-hue) 76% 34%);
+  --usage-border: hsl(var(--usage-hue) 70% 44% / 0.7);
+  --usage-soft: hsl(var(--usage-hue) 70% 44% / 0.16);
+  border-color: var(--usage-border);
 
   .stats-icon {
-    background-color: rgba(255, 152, 0, 0.1) !important;
-    color: #ff9800 !important;
+    background-color: var(--usage-soft);
+    color: var(--usage-accent);
   }
 
-  .stats-value {
-    color: #ff9800 !important;
+  .stats-info .stats-value {
+    color: var(--usage-accent);
+  }
+
+  .water-progress {
+    background-color: var(--usage-soft);
   }
 }
 
-.stats-card.danger-card {
-  border-color: #f44336 !important;
-  box-shadow: 0 4px 10px rgba(244, 67, 54, 0.15) !important;
-
-  .stats-icon {
-    background-color: rgba(244, 67, 54, 0.1) !important;
-    color: #f44336 !important;
-  }
-
-  .stats-value {
-    color: #f44336 !important;
-  }
+body.dark-theme .dashboard-container .stats-grid .stats-card.usage-gradient-card {
+  --usage-accent: hsl(var(--usage-hue) 82% 69%);
+  --usage-border: hsl(var(--usage-hue) 76% 62% / 0.7);
+  --usage-soft: hsl(var(--usage-hue) 76% 62% / 0.17);
 }
 
+.dashboard-container .stats-grid .stats-card.usage-gradient-card.permanent-card {
+  --usage-accent: #a4770c;
+  --usage-border: rgba(180, 132, 22, 0.72);
+  --usage-soft: rgba(212, 175, 55, 0.18);
+}
+
+body.dark-theme .dashboard-container .stats-grid .stats-card.usage-gradient-card.permanent-card {
+  --usage-accent: #f6d36e;
+  --usage-border: rgba(246, 211, 110, 0.72);
+  --usage-soft: rgba(246, 211, 110, 0.17);
+}
 
 .eztheme-btn {
   display: inline-flex !important;

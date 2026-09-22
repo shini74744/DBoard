@@ -1,0 +1,211 @@
+.dboard-admin-group-bar {
+  margin: .5rem 0 1rem;
+  padding: .85rem 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: .75rem;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+.dboard-admin-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .65rem;
+}
+.dboard-admin-group-head > strong { font-size: .9rem; white-space: nowrap; }
+.dboard-admin-group-chips {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: .45rem;
+  min-width: 0;
+}
+.dboard-admin-group-chip, .dboard-admin-group-manage,
+.dboard-admin-group-card button, .dboard-admin-group-dialog button {
+  border: 1px solid hsl(var(--border));
+  border-radius: .5rem;
+  padding: .4rem .7rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font: inherit;
+  font-size: .8rem;
+  cursor: pointer;
+}
+.dboard-admin-group-chip:hover, .dboard-admin-group-manage:hover,
+.dboard-admin-group-card button:hover, .dboard-admin-group-dialog button:hover {
+  background: hsl(var(--accent));
+}
+.dboard-admin-group-chip.active {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / .12);
+  color: hsl(var(--primary));
+}
+.dboard-admin-group-count {
+  display: inline-block;
+  margin-left: .4rem;
+  opacity: .7;
+  font-variant-numeric: tabular-nums;
+}
+.dboard-admin-group-status {
+  margin: .5rem 0 0;
+  color: hsl(var(--muted-foreground));
+  font-size: .8rem;
+}
+#root [data-dboard-group-native][hidden],
+#root .dboard-admin-group-results[hidden] { display: none !important; }
+.dboard-admin-group-results {
+  min-height: 8rem;
+  max-height: calc(100svh - 235px);
+  overflow-y: auto;
+  padding: .25rem 0 1rem;
+}
+.dboard-admin-group-results h3 {
+  margin: .1rem 0 .7rem;
+  font-size: 1rem;
+  font-weight: 650;
+}
+.dboard-admin-group-search,
+.dboard-admin-group-editor-row input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid hsl(var(--input));
+  border-radius: .5rem;
+  padding: .55rem .7rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font: inherit;
+  font-size: .85rem;
+}
+.dboard-admin-group-results > .dboard-admin-group-search { max-width: 360px; margin-bottom: .85rem; }
+.dboard-admin-group-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .75rem; }
+.dboard-admin-group-card {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: .7rem;
+  background: hsl(var(--card));
+}
+.dboard-admin-group-card strong { overflow-wrap: anywhere; }
+.dboard-admin-group-meta { color: hsl(var(--muted-foreground)); font-size: .8rem; overflow-wrap: anywhere; }
+.dboard-admin-group-actions { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .45rem; }
+.dboard-admin-group-empty { color: hsl(var(--muted-foreground)); font-size: .85rem; }
+.dboard-admin-group-overlay {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, .55);
+}
+.dboard-admin-group-dialog {
+  width: min(720px, 100%);
+  max-height: calc(100svh - 2rem);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: .7rem;
+  padding: 1.2rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: .9rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .3);
+}
+.dboard-admin-group-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.dboard-admin-group-dialog-head h2 { margin: 0; font-size: 1.2rem; font-weight: 700; }
+.dboard-admin-group-editor-list { display: grid; gap: .55rem; overflow-y: auto; min-height: 0; }
+.dboard-admin-group-create,
+.dboard-admin-group-edit,
+.dboard-admin-group-member-tools {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+.dboard-admin-group-create input,
+.dboard-admin-group-edit input { flex: 1 1 180px; min-width: 0; }
+.dboard-admin-group-picker label { display: grid; gap: .35rem; font-size: .85rem; font-weight: 600; }
+.dboard-admin-group-picker select { min-height: 2.3rem; }
+.dboard-admin-group-member-tools > span { flex: 1 1 100%; }
+.dboard-admin-group-editor-list { flex: 1 1 auto; }
+.dboard-admin-group-select-row {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  padding: .65rem .75rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: .55rem;
+  cursor: pointer;
+}
+.dboard-admin-group-select-row:hover { background: hsl(var(--accent) / .5); }
+.dboard-admin-group-select-row input { width: 1rem; height: 1rem; flex: 0 0 auto; }
+.dboard-admin-group-item { display: grid; gap: .2rem; min-width: 0; overflow-wrap: anywhere; }
+.dboard-admin-group-item strong { font-size: .85rem; }
+.dboard-admin-group-item small { color: hsl(var(--muted-foreground)); font-size: .75rem; }
+.dboard-admin-group-dialog .dboard-admin-group-save {
+  align-self: flex-end;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.dboard-admin-group-dialog .dboard-admin-group-danger { color: hsl(var(--destructive)); }
+.dboard-admin-group-dialog [hidden] { display: none !important; }
+.dboard-admin-group-dialog button:disabled { opacity: .55; cursor: wait; }
+@media (max-width: 600px) {
+  .dboard-admin-group-head { align-items: flex-start; }
+  .dboard-admin-group-head > strong { width: 100%; }
+  .dboard-admin-group-chips { width: 100%; }
+  .dboard-admin-group-dialog { padding: .9rem; }
+  .dboard-admin-group-create input,
+  .dboard-admin-group-edit input { flex-basis: 100%; }
+  .dboard-admin-group-dialog button { min-height: 2.3rem; }
+}
+
+.dboard-machine-sort-overlay {
+  position: fixed;
+  z-index: 130;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgb(0 0 0 / .55);
+}
+.dboard-machine-sort-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 640px);
+  max-height: 90svh;
+  padding: 1.25rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: .85rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  box-shadow: 0 24px 60px rgb(0 0 0 / .2);
+}
+.dboard-machine-sort-dialog h2 { margin: 0; font-size: 1.25rem; font-weight: 700; }
+.dboard-machine-sort-dialog p { margin: .35rem 0 .9rem; color: hsl(var(--muted-foreground)); font-size: .85rem; }
+.dboard-machine-sort-list { display: grid; gap: .45rem; min-height: 0; overflow-y: auto; margin: 0; padding: .15rem; list-style: none; }
+.dboard-machine-sort-row { display: flex; align-items: center; gap: .6rem; padding: .55rem; border: 1px solid hsl(var(--border)); border-radius: .5rem; background: hsl(var(--card)); }
+.dboard-machine-sort-row.dragging { opacity: .45; }
+.dboard-machine-sort-dialog button { border: 1px solid hsl(var(--border)); border-radius: .4rem; padding: .35rem .65rem; background: hsl(var(--background)); color: hsl(var(--foreground)); cursor: pointer; }
+.dboard-machine-sort-dialog button:hover { background: hsl(var(--accent)); }
+.dboard-machine-sort-dialog button:disabled { opacity: .55; cursor: wait; }
+.dboard-machine-sort-handle { flex: none; cursor: grab !important; touch-action: none; font-size: 1rem; }
+.dboard-machine-sort-handle:active { cursor: grabbing !important; }
+.dboard-machine-sort-label { display: grid; flex: 1; min-width: 0; }
+.dboard-machine-sort-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; font-weight: 600; }
+.dboard-machine-sort-label small { color: hsl(var(--muted-foreground)); }
+.dboard-machine-sort-controls { display: flex; gap: .25rem; flex: none; }
+.dboard-machine-sort-status { min-height: 1.1rem; }
+.dboard-machine-sort-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .5rem; }
+.dboard-machine-sort-actions .primary { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+@media (max-width: 600px) {
+  .dboard-machine-sort-overlay { padding: .5rem; }
+  .dboard-machine-sort-dialog { max-height: 94svh; padding: .9rem; }
+  .dboard-machine-sort-row { gap: .35rem; padding: .4rem; }
+}

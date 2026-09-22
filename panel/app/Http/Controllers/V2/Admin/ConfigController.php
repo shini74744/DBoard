@@ -81,6 +81,41 @@ class ConfigController extends Controller
         return $this->success($configMappings);
     }
 
+    public function getUserTelegramSettings()
+    {
+        return $this->success($this->userTelegramSettings());
+    }
+
+    public function saveUserTelegramSettings(Request $request)
+    {
+        $data = $request->validate([
+            'telegram_user_notify_node_name' => 'sometimes|required|boolean',
+            'telegram_user_notify_node_rate' => 'sometimes|required|boolean',
+            'telegram_user_notify_node_new' => 'sometimes|required|boolean',
+            'telegram_user_notify_node_offline' => 'sometimes|required|boolean',
+            'telegram_user_notify_manual_reset' => 'sometimes|required|boolean',
+            'telegram_node_offline_reminders' => 'sometimes|required|integer|min:1|max:10',
+            'telegram_node_offline_interval' => 'sometimes|required|integer|min:5|max:1440',
+        ]);
+        foreach ($data as $key => $value) {
+            admin_setting([$key => $value]);
+        }
+        return $this->success($this->userTelegramSettings());
+    }
+
+    private function userTelegramSettings(): array
+    {
+        return [
+            'telegram_user_notify_node_name' => (bool) admin_setting('telegram_user_notify_node_name', 0),
+            'telegram_user_notify_node_rate' => (bool) admin_setting('telegram_user_notify_node_rate', 0),
+            'telegram_user_notify_node_new' => (bool) admin_setting('telegram_user_notify_node_new', 0),
+            'telegram_user_notify_node_offline' => (bool) admin_setting('telegram_user_notify_node_offline', 0),
+            'telegram_user_notify_manual_reset' => (bool) admin_setting('telegram_user_notify_manual_reset', 0),
+            'telegram_node_offline_reminders' => (int) admin_setting('telegram_node_offline_reminders', 3),
+            'telegram_node_offline_interval' => (int) admin_setting('telegram_node_offline_interval', 60),
+        ];
+    }
+
     /**
      * 获取配置映射数据
      * 

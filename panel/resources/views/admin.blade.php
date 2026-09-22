@@ -77,10 +77,17 @@
     <script src="/assets/admin/locales/zh-CN.js"></script>
     <script src="/assets/admin/locales/ko-KR.js"></script>
   @endif
+  <style>{!! file_get_contents(resource_path('css/dboard-admin-overrides.css')) !!}</style>
+  <style>{!! file_get_contents(resource_path('css/dboard-admin-groups.css')) !!}</style>
 </head>
 
 <body>
   <div id="root"></div>
+  <script>{!! file_get_contents(resource_path('js/dboard-telegram-settings.js')) !!}</script>
+  <script>{!! file_get_contents(resource_path('js/dboard-outbound-sort.js')) !!}</script>
+  <script>{!! file_get_contents(resource_path('js/dboard-marketing-notifications.js')) !!}</script>
+  <script>{!! file_get_contents(resource_path('js/dboard-machine-sort.js')) !!}</script>
+  <script>{!! file_get_contents(resource_path('js/dboard-admin-groups.js')) !!}</script>
 </body>
 
 </html>

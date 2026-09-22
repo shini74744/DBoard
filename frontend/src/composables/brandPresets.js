@@ -29,5 +29,15 @@ export const BRAND_PRESETS = {
       primaryColorHover: '#d0bcff', backgroundColor: '#1a1827',
       cardBackground: '#29253b', borderColor: '#49415e',
       shadowColor: 'rgba(0, 0, 0, 0.35)' }
+  },
+  'DBoard-Glass': {
+    light: { primaryColor: '#176782', primaryColorRgb: '23, 103, 130',
+      primaryColorHover: '#0f526b', backgroundColor: '#d8eaf2',
+      cardBackground: 'rgba(255, 255, 255, 0.50)', borderColor: 'rgba(255, 255, 255, 0.82)',
+      shadowColor: 'rgba(31, 78, 105, 0.20)' },
+    dark: { primaryColor: '#9ce7ef', primaryColorRgb: '156, 231, 239',
+      primaryColorHover: '#c0f3f5', backgroundColor: '#101f30',
+      cardBackground: 'rgba(15, 34, 50, 0.48)', borderColor: 'rgba(209, 240, 255, 0.28)',
+      shadowColor: 'rgba(0, 8, 24, 0.46)' }
   }
 };

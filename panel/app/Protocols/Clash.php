@@ -312,7 +312,7 @@ class Clash extends AbstractProtocol
     private function isMatch($exp, $str)
     {
         try {
-            return preg_match($exp, $str) === 1;
+            return @preg_match($exp, $str) === 1;
         } catch (\Exception $e) {
             return false;
         }
@@ -324,7 +324,7 @@ class Clash extends AbstractProtocol
             return false;
         }
         try {
-            return preg_match($exp, '') !== false;
+            return @preg_match($exp, '') !== false;
         } catch (\Exception $e) {
             return false;
         }

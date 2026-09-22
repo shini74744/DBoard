@@ -2,6 +2,11 @@ import {SITE_CONFIG} from '../../utils/baseConfig';
 
 export default {
     common: {
+        navigationSettings: '导航设置',
+        navigationSettingsHint: '选择在顶部导航栏显示的功能；设置会同步到您登录的所有设备。',
+        navigationSettingsLoadFailed: '读取导航设置失败，请重试。',
+        navigationSettingsSaved: '导航设置已保存',
+        navigationSettingsSaveFailed: '保存导航设置失败，请重试。',
         appName: SITE_CONFIG.siteName,
         welcome: `欢迎使用 ${SITE_CONFIG.siteName}`,
         login: '登录',
@@ -179,6 +184,12 @@ export default {
     dashboard: {
         welcome: '欢迎回来',
         welcomeDesc: '查看您的服务和使用情况',
+        themeNoteAction: '点一下，看看今天的寄语',
+        themeNoteTide: '像潮汐一样自在，连接总在需要时抵达。',
+        themeNoteCopper: '留一点暖意给今天，也留一条畅通的路。',
+        themeNoteIris: '保持好奇，下一段旅程正等待开启。',
+        themeNoteGlass: '透过清晰的视界，去看更远的风景。',
+        themeNoteDefault: '愿今天的连接顺畅，心情也轻盈。',
         siteAnnouncement: '网站公告',
         subscriptionInfo: '套餐信息',
         planName: '套餐名称',
@@ -267,6 +278,7 @@ export default {
         hotSale: '热销'
     },
     more: {
+        shopDescription: '查看并购买可用的套餐',
         title: '更多功能',
         description: '探索更多功能和服务',
         inviteDescription: '邀请好友获得返佣奖励',
@@ -415,6 +427,8 @@ export default {
         accountSettings: '账号设置',
         expireRemind: '到期提醒',
         trafficRemind: '流量提醒',
+        telegramRemind: 'Telegram 通知',
+        telegramRemindDesc: '绑定 Telegram 后接收到期提醒和节点通知；新用户默认开启',
         autoRenewal: '自动续费',
         expireRemindDesc: '接收账户到期提醒邮件',
         trafficRemindDesc: '接收流量用尽提醒邮件',

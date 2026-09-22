@@ -6,6 +6,7 @@ use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Utils\Dict;
+use App\Services\ShopPromotion;
 use Illuminate\Http\Request;
 
 class CommController extends Controller
@@ -14,6 +15,7 @@ class CommController extends Controller
     {
         $data = [
             'frontend_theme' => admin_setting('frontend_theme', 'Xboard'),
+            'shop_promotion' => ShopPromotion::overrides(),
             'is_telegram' => (int)admin_setting('telegram_bot_enable', 0),
             'telegram_discuss_link' => admin_setting('telegram_discuss_link'),
             'stripe_pk' => admin_setting('stripe_pk_live'),

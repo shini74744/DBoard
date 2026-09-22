@@ -25,6 +25,10 @@
           <IconWallet class="menu-icon" />
           <span>{{ $t('common.myWallet') }}</span>
         </div>
+        <div class="menu-item" @click="openNavigationSettings">
+          <IconSettings class="menu-icon" />
+          <span>{{ $t('common.navigationSettings') }}</span>
+        </div>
         <div class="menu-item" @click="navigateTo('/profile?openPasswordModal=true')">
           <IconLock class="menu-icon" />
           <span>{{ $t('common.changePassword') }}</span>
@@ -37,6 +41,32 @@
       </div>
     </transition>
   </div>
+  <Teleport to="body">
+    <div v-if="showNavigationSettings" class="navigation-settings-overlay" @click.self="closeNavigationSettings">
+      <section class="navigation-settings-dialog" role="dialog" aria-modal="true" :aria-label="$t('common.navigationSettings')">
+        <div class="navigation-settings-header">
+          <h2>{{ $t('common.navigationSettings') }}</h2>
+          <button type="button" class="navigation-settings-close" :aria-label="$t('common.cancel')" @click="closeNavigationSettings">×</button>
+        </div>
+        <p class="navigation-settings-hint">{{ $t('common.navigationSettingsHint') }}</p>
+        <div v-if="navigationLoading" class="navigation-settings-state">{{ $t('common.loading') }}</div>
+        <div v-else class="navigation-settings-list">
+          <label v-for="key in navigationOptions" :key="key" class="navigation-settings-row">
+            <span>{{ $t(`menu.${key}`) }}</span>
+            <input type="checkbox" :checked="!navigationDraft.includes(key)" :disabled="navigationSaving"
+              @change="toggleNavigationItem(key, $event.target.checked)" />
+          </label>
+        </div>
+        <p v-if="navigationError" class="navigation-settings-error" role="alert">{{ navigationError }}</p>
+        <div class="navigation-settings-actions">
+          <button type="button" class="navigation-settings-cancel" @click="closeNavigationSettings">{{ $t('common.cancel') }}</button>
+          <button type="button" class="navigation-settings-save" :disabled="navigationLoading || navigationSaving" @click="saveNavigationSettings">
+            {{ navigationSaving ? $t('common.loading') : $t('common.save') }}
+          </button>
+        </div>
+      </section>
+    </div>
+  </Teleport>
 </template>
 
 <script>
@@ -49,6 +79,8 @@ import IconUser from '@/components/icons/IconUser.vue';
 import IconLogout from '@/components/icons/IconLogout.vue';
 import IconWallet from '@/components/icons/IconWallet.vue';
 import IconLock from '@/components/icons/IconLock.vue';
+import { IconSettings } from '@tabler/icons-vue';
+import { useNavigationPreferences, optionalNavItems, resetNavigationPreferences } from '@/composables/useNavigationPreferences';
 
 export default {
   name: 'UserAvatar',
@@ -56,7 +88,8 @@ export default {
     IconUser,
     IconLogout,
     IconWallet,
-    IconLock
+    IconLock,
+    IconSettings
   },
   props: {
     username: {
@@ -74,6 +107,52 @@ export default {
     const { showToast } = useToast();
     const isDropdownOpen = ref(false);
     const avatarContainer = ref(null);
+    const showNavigationSettings = ref(false);
+    const navigationLoading = ref(false);
+    const navigationSaving = ref(false);
+    const navigationError = ref('');
+    const navigationDraft = ref([]);
+    const navigationOptions = optionalNavItems();
+    const { hiddenItems, loadNavigationPreferences, saveNavigationPreferences } = useNavigationPreferences();
+
+    const openNavigationSettings = async () => {
+      isDropdownOpen.value = false;
+      showNavigationSettings.value = true;
+      navigationLoading.value = true;
+      navigationError.value = '';
+      try {
+        await loadNavigationPreferences(true);
+        navigationDraft.value = [...hiddenItems.value];
+      } catch (error) {
+        navigationError.value = t('common.navigationSettingsLoadFailed');
+      } finally {
+        navigationLoading.value = false;
+      }
+    };
+
+    const closeNavigationSettings = () => {
+      if (!navigationSaving.value) showNavigationSettings.value = false;
+    };
+
+    const toggleNavigationItem = (key, visible) => {
+      navigationDraft.value = visible
+        ? navigationDraft.value.filter(item => item !== key)
+        : [...new Set([...navigationDraft.value, key])];
+    };
+
+    const saveNavigationSettings = async () => {
+      navigationSaving.value = true;
+      navigationError.value = '';
+      try {
+        await saveNavigationPreferences(navigationDraft.value);
+        showNavigationSettings.value = false;
+        showToast(t('common.navigationSettingsSaved'), 'success', 3000);
+      } catch (error) {
+        navigationError.value = t('common.navigationSettingsSaveFailed');
+      } finally {
+        navigationSaving.value = false;
+      }
+    };
 
     const toggleDropdown = () => {
       isDropdownOpen.value = !isDropdownOpen.value;
@@ -87,6 +166,7 @@ export default {
     const logout = async () => {
       try {
         localStorage.removeItem('token');
+        resetNavigationPreferences();
         isDropdownOpen.value = false;
 
         showToast(t('auth.logoutSuccess'), 'success', 3000);
@@ -116,6 +196,8 @@ export default {
 
     return {
       isDropdownOpen,
+      showNavigationSettings, navigationLoading, navigationSaving, navigationError, navigationDraft, navigationOptions,
+      openNavigationSettings, closeNavigationSettings, toggleNavigationItem, saveNavigationSettings,
       toggleDropdown,
       navigateTo,
       logout,
@@ -260,4 +342,44 @@ export default {
     transform: translateY(0);
   }
 }
+.navigation-settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, .55);
+}
+.navigation-settings-dialog {
+  width: min(100%, 420px);
+  max-height: calc(100svh - 32px);
+  overflow-y: auto;
+  padding: 22px;
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  background: var(--card-background, #fff);
+  color: var(--text-color);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
+}
+.navigation-settings-header, .navigation-settings-row, .navigation-settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.navigation-settings-header h2 { margin: 0; font-size: 20px; }
+.navigation-settings-close { border: 0; background: transparent; color: inherit; font-size: 28px; cursor: pointer; }
+.navigation-settings-hint { margin: 10px 0 18px; color: var(--text-secondary, var(--text-color)); font-size: 14px; }
+.navigation-settings-list { display: grid; gap: 10px; }
+.navigation-settings-row { padding: 12px 14px; border: 1px solid var(--border-color); border-radius: 10px; cursor: pointer; }
+.navigation-settings-row input { width: 18px; height: 18px; accent-color: var(--theme-color); }
+.navigation-settings-state { padding: 18px 0; }
+.navigation-settings-error { color: #dc2626; font-size: 14px; }
+.navigation-settings-actions { justify-content: flex-end; margin-top: 20px; }
+.navigation-settings-actions button { padding: 9px 18px; border-radius: 9px; cursor: pointer; }
+.navigation-settings-cancel { border: 1px solid var(--border-color); background: transparent; color: inherit; }
+.navigation-settings-save { border: 0; background: var(--theme-color); color: #fff; }
+.navigation-settings-save:disabled { opacity: .6; cursor: not-allowed; }
 </style>

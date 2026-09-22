@@ -34,6 +34,15 @@
 
       <div class="stats-grid">
 
+        <div v-if="shouldShowShopCard" class="stats-card" @click="$router.push('/shop')">
+          <div class="stats-icon"><IconShoppingCart :size="32" /></div>
+          <div class="stats-info">
+            <div class="stats-value">{{ $t('menu.shop') }}</div>
+            <div class="stats-label">{{ $t('more.shopDescription') }}</div>
+          </div>
+          <div class="chevron-icon"><IconChevronRight :size="20" /></div>
+        </div>
+
         <div v-if="shouldShowInviteCard" class="stats-card" @click="$router.push('/invite')">
 
           <div class="stats-icon">
@@ -353,6 +362,7 @@ import { useRouter } from 'vue-router';
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 
 import DomainAuthAlert from '@/components/common/DomainAuthAlert.vue';
+import { useNavigationPreferences } from '@/composables/useNavigationPreferences';
 
 
 
@@ -385,8 +395,9 @@ const morePageConfig = MORE_PAGE_CONFIG;
 const thirdNavItem = NAVIGATION_CONFIG?.thirdNavItem || 'invite';
 
 const fourthNavItem = NAVIGATION_CONFIG?.fourthNavItem || '';
-
-const isHiddenByTopNav = (key) => key === thirdNavItem || key === fourthNavItem;
+const { hiddenItems, loadNavigationPreferences } = useNavigationPreferences();
+const isHiddenByTopNav = (key) => (key === thirdNavItem || key === fourthNavItem) && !hiddenItems.value.includes(key);
+const shouldShowShopCard = computed(() => hiddenItems.value.includes('shop'));
 
 
 
@@ -489,6 +500,7 @@ const getLocaleTitle = (key) => {
 
 
 onMounted(async () => {
+  loadNavigationPreferences().catch(error => console.error('Failed to load navigation settings:', error));
 
 
 

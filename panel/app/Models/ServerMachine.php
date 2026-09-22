@@ -35,7 +35,7 @@ class ServerMachine extends Model
         'updated_at' => 'timestamp',
     ];
 
-    protected $hidden = ['token'];
+    protected $hidden = ['token', 'admin_group'];
 
     public function servers(): HasMany
     {

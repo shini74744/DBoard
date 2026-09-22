@@ -15,7 +15,7 @@ class ThemeService
     private const USER_THEME_DIR = '/storage/theme/';
     private const CONFIG_FILE = 'config.json';
     private const SETTING_PREFIX = 'theme_';
-    private const SYSTEM_THEMES = ['Xboard', 'v2board', 'DBoard-Tide', 'DBoard-Copper', 'DBoard-Iris'];
+    private const SYSTEM_THEMES = ['Xboard', 'v2board', 'DBoard-Tide', 'DBoard-Copper', 'DBoard-Iris', 'DBoard-Glass'];
 
     public function __construct()
     {
@@ -191,33 +191,53 @@ class ThemeService
         }
 
         $currentTheme = admin_setting('current_theme');
+        $themePath = $this->getThemePath($theme);
+        if (!$themePath || !File::exists($themePath . '/dashboard.blade.php')) {
+            throw new Exception('Theme files not found');
+        }
+
+        $targetPath = public_path('theme/' . $theme);
+        $stagingPath = $targetPath . '.staging-' . uniqid();
+        $backupPath = $targetPath . '.backup-' . uniqid();
+        $backedUp = false;
+        $activated = false;
 
         try {
-            $themePath = $this->getThemePath($theme);
-            if (!$themePath) {
-                throw new Exception('Theme not found');
+            if (!File::copyDirectory($themePath, $stagingPath)) {
+                throw new Exception('Failed to stage theme files');
             }
-
-            if (!File::exists($this->getThemeViewPath($theme))) {
-                throw new Exception('Theme view file not found');
+            if (File::exists($targetPath)) {
+                if (!@rename($targetPath, $backupPath)) {
+                    throw new Exception('Failed to move previous theme files');
+                }
+                $backedUp = true;
             }
-
-            if ($currentTheme && $currentTheme !== $theme) {
-                $this->cleanupThemeFiles($currentTheme);
+            if (!@rename($stagingPath, $targetPath)) {
+                throw new Exception('Failed to activate theme files');
             }
-
-            $targetPath = public_path('theme/' . $theme);
-            if (!File::copyDirectory($themePath, $targetPath)) {
-                throw new Exception('Failed to copy theme files');
-            }
-
+            $activated = true;
             admin_setting(['current_theme' => $theme]);
-            return true;
-
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
+            if ($activated) {
+                File::deleteDirectory($targetPath);
+            }
+            if ($backedUp) {
+                @rename($backupPath, $targetPath);
+            }
+            if (File::exists($stagingPath)) {
+                File::deleteDirectory($stagingPath);
+            }
             Log::error('Theme switch failed', ['theme' => $theme, 'error' => $e->getMessage()]);
             throw $e;
         }
+
+        if ($currentTheme && $currentTheme !== $theme) {
+            $this->cleanupThemeFiles($currentTheme);
+        }
+        if ($backedUp && File::exists($backupPath) && !File::deleteDirectory($backupPath)) {
+            Log::warning('Old public theme files could not be removed', ['path' => $backupPath]);
+        }
+        return true;
     }
 
     /**

@@ -10,13 +10,13 @@
 
         <div class="card-header">
 
-          <h2 class="card-title">{{ $t('shop.title') }}</h2>
+          <h2 class="card-title">{{ shopPromo.hero_title || $t('shop.title') }}</h2>
 
         </div>
 
         <div class="card-body">
 
-          <p>{{ $t('shop.description') }}</p>
+          <p>{{ shopPromo.hero_description || $t('shop.description') }}</p>
 
         </div>
 
@@ -38,9 +38,9 @@
 
           <div class="stats-info">
 
-            <div class="stats-value">{{ $t('shop.stats.global_nodes') }}</div>
+            <div class="stats-value">{{ shopPromo.global_nodes_title || $t('shop.stats.global_nodes') }}</div>
 
-            <div class="stats-label">{{ $t('shop.stats.global_nodes_desc') }}</div>
+            <div class="stats-label">{{ shopPromo.global_nodes_description || $t('shop.stats.global_nodes_desc') }}</div>
 
           </div>
 
@@ -58,9 +58,9 @@
 
           <div class="stats-info">
 
-            <div class="stats-value">{{ $t('shop.stats.speed') }}</div>
+            <div class="stats-value">{{ shopPromo.speed_title || $t('shop.stats.speed') }}</div>
 
-            <div class="stats-label">{{ $t('shop.stats.speed_desc') }}</div>
+            <div class="stats-label">{{ shopPromo.speed_description || $t('shop.stats.speed_desc') }}</div>
 
           </div>
 
@@ -78,9 +78,9 @@
 
           <div class="stats-info">
 
-            <div class="stats-value">{{ $t('shop.stats.streaming') }}</div>
+            <div class="stats-value">{{ shopPromo.streaming_title || $t('shop.stats.streaming') }}</div>
 
-            <div class="stats-label">{{ $t('shop.stats.streaming_desc') }}</div>
+            <div class="stats-label">{{ shopPromo.streaming_description || $t('shop.stats.streaming_desc') }}</div>
 
           </div>
 
@@ -98,9 +98,9 @@
 
           <div class="stats-info">
 
-            <div class="stats-value">{{ $t('shop.stats.devices') }}</div>
+            <div class="stats-value">{{ shopPromo.devices_title || $t('shop.stats.devices') }}</div>
 
-            <div class="stats-label">{{ $t('shop.stats.devices_desc') }}</div>
+            <div class="stats-label">{{ shopPromo.devices_description || $t('shop.stats.devices_desc') }}</div>
 
           </div>
 
@@ -510,6 +510,8 @@ export default {
 
     const currencySymbol = ref('¥');
 
+    const shopPromo = ref({});
+
 
 
     const selectedPriceType = reactive({});
@@ -564,17 +566,20 @@ export default {
 
 
 
+    const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+
     const initPopup = () => {
 
-      if (SHOP_CONFIG.popup && SHOP_CONFIG.popup.enabled) {
+      const configured = shopPromo.value;
+      if (configured.popup_enabled ?? SHOP_CONFIG.popup?.enabled) {
 
-        popupConfig.title = SHOP_CONFIG.popup.title || '';
+        popupConfig.title = configured.popup_title ? escapeHtml(configured.popup_title) : (SHOP_CONFIG.popup?.title || '');
 
-        popupConfig.content = SHOP_CONFIG.popup.content || '';
+        popupConfig.content = configured.popup_content ? escapeHtml(configured.popup_content).replace(/\n/g, '<br>') : (SHOP_CONFIG.popup?.content || '');
 
-        popupConfig.cooldownHours = SHOP_CONFIG.popup.cooldownHours || 24;
+        popupConfig.cooldownHours = configured.popup_cooldown_hours ?? SHOP_CONFIG.popup?.cooldownHours ?? 24;
 
-        popupConfig.closeWaitSeconds = SHOP_CONFIG.popup.closeWaitSeconds || 0;
+        popupConfig.closeWaitSeconds = configured.popup_close_wait_seconds ?? SHOP_CONFIG.popup?.closeWaitSeconds ?? 0;
 
 
 
@@ -791,6 +796,8 @@ export default {
         const response = await getCommConfig();
 
         if (response.data) {
+
+          shopPromo.value = response.data.shop_promotion || {};
 
           currency.value = response.data.currency || 'CNY';
 
@@ -1118,7 +1125,8 @@ export default {
 
         nextTick(() => {
 
-          if (SHOP_CONFIG.popup && SHOP_CONFIG.popup.enabled && SHOP_CONFIG.popup.cooldownHours === 0) {
+          if ((shopPromo.value.popup_enabled ?? SHOP_CONFIG.popup?.enabled) &&
+              (shopPromo.value.popup_cooldown_hours ?? SHOP_CONFIG.popup?.cooldownHours) === 0) {
 
             localStorage.removeItem('shop_popup_close_time');
 
@@ -1217,6 +1225,8 @@ export default {
       currency,
 
       currencySymbol,
+
+      shopPromo,
 
       paymentMethods,
 

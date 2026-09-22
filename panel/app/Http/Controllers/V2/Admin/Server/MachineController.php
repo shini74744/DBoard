@@ -9,6 +9,7 @@ use App\Models\ServerMachine;
 use App\Models\ServerMachineLoadHistory;
 use App\Services\NodeSyncService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class MachineController extends Controller
 {
@@ -18,12 +19,15 @@ class MachineController extends Controller
     public function fetch(Request $request)
     {
         $machines = ServerMachine::withCount('servers')
+            ->orderBy('sort')
             ->orderBy('id')
             ->get()
             ->map(function (ServerMachine $machine) {
                 return [
                     'id' => $machine->id,
+                    'sort' => $machine->sort,
                     'name' => $machine->name,
+                    'admin_group' => $machine->admin_group,
                     'notes' => $machine->notes,
                     'is_active' => $machine->is_active,
                     'last_seen_at' => $machine->last_seen_at,
@@ -35,6 +39,28 @@ class MachineController extends Controller
             });
 
         return $this->success($machines);
+    }
+
+    public function sort(Request $request)
+    {
+        $data = $request->validate([
+            'ids' => 'required|array',
+            'ids.*' => 'required|integer|distinct|min:1',
+        ]);
+        $ids = array_map('intval', $data['ids']);
+        DB::transaction(function () use ($ids) {
+            $current = ServerMachine::query()->lockForUpdate()->pluck('id')->map(fn($id) => (int) $id)->all();
+            sort($current);
+            $incoming = $ids;
+            sort($incoming);
+            if ($current !== $incoming) {
+                throw new ApiException('服务器列表已更新，请刷新后重新排序');
+            }
+            foreach ($ids as $position => $id) {
+                ServerMachine::whereKey($id)->update(['sort' => $position + 1]);
+            }
+        });
+        return $this->success(true);
     }
 
     /**
@@ -63,6 +89,7 @@ class MachineController extends Controller
         }
 
         $machine = ServerMachine::create([
+            'sort' => ((int) ServerMachine::max('sort')) + 1,
             'name' => $params['name'],
             'notes' => $params['notes'] ?? null,
             'is_active' => $params['is_active'] ?? true,
@@ -74,6 +101,31 @@ class MachineController extends Controller
             'token' => $machine->token,
             'install_command' => $this->buildInstallCommand($request, $machine),
         ]);
+    }
+
+    /**
+     * 后台列表分组，仅影响管理界面的筛选。
+     */
+    public function setGroup(Request $request)
+    {
+        $params = $request->validate([
+            'id' => 'required|integer|exists:v2_server_machine,id',
+            'admin_group' => 'present|nullable|string|max:64',
+        ]);
+
+        $group = trim((string) ($params['admin_group'] ?? ''));
+        if ($group !== '' && preg_match('/[\x00-\x1F\x7F]/u', $group)) {
+            return $this->fail([422, '分组名称不能包含控制字符']);
+        }
+
+        if ($group !== '') {
+            DB::table('dboard_admin_groups')->insertOrIgnore([
+                'kind' => 'machine', 'name' => $group,
+                'created_at' => time(), 'updated_at' => time(),
+            ]);
+        }
+        ServerMachine::whereKey($params['id'])->update(['admin_group' => $group ?: null]);
+        return $this->success(true);
     }
 
     /**

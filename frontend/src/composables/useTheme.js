@@ -2,6 +2,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { THEME_CONFIG } from '@/utils/baseConfig';
 import { BRAND_PRESETS } from './brandPresets';
+import { readableText } from '@/utils/colorContrast';
 let activeBrandTheme = 'Xboard';
 export function useTheme() {
   const theme = ref(THEME_CONFIG.defaultTheme);
@@ -24,31 +25,37 @@ export function useTheme() {
 
     document.body.offsetHeight;
 
-    root.style.setProperty('--theme-color', themeVars.primaryColor);
-    root.style.setProperty('--theme-color-rgb', themeVars.primaryColorRgb);
-
-    root.style.setProperty('--theme-hover-color', themeVars.primaryColorHover);
-    root.style.setProperty('--primary-color-hover', themeVars.primaryColorHover);
-
-    root.style.setProperty('--background-color', themeVars.backgroundColor);
-    root.style.setProperty('--card-background', themeVars.cardBackground);
-    root.style.setProperty('--text-color', themeVars.textColor);
-    root.style.setProperty('--secondary-text-color', themeVars.secondaryTextColor);
-    root.style.setProperty('--border-color', themeVars.borderColor);
-    root.style.setProperty('--shadow-color', themeVars.shadowColor);
+    const background = themeVars.backgroundColor;
+    const cardBackground = themeVars.cardBackground || background;
+    const bodyText = readableText(themeVars.textColor, background, selectedTheme === 'dark' ? '#171a1d' : '#ffffff');
+    const cardText = readableText(themeVars.textColor, cardBackground, background);
+    const variables = {
+      '--theme-color': themeVars.primaryColor,
+      '--theme-color-rgb': themeVars.primaryColorRgb,
+      '--theme-hover-color': themeVars.primaryColorHover,
+      '--primary-color-hover': themeVars.primaryColorHover,
+      '--on-theme-color': readableText('#ffffff', themeVars.primaryColor, background),
+      '--background-color': background,
+      '--card-background': cardBackground,
+      '--card-bg-color': cardBackground,
+      '--text-color': bodyText,
+      '--secondary-text-color': readableText(themeVars.secondaryTextColor, background),
+      '--card-text-color': cardText,
+      '--card-secondary-text-color': readableText(themeVars.secondaryTextColor, cardBackground, background),
+      '--border-color': themeVars.borderColor,
+      '--shadow-color': themeVars.shadowColor,
+    };
+    Object.entries(variables).forEach(([name, value]) => {
+      root.style.setProperty(name, value);
+      document.body.style.setProperty(name, value);
+    });
     root.dataset.brandTheme = activeBrandTheme;
 
-    if (selectedTheme === 'dark') {
-      document.querySelectorAll('.auth-card').forEach(card => {
-        card.style.backgroundColor = '#1e1e1e';
-        card.style.boxShadow = '0 0 20px rgba(0, 0, 0, 0.3)';
-      });
-    } else {
-      document.querySelectorAll('.auth-card').forEach(card => {
-        card.style.backgroundColor = '';
-        card.style.boxShadow = '';
-      });
-    }
+    document.querySelectorAll('.auth-card').forEach(card => {
+      const useLegacyDarkSurface = selectedTheme === 'dark' && activeBrandTheme !== 'DBoard-Glass';
+      card.style.backgroundColor = useLegacyDarkSurface ? '#1e1e1e' : '';
+      card.style.boxShadow = useLegacyDarkSurface ? '0 0 20px rgba(0, 0, 0, 0.3)' : '';
+    });
   };
 
   const applyBrandTheme = (name) => {

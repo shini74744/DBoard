@@ -110,7 +110,6 @@ onBeforeUnmount(() => {
 .daily-track { height: 7px; margin: 9px 0 6px; overflow: hidden; border-radius: 99px; background: rgba(var(--theme-color-rgb), .1); }
 .daily-track > div { height: 100%; border-radius: inherit; background: var(--theme-color); }
 .daily-state { display: grid; place-items: center; gap: 12px; min-height: 190px; padding: 24px; text-align: center; color: var(--secondary-text-color); }
-.daily-state button { border: 0; border-radius: 8px; padding: 8px 18px; background: var(--theme-color); color: #fff; cursor: pointer; }
-:global(body.dark-theme) .daily-state button { color: #142027; }
+.daily-state button { border: 0; border-radius: 8px; padding: 8px 18px; background: var(--theme-color); color: var(--on-theme-color, #fff); cursor: pointer; }
 @media (max-width: 480px) { .daily-header { padding: 18px 16px 8px; } .daily-note { padding: 0 16px 14px; } .daily-summary { gap: 6px; padding: 0 16px 14px; } .daily-summary > div { padding: 8px; } .daily-summary strong { font-size: 13px; } .daily-list { padding: 0 16px 16px; } }
 </style>

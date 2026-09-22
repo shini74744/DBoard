@@ -17,11 +17,37 @@ class ManageController extends Controller
     public function getNodes(Request $request)
     {
         $servers = ServerService::getAllServers()->map(function ($item) {
+            $item->makeVisible('admin_group');
             $item['groups'] = ServerGroup::whereIn('id', $item['group_ids'] ?? [])->get(['name', 'id']);
             $item['parent'] = $item->parent;
             return $item;
         });
         return $this->success($servers);
+    }
+
+    /**
+     * 后台列表分组，与节点权限组无关，不触发节点配置同步。
+     */
+    public function setGroup(Request $request)
+    {
+        $params = $request->validate([
+            'id' => 'required|integer|exists:v2_server,id',
+            'admin_group' => 'present|nullable|string|max:64',
+        ]);
+
+        $group = trim((string) ($params['admin_group'] ?? ''));
+        if ($group !== '' && preg_match('/[\x00-\x1F\x7F]/u', $group)) {
+            return $this->fail([422, '分组名称不能包含控制字符']);
+        }
+
+        if ($group !== '') {
+            DB::table('dboard_admin_groups')->insertOrIgnore([
+                'kind' => 'node', 'name' => $group,
+                'created_at' => time(), 'updated_at' => time(),
+            ]);
+        }
+        Server::whereKey($params['id'])->update(['admin_group' => $group ?: null]);
+        return $this->success(true);
     }
 
     public function sort(Request $request)

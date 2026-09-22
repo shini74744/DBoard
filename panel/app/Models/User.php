@@ -73,6 +73,8 @@ class User extends Authenticatable
         'is_staff' => 'boolean',
         'remind_expire' => 'boolean',
         'remind_traffic' => 'boolean',
+        'remind_telegram' => 'boolean',
+        'navigation_hidden' => 'array',
         'commission_auto_check' => 'boolean',
         'commission_rate' => 'float',
         'next_reset_at' => 'timestamp',

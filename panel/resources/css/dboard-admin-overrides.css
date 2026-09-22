@@ -1,0 +1,81 @@
+/* Maintained DBoard admin palette; the upstream React bundle supplies layout. */
+.dark {
+  --background: 220 23% 14%;
+  --foreground: 210 18% 88%;
+  --card: 220 20% 18%;
+  --card-foreground: 210 18% 88%;
+  --popover: 220 20% 19%;
+  --popover-foreground: 210 18% 90%;
+  --primary: 211 76% 68%;
+  --primary-foreground: 220 30% 11%;
+  --secondary: 220 16% 26%;
+  --secondary-foreground: 210 18% 90%;
+  --muted: 220 16% 24%;
+  --muted-foreground: 210 12% 71%;
+  --accent: 216 20% 29%;
+  --accent-foreground: 210 20% 94%;
+  --border: 220 13% 34%;
+  --input: 220 13% 36%;
+  --ring: 211 76% 68%;
+}
+.dark button:not(:disabled):hover { filter: brightness(1.09); }
+.dark button:disabled { opacity: .6; }
+.dark :is(button, a, input):focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+.dboard-admin-card { padding: 1.25rem; border: 1px solid hsl(var(--border)); border-radius: .75rem; background: hsl(var(--card)); color: hsl(var(--card-foreground)); }
+.dboard-admin-card h4 { margin: 0; font-size: 1rem; font-weight: 650; }
+.dboard-admin-card p { margin: .25rem 0 1rem; color: hsl(var(--muted-foreground)); font-size: .875rem; }
+.dboard-admin-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .65rem 1rem; }
+.dboard-admin-toggle, .dboard-admin-number { display: flex; align-items: center; gap: .65rem; min-height: 2.5rem; font-size: .875rem; cursor: pointer; }
+.dboard-admin-toggle input { width: 1rem; height: 1rem; accent-color: hsl(var(--primary)); }
+.dboard-admin-number { margin-top: .75rem; }
+.dboard-admin-number input { width: 5rem; margin-left: auto; padding: .35rem .55rem; border: 1px solid hsl(var(--input)); border-radius: .45rem; color: hsl(var(--foreground)); background: hsl(var(--background)); }
+.dboard-admin-card output { display: block; min-height: 1.3rem; color: hsl(var(--muted-foreground)); font-size: .75rem; }
+@media (max-width: 600px) { .dboard-admin-fields { grid-template-columns: 1fr; } }
+.dboard-sort-hint { margin: .5rem .75rem; color: hsl(var(--muted-foreground)); font-size: .8rem; }
+.dboard-outbound-controls { display: inline-flex; align-items: center; gap: .15rem; margin-right: .4rem; vertical-align: middle; }
+.dboard-outbound-handle, .dboard-outbound-move { display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.7rem; border: 0; border-radius: .3rem; background: transparent; color: hsl(var(--muted-foreground)); cursor: pointer; }
+.dboard-outbound-handle { cursor: grab; touch-action: none; font-size: 1rem; }
+.dboard-outbound-handle:active { cursor: grabbing; }
+.dboard-outbound-handle:hover, .dboard-outbound-move:hover, .dboard-outbound-handle:focus-visible, .dboard-outbound-move:focus-visible { background: hsl(var(--accent)); color: hsl(var(--foreground)); }
+tr.dboard-dragging { opacity: .48; background: hsl(var(--accent)); }
+
+/* DBoard store promotion and Telegram notification center. */
+.dboard-marketing-panel[hidden], .dboard-marketing-field[hidden], .dboard-marketing-user-area[hidden] { display: none !important; }
+.dboard-marketing-panel {
+  position: fixed; z-index: 80; top: 0; right: 0; bottom: 0; left: 240px;
+  overflow-y: auto; padding: 2rem clamp(1rem, 3vw, 3rem);
+  background: hsl(var(--background)); color: hsl(var(--foreground));
+}
+.dboard-marketing-header { display: flex; justify-content: space-between; align-items: start; gap: 1rem; max-width: 1100px; margin: 0 auto 1.5rem; }
+.dboard-marketing-header h1 { margin: 0 0 .3rem; font-size: 1.7rem; font-weight: 700; }
+.dboard-marketing-header p { margin: 0; color: hsl(var(--muted-foreground)); font-size: .9rem; }
+.dboard-marketing-panel button { border: 1px solid hsl(var(--border)); border-radius: .5rem; padding: .55rem .9rem; background: hsl(var(--card)); color: hsl(var(--foreground)); cursor: pointer; }
+.dboard-marketing-panel button:hover { background: hsl(var(--accent)); }
+.dboard-marketing-panel button:disabled { opacity: .6; cursor: wait; }
+.dboard-marketing-panel .dboard-marketing-primary { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary)); }
+.dboard-marketing-form, .dboard-marketing-history { max-width: 1100px; margin: 0 auto 1.5rem; padding: 1.5rem; border: 1px solid hsl(var(--border)); border-radius: .8rem; background: hsl(var(--card)); }
+.dboard-marketing-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.dboard-marketing-field { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1rem; font-size: .9rem; }
+.dboard-marketing-field input, .dboard-marketing-field textarea, .dboard-marketing-field select {
+  width: 100%; box-sizing: border-box; padding: .65rem .75rem; border: 1px solid hsl(var(--input)); border-radius: .5rem;
+  color: hsl(var(--foreground)); background: hsl(var(--background)); font: inherit;
+}
+.dboard-marketing-field textarea { resize: vertical; }
+.dboard-marketing-check { display: flex; align-items: center; gap: .55rem; margin: .35rem 0; font-size: .9rem; }
+.dboard-marketing-check input { accent-color: hsl(var(--primary)); }
+.dboard-marketing-results { max-height: 220px; overflow-y: auto; padding: .5rem; border: 1px solid hsl(var(--border)); border-radius: .5rem; }
+.dboard-marketing-user-area { margin-bottom: 1rem; }
+.dboard-marketing-user-area > p { margin: .5rem 0; }
+.dboard-marketing-actions { display: flex; flex-wrap: wrap; gap: .7rem; }
+.dboard-marketing-status { display: block; max-width: 1100px; min-height: 1.5rem; margin: 0 auto 1rem; color: hsl(var(--muted-foreground)); }
+.dboard-marketing-history h2 { margin: 0 0 .8rem; font-size: 1.1rem; }
+.dboard-marketing-history-row { padding: .9rem 0; border-top: 1px solid hsl(var(--border)); display: grid; gap: .25rem; }
+.dboard-marketing-history-row span, .dboard-marketing-history-row small { color: hsl(var(--muted-foreground)); font-size: .8rem; }
+.dboard-marketing-history-row p { margin: .25rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dboard-marketing-history-row button { justify-self: start; }
+@media (max-width: 900px) { .dboard-marketing-panel { left: 0; padding: 1rem; } .dboard-marketing-grid { grid-template-columns: 1fr; } }
+
+.dboard-marketing-section-title { margin: 1.3rem 0 .8rem; padding-bottom: .5rem; border-bottom: 1px solid hsl(var(--border)); font-size: 1rem; font-weight: 650; }
+.dboard-marketing-form > .dboard-marketing-section-title:first-child { margin-top: 0; }
+.dboard-custom-menu-link { display: flex !important; align-items: center; gap: .6rem; }
+.dboard-custom-menu-link svg { display: block; width: 16px; height: 16px; flex: 0 0 16px; }

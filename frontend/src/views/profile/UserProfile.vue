@@ -277,6 +277,19 @@
             </div>
 
             <div class="setting-item">
+              <div class="setting-info">
+                <span class="setting-label">{{ $t('profile.telegramRemind') }}</span>
+                <span class="setting-description">{{ $t('profile.telegramRemindDesc') }}</span>
+              </div>
+              <div class="setting-toggle">
+                <label class="switch" :class="{ 'disabled': updatingSettings }">
+                  <input type="checkbox" v-model="remindTelegram" @change="updateRemindSettings('telegram')" :disabled="updatingSettings" />
+                  <span class="slider round" :class="{ 'loading': updatingTelegram }"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="setting-item">
 
               <div class="setting-info">
 
@@ -981,6 +994,8 @@ const remindExpire = ref(false);
 
 const remindTraffic = ref(false);
 
+const remindTelegram = ref(true);
+
 const remindAutoRenewal = ref(false);
 
 const supportsAutoRenewal = ref(false);
@@ -1028,6 +1043,8 @@ const updatingSettings = ref(false);
 const updatingExpire = ref(false);
 
 const updatingTraffic = ref(false);
+
+const updatingTelegram = ref(false);
 
 const updatingAutoRenewal = ref(false);
 
@@ -1106,6 +1123,8 @@ const fetchUserInfo = async (showLoading = true) => {
       remindExpire.value = !!response.data.remind_expire;
 
       remindTraffic.value = !!response.data.remind_traffic;
+
+      remindTelegram.value = response.data.remind_telegram !== false && response.data.remind_telegram !== 0;
 
       supportsAutoRenewal.value = Object.prototype.hasOwnProperty.call(response.data, 'auto_renewal');
 
@@ -1359,6 +1378,10 @@ const updateRemindSettings = async (type) => {
 
     updatingTraffic.value = true;
 
+  } else if (type === 'telegram') {
+
+    updatingTelegram.value = true;
+
   } else if (type === 'auto_renewal') {
 
     updatingAutoRenewal.value = true;
@@ -1373,7 +1396,9 @@ const updateRemindSettings = async (type) => {
 
       remind_expire: remindExpire.value ? 1 : 0,
 
-      remind_traffic: remindTraffic.value ? 1 : 0
+      remind_traffic: remindTraffic.value ? 1 : 0,
+
+      remind_telegram: remindTelegram.value ? 1 : 0
 
     };
 
@@ -1405,6 +1430,8 @@ const updateRemindSettings = async (type) => {
 
     remindTraffic.value = !!userInfo.value.remind_traffic;
 
+    remindTelegram.value = userInfo.value.remind_telegram !== false && userInfo.value.remind_telegram !== 0;
+
     remindAutoRenewal.value = supportsAutoRenewal.value && !!userInfo.value.auto_renewal;
 
 
@@ -1422,6 +1449,8 @@ const updateRemindSettings = async (type) => {
     updatingExpire.value = false;
 
     updatingTraffic.value = false;
+
+    updatingTelegram.value = false;
 
     updatingAutoRenewal.value = false;
 

@@ -17,9 +17,32 @@ class RouteController extends Controller
     {
         return [
             'data' => ServerOutbound::query()
+                ->orderBy('sort')
                 ->orderByDesc('id')
                 ->get(),
         ];
+    }
+
+    public function sort(Request $request)
+    {
+        $data = $request->validate([
+            'ids' => 'required|array',
+            'ids.*' => 'required|integer|distinct|min:1',
+        ]);
+        $ids = array_map('intval', $data['ids']);
+        DB::transaction(function () use ($ids) {
+            $current = ServerOutbound::query()->lockForUpdate()->pluck('id')->map(fn($id) => (int) $id)->all();
+            sort($current);
+            $incoming = $ids;
+            sort($incoming);
+            if ($current !== $incoming) {
+                throw new ApiException('出站列表已更新，请刷新后重新排序');
+            }
+            foreach ($ids as $position => $id) {
+                ServerOutbound::whereKey($id)->update(['sort' => $position + 1]);
+            }
+        });
+        return $this->success(true);
     }
 
     public function parse(Request $request, OutboundLinkParser $parser)
@@ -73,6 +96,9 @@ class RouteController extends Controller
             $outbound = DB::transaction(function () use ($existing, $data) {
                 $oldTag = $existing?->tag;
                 $outbound = $existing ?: new ServerOutbound();
+                if (!$existing) {
+                    $outbound->sort = ((int) ServerOutbound::max('sort')) + 1;
+                }
                 $outbound->fill($data);
                 $outbound->save();
 

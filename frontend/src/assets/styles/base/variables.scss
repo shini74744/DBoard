@@ -7,6 +7,10 @@
   // 背景颜色
   --background-color: #f5f7fa;
   --card-background: #ffffff;
+  --card-bg-color: #ffffff;
+  --card-text-color: #333333;
+  --card-secondary-text-color: #666666;
+  --on-theme-color: #ffffff;
   --card-background-rgb: 255, 255, 255;
 
   // 文本颜色
@@ -40,6 +44,9 @@
 body.dark-theme {
   --background-color: #171A1D;
   --card-background: rgba(30, 30, 30, 0.8);
+  --card-bg-color: rgba(30, 30, 30, 0.8);
+  --card-text-color: rgba(255, 255, 255, 0.9);
+  --card-secondary-text-color: rgba(255, 255, 255, 0.7);
   --card-background-rgb: 30, 30, 30;
   --text-color: rgba(255, 255, 255, 0.9);
   --text-color-rgb: 255, 255, 255;

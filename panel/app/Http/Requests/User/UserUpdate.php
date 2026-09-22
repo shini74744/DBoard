@@ -15,7 +15,9 @@ class UserUpdate extends FormRequest
     {
         return [
             'remind_expire' => 'in:0,1',
-            'remind_traffic' => 'in:0,1'
+            'remind_traffic' => 'in:0,1',
+            'remind_telegram' => 'in:0,1',
+            'navigation_hidden' => 'sometimes|required|json'
         ];
     }
 

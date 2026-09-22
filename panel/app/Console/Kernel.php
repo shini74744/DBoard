@@ -35,11 +35,14 @@ class Kernel extends ConsoleKernel
         $schedule->command('check:commission')->everyMinute()->onOneServer()->withoutOverlapping(5);
         $schedule->command('check:ticket')->everyMinute()->onOneServer()->withoutOverlapping(5);
         $schedule->command('check:traffic-exceeded')->everyMinute()->onOneServer()->withoutOverlapping(10)->runInBackground();
+        $schedule->command('check:server')->everyFiveMinutes()->onOneServer()->withoutOverlapping(5);
         // reset
         $schedule->command('reset:traffic')->everyMinute()->onOneServer()->withoutOverlapping(10);
         $schedule->command('reset:log')->daily()->onOneServer();
         // send
         $schedule->command('send:remindMail', ['--force'])->dailyAt('11:30')->onOneServer();
+        $schedule->command('send:remindTelegram')->hourlyAt(5)->onOneServer()->withoutOverlapping(10);
+        $schedule->command('dboard:dispatch-telegram-campaigns')->everyMinute()->onOneServer()->withoutOverlapping(10);
         // horizon metrics
         $schedule->command('horizon:snapshot')->everyFiveMinutes()->onOneServer();
         // cleanup stale online_count (GC for Redis TTL expiration)

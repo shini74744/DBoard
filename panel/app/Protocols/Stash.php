@@ -570,7 +570,7 @@ class Stash extends AbstractProtocol
             return false;
         }
         try {
-            return preg_match($exp, '') !== false;
+            return @preg_match($exp, '') !== false;
         } catch (\Exception $e) {
             return false;
         }
@@ -579,7 +579,7 @@ class Stash extends AbstractProtocol
     private function isMatch($exp, $str)
     {
         try {
-            return preg_match($exp, $str);
+            return @preg_match($exp, $str);
         } catch (\Exception $e) {
             return false;
         }

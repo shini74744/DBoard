@@ -113,6 +113,7 @@ class Server extends Model
     protected $table = 'v2_server';
 
     protected $guarded = ['id'];
+    protected $hidden = ['admin_group'];
     protected $casts = [
         'group_ids' => 'array',
         'route_ids' => 'array',

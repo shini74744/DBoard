@@ -1,7 +1,12 @@
-﻿import {SITE_CONFIG} from '../../utils/baseConfig';
+import {SITE_CONFIG} from '../../utils/baseConfig';
 
 export default {
     common: {
+        navigationSettings: 'Navigation settings',
+        navigationSettingsHint: 'Choose which items appear in the top navigation. Your choice syncs across devices.',
+        navigationSettingsLoadFailed: 'Could not load navigation settings. Please try again.',
+        navigationSettingsSaved: 'Navigation settings saved',
+        navigationSettingsSaveFailed: 'Could not save navigation settings. Please try again.',
         appName: SITE_CONFIG.siteName,
         welcome: `Welcome to ${SITE_CONFIG.siteName}`,
         login: 'Login',
@@ -179,6 +184,12 @@ export default {
     dashboard: {
         welcome: 'Welcome Back',
         welcomeDesc: 'View your services and usage',
+        themeNoteAction: 'Tap for a little note',
+        themeNoteTide: 'Move with the tide. Your next connection is close.',
+        themeNoteCopper: 'A little warmth for today, and a clear path ahead.',
+        themeNoteIris: 'Stay curious. Your next journey is waiting.',
+        themeNoteGlass: 'See farther through a clearer view.',
+        themeNoteDefault: 'Wishing you smooth connections today.',
         siteAnnouncement: 'Site Announcements',
         subscriptionInfo: 'Subscription Info',
         planName: 'Plan Name',
@@ -267,6 +278,7 @@ export default {
         hotSale: 'Hot'
     },
     more: {
+        shopDescription: 'Browse and purchase available plans',
         title: 'More Features',
         description: 'Explore more features and services',
         inviteDescription: 'Invite friends to earn commission rewards',
@@ -416,6 +428,8 @@ export default {
         accountSettings: 'Account Settings',
         expireRemind: 'Expiry Reminder',
         trafficRemind: 'Traffic Reminder',
+        telegramRemind: 'Telegram Notifications',
+        telegramRemindDesc: 'Receive expiry and node alerts after binding Telegram; enabled by default',
         autoRenewal: 'Auto Renewal',
         expireRemindDesc: 'Receive account expiry reminder emails',
         trafficRemindDesc: 'Receive traffic exhaustion reminder emails',
