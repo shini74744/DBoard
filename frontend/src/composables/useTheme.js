@@ -4,6 +4,48 @@ import { THEME_CONFIG } from '@/utils/baseConfig';
 import { BRAND_PRESETS } from './brandPresets';
 import { readableText } from '@/utils/colorContrast';
 let activeBrandTheme = 'Xboard';
+let glassPointerInstalled = false;
+
+function enableGlassPointerLight() {
+  if (glassPointerInstalled) return;
+  glassPointerInstalled = true;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
+  const surfaceSelector = '.dashboard-card, .plan-card, .profile-card, .auth-card';
+  let pending = null;
+  let frame = 0;
+
+  document.addEventListener('pointermove', (event) => {
+    if (event.pointerType !== 'mouse' || !finePointer.matches || reducedMotion.matches || activeBrandTheme !== 'DBoard-Glass') return;
+    const card = event.target instanceof Element ? event.target.closest(surfaceSelector) : null;
+    if (!card) return;
+    const bounds = card.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    pending = {
+      card,
+      x: `${Math.max(0, Math.min(100, ((event.clientX - bounds.left) / bounds.width) * 100)).toFixed(1)}%`,
+      y: `${Math.max(0, Math.min(100, ((event.clientY - bounds.top) / bounds.height) * 100)).toFixed(1)}%`
+    };
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      if (pending?.card.isConnected) {
+        pending.card.style.setProperty('--glass-x', pending.x);
+        pending.card.style.setProperty('--glass-y', pending.y);
+      }
+      pending = null;
+      frame = 0;
+    });
+  }, { passive: true });
+
+  document.addEventListener('pointerout', (event) => {
+    const card = event.target instanceof Element ? event.target.closest(surfaceSelector) : null;
+    if (!card || (event.relatedTarget instanceof Node && card.contains(event.relatedTarget))) return;
+    if (pending?.card === card) pending = null;
+    card.style.removeProperty('--glass-x');
+    card.style.removeProperty('--glass-y');
+  }, { passive: true });
+}
+
 export function useTheme() {
   const theme = ref(THEME_CONFIG.defaultTheme);
 
@@ -61,6 +103,7 @@ export function useTheme() {
   const applyBrandTheme = (name) => {
     activeBrandTheme = BRAND_PRESETS[name] ? name : 'Xboard';
     applyTheme(document.body.classList.contains('dark-theme') ? 'dark' : 'light');
+    if (activeBrandTheme === 'DBoard-Glass') enableGlassPointerLight();
   };
   const initTheme = () => {
     const savedTheme = localStorage.getItem('theme');

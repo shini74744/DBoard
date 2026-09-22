@@ -33,11 +33,11 @@ export const BRAND_PRESETS = {
   'DBoard-Glass': {
     light: { primaryColor: '#176782', primaryColorRgb: '23, 103, 130',
       primaryColorHover: '#0f526b', backgroundColor: '#d8eaf2',
-      cardBackground: 'rgba(255, 255, 255, 0.36)', borderColor: 'rgba(255, 255, 255, 0.72)',
-      shadowColor: 'rgba(31, 78, 105, 0.17)' },
+      cardBackground: 'rgba(255, 255, 255, 0.28)', borderColor: 'rgba(255, 255, 255, 0.58)',
+      shadowColor: 'rgba(31, 78, 105, 0.16)' },
     dark: { primaryColor: '#9ce7ef', primaryColorRgb: '156, 231, 239',
       primaryColorHover: '#c0f3f5', backgroundColor: '#101f30',
-      cardBackground: 'rgba(15, 34, 50, 0.34)', borderColor: 'rgba(209, 240, 255, 0.30)',
-      shadowColor: 'rgba(0, 8, 24, 0.40)' }
+      cardBackground: 'rgba(15, 34, 50, 0.26)', borderColor: 'rgba(209, 240, 255, 0.24)',
+      shadowColor: 'rgba(0, 8, 24, 0.38)' }
   }
 };
