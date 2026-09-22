@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-dboard-theme="{{ $brand_theme }}">
 
 <head>
   <meta charset="UTF-8" />
@@ -79,6 +79,7 @@
   @endif
   <style>{!! file_get_contents(resource_path('css/dboard-admin-overrides.css')) !!}</style>
   <style>{!! file_get_contents(resource_path('css/dboard-admin-groups.css')) !!}</style>
+  <style>{!! file_get_contents(resource_path('css/dboard-admin-theme.css')) !!}</style>
 </head>
 
 <body>
@@ -88,6 +89,7 @@
   <script>{!! file_get_contents(resource_path('js/dboard-marketing-notifications.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-machine-sort.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-admin-groups.js')) !!}</script>
+  <script>{!! file_get_contents(resource_path('js/dboard-admin-theme.js')) !!}</script>
 </body>
 
 </html>

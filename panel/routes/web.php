@@ -80,6 +80,7 @@ Route::get('/' . admin_setting('secure_path', admin_setting('frontend_admin_path
         'theme_sidebar' => admin_setting('frontend_theme_sidebar', 'light'),
         'theme_header' => admin_setting('frontend_theme_header', 'dark'),
         'theme_color' => admin_setting('frontend_theme_color', 'default'),
+        'brand_theme' => admin_setting('frontend_theme', 'Xboard'),
         'background_url' => admin_setting('frontend_background_url'),
         'version' => app(UpdateService::class)->getCurrentVersion(),
         'logo' => admin_setting('logo'),
