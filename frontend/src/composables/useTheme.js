@@ -94,7 +94,7 @@ export function useTheme() {
     root.dataset.brandTheme = activeBrandTheme;
 
     document.querySelectorAll('.auth-card').forEach(card => {
-      const useLegacyDarkSurface = selectedTheme === 'dark' && activeBrandTheme !== 'DBoard-Glass';
+      const useLegacyDarkSurface = selectedTheme === 'dark' && activeBrandTheme === 'Xboard';
       card.style.backgroundColor = useLegacyDarkSurface ? '#1e1e1e' : '';
       card.style.boxShadow = useLegacyDarkSurface ? '0 0 20px rgba(0, 0, 0, 0.3)' : '';
     });

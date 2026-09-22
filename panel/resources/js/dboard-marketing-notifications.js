@@ -44,6 +44,18 @@
   let page = '';
   let openedUrl = '';
   let selectedUsers = new Set();
+  let observedContent = null;
+  const layoutObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(syncPanelPosition) : null;
+  function syncPanelPosition() {
+    const content = document.getElementById('content');
+    if (content !== observedContent) {
+      layoutObserver?.disconnect();
+      observedContent = content;
+      if (content) layoutObserver?.observe(content);
+    }
+    panel.style.left = content ? `${Math.max(0, Math.round(content.getBoundingClientRect().left))}px` : '0px';
+  }
+  window.addEventListener('resize', syncPanelPosition);
   function close() {
     panel.hidden = true;
     page = '';
@@ -67,6 +79,7 @@
     closeButton.type = 'button'; closeButton.addEventListener('click', close);
     head.append(titleWrap, closeButton);
     panel.append(head);
+    syncPanelPosition();
     panel.hidden = false;
     return panel;
   }

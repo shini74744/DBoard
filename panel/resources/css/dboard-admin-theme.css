@@ -64,8 +64,10 @@ html[data-dboard-theme='DBoard-Glass'] {
   --dboard-muted-foreground: 205 17% 40%; --dboard-border: 197 25% 72%;
   --dboard-glow: 79, 207, 224;
   --dboard-glass-card: rgba(255, 255, 255, .28);
-  --dboard-glass-popover: rgba(245, 252, 255, .82);
+  --dboard-glass-popover: rgba(248, 252, 255, .97);
   --dboard-glass-field: rgba(255, 255, 255, .42);
+  --dboard-glass-control: rgba(218, 239, 249, .82);
+  --dboard-glass-control-line: rgba(59, 105, 133, .52);
   --dboard-glass-line: rgba(255, 255, 255, .64);
   --dboard-glass-shadow: rgba(31, 78, 105, .16);
   --dboard-glass-sheen: rgba(255, 255, 255, .34);
@@ -77,8 +79,10 @@ html[data-dboard-theme='DBoard-Glass'].dark {
   --dboard-muted-foreground: 202 19% 74%; --dboard-border: 205 23% 39%;
   --dboard-glow: 38, 173, 201;
   --dboard-glass-card: rgba(15, 34, 50, .30);
-  --dboard-glass-popover: rgba(18, 36, 54, .88);
+  --dboard-glass-popover: rgba(18, 36, 54, .97);
   --dboard-glass-field: rgba(226, 246, 255, .09);
+  --dboard-glass-control: rgba(53, 84, 104, .62);
+  --dboard-glass-control-line: rgba(158, 216, 240, .48);
   --dboard-glass-line: rgba(209, 240, 255, .28);
   --dboard-glass-shadow: rgba(0, 8, 24, .38);
   --dboard-glass-sheen: rgba(187, 232, 255, .19);
@@ -127,13 +131,50 @@ html[data-dboard-theme='DBoard-Glass'] :is(.bg-popover, [role='dialog'], .dboard
 }
 html[data-dboard-theme='DBoard-Glass'] .bg-background { background-color: var(--dboard-glass-field); }
 html[data-dboard-theme='DBoard-Glass'] #root > .bg-background { background-color: transparent; }
-html[data-dboard-theme='DBoard-Glass'] :is(input:not([type='checkbox']):not([type='radio']):not([type='file']), textarea:not(.inputarea), select) {
-  background-color: var(--dboard-glass-field);
-  border-color: var(--dboard-glass-line);
+/* Dialogs also use bg-background; keep their surface above the dimmed page. */
+html[data-dboard-theme='DBoard-Glass'] [role='dialog'] {
+  background-color: var(--dboard-glass-popover);
   color: hsl(var(--foreground));
+  box-shadow: 0 24px 72px rgba(19, 42, 62, .28), inset 0 1px 0 var(--dboard-glass-line);
+}
+html[data-dboard-theme='DBoard-Glass'].dark [role='dialog'] {
+  box-shadow: 0 24px 72px rgba(0, 7, 19, .58), inset 0 1px 0 var(--dboard-glass-line);
+}
+html[data-dboard-theme='DBoard-Glass'] :is(input:not([type='checkbox']):not([type='radio']):not([type='file']), textarea:not(.inputarea), select) {
+  background-color: var(--dboard-glass-control);
+  border-color: var(--dboard-glass-control-line);
+  color: hsl(var(--foreground));
+  box-shadow: inset 0 1px 2px rgba(24, 68, 94, .08);
 }
 html[data-dboard-theme='DBoard-Glass'] :is(input, textarea)::placeholder { color: hsl(var(--muted-foreground)); opacity: 1; }
-html[data-dboard-theme='DBoard-Glass'] :is(input, textarea, select):focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+html[data-dboard-theme='DBoard-Glass'] :is(input, textarea, select):focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; box-shadow: 0 0 0 4px rgba(23, 103, 130, .16); }
+html[data-dboard-theme='DBoard-Glass'] :is(.dboard-marketing-form, .dboard-marketing-history) {
+  background-color: rgba(246, 252, 255, .8);
+  border-color: rgba(89, 135, 160, .42);
+}
+html[data-dboard-theme='DBoard-Glass'].dark :is(.dboard-marketing-form, .dboard-marketing-history) {
+  background-color: rgba(18, 37, 54, .88);
+  border-color: rgba(151, 205, 230, .34);
+}
+html[data-dboard-theme='DBoard-Glass'] .dboard-marketing-field :is(input, textarea, select) {
+  border: 1px solid var(--dboard-glass-control-line);
+  background-color: var(--dboard-glass-control);
+  color: hsl(var(--foreground));
+  box-shadow: inset 0 1px 2px rgba(24, 68, 94, .1), 0 1px 0 rgba(255, 255, 255, .34);
+}
+html[data-dboard-theme='DBoard-Glass'] .dboard-marketing-field :is(input, textarea, select):focus-visible {
+  border-color: hsl(var(--ring));
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 1px;
+}
+html[data-dboard-theme='DBoard-Glass'] .dboard-marketing-results {
+  background-color: var(--dboard-glass-control);
+  border-color: var(--dboard-glass-control-line);
+}
+html[data-dboard-theme='DBoard-Glass'] .dboard-marketing-field select option {
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
 @supports ((-webkit-mask-composite: xor) or (mask-composite: exclude)) {
   html[data-dboard-theme='DBoard-Glass'] :is(.rounded-xl.bg-card, .dboard-admin-card, .dboard-marketing-form, .dboard-marketing-history) { position: relative; }
   html[data-dboard-theme='DBoard-Glass'] :is(.rounded-xl.bg-card, .dboard-admin-card, .dboard-marketing-form, .dboard-marketing-history)::after {
@@ -167,4 +208,139 @@ html[data-dboard-theme='DBoard-Glass'] :is(input, textarea, select):focus-visibl
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   html[data-dboard-theme='DBoard-Glass'] :is(.bg-card, .dboard-admin-card, .dboard-marketing-form, .dboard-marketing-history) { background-color: rgba(255, 255, 255, .92); }
   html[data-dboard-theme='DBoard-Glass'].dark :is(.bg-card, .dboard-admin-card, .dboard-marketing-form, .dboard-marketing-history) { background-color: rgba(15, 34, 50, .94); }
+}
+/* The remaining editions use crisp, opaque working surfaces and distinct ambient scenes. */
+html[data-dboard-theme='DBoard-Tide'] {
+  --edition-accent: 8, 127, 140; --edition-companion: 42, 182, 166;
+  --edition-glint: rgba(216, 255, 246, .86);
+  --edition-scene: radial-gradient(ellipse at 7% 6%, rgba(42, 189, 175, .22), transparent 37%),
+    radial-gradient(ellipse at 92% 78%, rgba(39, 129, 174, .14), transparent 43%),
+    repeating-radial-gradient(ellipse at 10% 10%, transparent 0 37px, rgba(8, 127, 140, .03) 38px 39px),
+    linear-gradient(155deg, #e9faf6, #eef8fa 54%, #e1eff4);
+}
+html[data-dboard-theme='DBoard-Tide'].dark {
+  --edition-accent: 81, 214, 205; --edition-companion: 49, 143, 181;
+  --edition-glint: rgba(139, 235, 224, .2);
+  --edition-scene: radial-gradient(ellipse at 7% 6%, rgba(27, 145, 147, .23), transparent 38%),
+    radial-gradient(ellipse at 92% 78%, rgba(37, 106, 158, .18), transparent 43%),
+    repeating-radial-gradient(ellipse at 10% 10%, transparent 0 37px, rgba(92, 219, 209, .03) 38px 39px),
+    linear-gradient(155deg, #0c2228, #10282e 54%, #102533);
+}
+html[data-dboard-theme='DBoard-Copper'] {
+  --edition-accent: 168, 84, 28; --edition-companion: 223, 163, 87;
+  --edition-glint: rgba(255, 235, 204, .9);
+  --edition-scene: radial-gradient(ellipse at 88% 5%, rgba(220, 143, 65, .20), transparent 39%),
+    radial-gradient(ellipse at 8% 76%, rgba(163, 95, 47, .12), transparent 40%),
+    repeating-linear-gradient(116deg, rgba(145, 81, 36, .03) 0 1px, transparent 1px 27px),
+    linear-gradient(150deg, #fffaf1, #f9f0e5 58%, #f5e8db);
+}
+html[data-dboard-theme='DBoard-Copper'].dark {
+  --edition-accent: 255, 182, 111; --edition-companion: 180, 92, 55;
+  --edition-glint: rgba(255, 203, 137, .19);
+  --edition-scene: radial-gradient(ellipse at 88% 5%, rgba(170, 89, 48, .25), transparent 38%),
+    radial-gradient(ellipse at 8% 76%, rgba(147, 83, 38, .17), transparent 41%),
+    repeating-linear-gradient(116deg, rgba(252, 187, 117, .03) 0 1px, transparent 1px 27px),
+    linear-gradient(150deg, #211914, #291e19 58%, #241a17);
+}
+html[data-dboard-theme='DBoard-Iris'] {
+  --edition-accent: 103, 70, 190; --edition-companion: 118, 143, 229;
+  --edition-glint: rgba(239, 225, 255, .86);
+  --edition-scene: radial-gradient(ellipse at 12% 10%, rgba(175, 135, 234, .21), transparent 38%),
+    radial-gradient(ellipse at 90% 75%, rgba(105, 139, 219, .17), transparent 42%),
+    repeating-linear-gradient(135deg, rgba(120, 92, 181, .03) 0 1px, transparent 1px 34px),
+    linear-gradient(150deg, #f8f4ff, #f1f2ff 55%, #eeeafa);
+}
+html[data-dboard-theme='DBoard-Iris'].dark {
+  --edition-accent: 183, 154, 255; --edition-companion: 105, 130, 224;
+  --edition-glint: rgba(217, 193, 255, .19);
+  --edition-scene: radial-gradient(ellipse at 12% 10%, rgba(105, 66, 180, .27), transparent 38%),
+    radial-gradient(ellipse at 90% 75%, rgba(77, 96, 180, .22), transparent 43%),
+    repeating-linear-gradient(135deg, rgba(190, 165, 255, .03) 0 1px, transparent 1px 34px),
+    linear-gradient(150deg, #181627, #211e34 55%, #1a1d30);
+}
+html[data-dboard-theme='Xboard'] {
+  --edition-accent: 54, 119, 190; --edition-companion: 92, 153, 214;
+  --edition-glint: rgba(228, 242, 255, .9);
+  --edition-scene: radial-gradient(ellipse at 13% 7%, rgba(76, 143, 209, .15), transparent 36%),
+    radial-gradient(ellipse at 89% 79%, rgba(108, 153, 199, .10), transparent 39%),
+    linear-gradient(rgba(69, 117, 166, .03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(69, 117, 166, .03) 1px, transparent 1px),
+    linear-gradient(150deg, #f8fbff, #f0f5fb);
+}
+html[data-dboard-theme='Xboard'].dark {
+  --edition-accent: 130, 186, 244; --edition-companion: 89, 137, 203;
+  --edition-glint: rgba(147, 194, 247, .16);
+  --edition-scene: radial-gradient(ellipse at 13% 7%, rgba(54, 116, 186, .20), transparent 36%),
+    radial-gradient(ellipse at 89% 79%, rgba(86, 118, 177, .13), transparent 40%),
+    linear-gradient(rgba(147, 194, 247, .025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(147, 194, 247, .025) 1px, transparent 1px),
+    linear-gradient(150deg, #171c27, #1b2431);
+}
+html:is([data-dboard-theme='DBoard-Tide'], [data-dboard-theme='DBoard-Copper'], [data-dboard-theme='DBoard-Iris'], [data-dboard-theme='Xboard']) body {
+  background-color: hsl(var(--background));
+  background-image: var(--edition-scene);
+  background-attachment: fixed;
+}
+html:is([data-dboard-theme='DBoard-Tide'], [data-dboard-theme='DBoard-Copper'], [data-dboard-theme='DBoard-Iris'], [data-dboard-theme='Xboard']) #root > .bg-primary-foreground {
+  background-color: transparent;
+}
+html:is([data-dboard-theme='DBoard-Tide'], [data-dboard-theme='DBoard-Copper'], [data-dboard-theme='DBoard-Iris'], [data-dboard-theme='Xboard']) :is(.bg-card, .dboard-admin-card, .dboard-marketing-form, .dboard-marketing-history) {
+  background-color: hsl(var(--card));
+  background-image: radial-gradient(440px circle at 100% 0%, rgba(var(--edition-companion), .12), transparent 70%),
+    linear-gradient(145deg, rgba(var(--edition-accent), .045), transparent 54%);
+  border-color: hsl(var(--border));
+  box-shadow: inset 0 1px 0 var(--edition-glint), 0 10px 30px rgba(var(--edition-accent), .09);
+}
+html:is([data-dboard-theme='DBoard-Tide'], [data-dboard-theme='DBoard-Copper'], [data-dboard-theme='DBoard-Iris'], [data-dboard-theme='Xboard']) #root aside {
+  background-color: hsl(var(--card));
+  background-image: linear-gradient(165deg, rgba(var(--edition-companion), .12), transparent 43%);
+  border-color: hsl(var(--border));
+  box-shadow: inset -1px 0 0 var(--edition-glint), 8px 0 30px rgba(var(--edition-accent), .08);
+}
+html:is([data-dboard-theme='DBoard-Tide'], [data-dboard-theme='DBoard-Copper'], [data-dboard-theme='DBoard-Iris'], [data-dboard-theme='Xboard']) :is([role='dialog'], .bg-popover, .dboard-marketing-panel) {
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+  box-shadow: 0 24px 64px rgba(var(--edition-accent), .17);
+}
+html:is([data-dboard-theme='DBoard-Tide'], [data-dboard-theme='DBoard-Copper'], [data-dboard-theme='DBoard-Iris'], [data-dboard-theme='Xboard']) .bg-primary {
+  box-shadow: 0 4px 15px rgba(var(--edition-accent), .17);
+}
+html:is([data-dboard-theme='DBoard-Tide'], [data-dboard-theme='DBoard-Copper'], [data-dboard-theme='DBoard-Iris'], [data-dboard-theme='Xboard']) :is(input, textarea, select):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(var(--edition-accent), .13);
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  html:is([data-dboard-theme='DBoard-Tide'], [data-dboard-theme='DBoard-Copper'], [data-dboard-theme='DBoard-Iris'], [data-dboard-theme='Xboard']) body {
+    background-size: 115% 115%;
+    animation: dboard-edition-drift 32s ease-in-out infinite alternate;
+  }
+  html:is([data-dboard-theme='DBoard-Tide'], [data-dboard-theme='DBoard-Copper'], [data-dboard-theme='DBoard-Iris'], [data-dboard-theme='Xboard']) :is(.rounded-xl.bg-card, .dboard-admin-card, .dboard-marketing-form, .dboard-marketing-history) {
+    transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease;
+  }
+  html:is([data-dboard-theme='DBoard-Tide'], [data-dboard-theme='DBoard-Copper'], [data-dboard-theme='DBoard-Iris'], [data-dboard-theme='Xboard']) :is(.rounded-xl.bg-card, .dboard-admin-card, .dboard-marketing-form, .dboard-marketing-history):hover {
+    transform: translateY(-2px);
+    border-color: rgba(var(--edition-accent), .38);
+    box-shadow: inset 0 1px 0 var(--edition-glint), 0 17px 38px rgba(var(--edition-accent), .15);
+  }
+  html:is([data-dboard-theme='DBoard-Tide'], [data-dboard-theme='DBoard-Copper'], [data-dboard-theme='DBoard-Iris'], [data-dboard-theme='Xboard']) .bg-primary:not(:disabled):hover {
+    box-shadow: 0 8px 22px rgba(var(--edition-accent), .3);
+  }
+  html:is([data-dboard-theme='DBoard-Tide'], [data-dboard-theme='DBoard-Copper'], [data-dboard-theme='DBoard-Iris'], [data-dboard-theme='Xboard']) #root aside a:hover {
+    box-shadow: inset 3px 0 0 rgba(var(--edition-accent), .65);
+  }
+}
+@keyframes dboard-edition-drift {
+  from { background-position: 0% 0%; }
+  to { background-position: 100% 100%; }
+}
+@media (max-width: 600px), (prefers-reduced-motion: reduce) {
+  html:is([data-dboard-theme='DBoard-Tide'], [data-dboard-theme='DBoard-Copper'], [data-dboard-theme='DBoard-Iris'], [data-dboard-theme='Xboard']) body {
+    background-attachment: scroll;
+    animation: none;
+  }
+  html:is([data-dboard-theme='DBoard-Tide'], [data-dboard-theme='DBoard-Copper'], [data-dboard-theme='DBoard-Iris'], [data-dboard-theme='Xboard']) :is(.rounded-xl.bg-card, .dboard-admin-card, .dboard-marketing-form, .dboard-marketing-history) {
+    transition: none;
+  }
 }

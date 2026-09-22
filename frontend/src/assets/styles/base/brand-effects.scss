@@ -177,6 +177,165 @@ html[data-brand-theme='DBoard-Glass'] body.dark-theme .dashboard-card::before {
     background-color: rgba(15, 34, 50, .94);
   }
 }
+/* Distinct, solid-surface editions. Keep DBoard-Glass rules above unchanged. */
+html[data-brand-theme='DBoard-Tide'] {
+  --edition-accent: 8, 127, 140;
+  --edition-companion: 42, 182, 166;
+  --edition-glint: rgba(214, 255, 246, .72);
+  --edition-scene: radial-gradient(ellipse at 8% 5%, rgba(38, 188, 176, .24), transparent 37%),
+    radial-gradient(ellipse at 89% 75%, rgba(39, 129, 174, .16), transparent 40%),
+    repeating-radial-gradient(ellipse at 12% 14%, transparent 0 38px, rgba(8, 127, 140, .035) 39px 40px),
+    linear-gradient(155deg, #e8faf5, #edf8fa 54%, #deeff4);
+}
+html[data-brand-theme='DBoard-Tide'] body.dark-theme {
+  --edition-accent: 81, 214, 205;
+  --edition-companion: 49, 143, 181;
+  --edition-glint: rgba(128, 247, 228, .18);
+  --edition-scene: radial-gradient(ellipse at 9% 5%, rgba(25, 144, 145, .25), transparent 38%),
+    radial-gradient(ellipse at 90% 75%, rgba(36, 105, 155, .20), transparent 42%),
+    repeating-radial-gradient(ellipse at 12% 14%, transparent 0 38px, rgba(92, 219, 209, .035) 39px 40px),
+    linear-gradient(155deg, #0c2228, #10282e 55%, #102533);
+}
+html[data-brand-theme='DBoard-Copper'] {
+  --edition-accent: 168, 84, 28;
+  --edition-companion: 223, 163, 87;
+  --edition-glint: rgba(255, 238, 205, .78);
+  --edition-scene: radial-gradient(ellipse at 85% 4%, rgba(220, 143, 65, .22), transparent 39%),
+    radial-gradient(ellipse at 10% 76%, rgba(163, 95, 47, .13), transparent 39%),
+    repeating-linear-gradient(116deg, rgba(145, 81, 36, .035) 0 1px, transparent 1px 27px),
+    linear-gradient(150deg, #fffaf0, #f9efe3 58%, #f4e6d8);
+}
+html[data-brand-theme='DBoard-Copper'] body.dark-theme {
+  --edition-accent: 255, 182, 111;
+  --edition-companion: 180, 92, 55;
+  --edition-glint: rgba(255, 203, 137, .18);
+  --edition-scene: radial-gradient(ellipse at 85% 5%, rgba(170, 89, 48, .28), transparent 38%),
+    radial-gradient(ellipse at 8% 80%, rgba(147, 83, 38, .18), transparent 40%),
+    repeating-linear-gradient(116deg, rgba(252, 187, 117, .035) 0 1px, transparent 1px 27px),
+    linear-gradient(150deg, #201813, #291d18 58%, #221916);
+}
+html[data-brand-theme='DBoard-Iris'] {
+  --edition-accent: 103, 70, 190;
+  --edition-companion: 118, 143, 229;
+  --edition-glint: rgba(241, 225, 255, .76);
+  --edition-scene: radial-gradient(ellipse at 12% 11%, rgba(175, 135, 234, .23), transparent 38%),
+    radial-gradient(ellipse at 91% 73%, rgba(105, 139, 219, .19), transparent 42%),
+    repeating-linear-gradient(135deg, rgba(120, 92, 181, .035) 0 1px, transparent 1px 34px),
+    linear-gradient(150deg, #f8f3ff, #f0f2ff 55%, #ede9fa);
+}
+html[data-brand-theme='DBoard-Iris'] body.dark-theme {
+  --edition-accent: 183, 154, 255;
+  --edition-companion: 105, 130, 224;
+  --edition-glint: rgba(217, 193, 255, .18);
+  --edition-scene: radial-gradient(ellipse at 12% 8%, rgba(105, 66, 180, .31), transparent 38%),
+    radial-gradient(ellipse at 91% 73%, rgba(77, 96, 180, .25), transparent 43%),
+    repeating-linear-gradient(135deg, rgba(190, 165, 255, .035) 0 1px, transparent 1px 34px),
+    linear-gradient(150deg, #171626, #211e34 55%, #191c30);
+}
+html[data-brand-theme='Xboard'] {
+  --edition-accent: var(--theme-color-rgb);
+  --edition-companion: 84, 143, 209;
+  --edition-glint: rgba(227, 242, 255, .8);
+  --edition-scene: radial-gradient(ellipse at 12% 7%, rgba(76, 143, 209, .16), transparent 34%),
+    radial-gradient(ellipse at 89% 79%, rgba(108, 153, 199, .11), transparent 38%),
+    linear-gradient(rgba(69, 117, 166, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(69, 117, 166, .035) 1px, transparent 1px),
+    linear-gradient(150deg, #f8fbff, #f0f5fb);
+}
+html[data-brand-theme='Xboard'] body.dark-theme {
+  --edition-glint: rgba(147, 194, 247, .14);
+  --edition-scene: radial-gradient(ellipse at 12% 7%, rgba(54, 116, 186, .22), transparent 36%),
+    radial-gradient(ellipse at 89% 79%, rgba(86, 118, 177, .14), transparent 40%),
+    linear-gradient(rgba(147, 194, 247, .03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(147, 194, 247, .03) 1px, transparent 1px),
+    linear-gradient(150deg, #171c27, #1b2431);
+}
+html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) body {
+  background-color: var(--background-color);
+  background-image: var(--edition-scene);
+  background-attachment: fixed;
+}
+html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) :is(.dashboard-card, .plan-card, .profile-card, .auth-card) {
+  background-color: var(--card-bg-color);
+  background-image: radial-gradient(420px circle at 100% 0%, rgba(var(--edition-companion), .13), transparent 68%),
+    linear-gradient(145deg, rgba(var(--edition-accent), .055), transparent 42%, rgba(var(--edition-accent), .025));
+  border: 1px solid var(--border-color);
+  box-shadow: inset 0 1px 0 var(--edition-glint), 0 10px 28px var(--shadow-color);
+  color: var(--card-text-color);
+  --text-color: var(--card-text-color);
+  --secondary-text-color: var(--card-secondary-text-color);
+}
+html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) :is(.dashboard-card, .plan-card, .profile-card) {
+  border-radius: 18px;
+}
+html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) .welcome-card {
+  background-image: radial-gradient(480px circle at 98% 0%, rgba(var(--edition-companion), .22), transparent 72%),
+    linear-gradient(135deg, rgba(var(--edition-accent), .095), transparent 62%);
+}
+html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) :is(.slide-tabs-wrapper, .site-logo) {
+  background-color: var(--card-bg-color);
+  background-image: linear-gradient(155deg, rgba(var(--edition-companion), .12), transparent 62%);
+  border: 1px solid var(--border-color);
+  box-shadow: inset 0 1px 0 var(--edition-glint), 0 12px 30px var(--shadow-color);
+}
+html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) .slider-indicator {
+  box-shadow: 0 0 18px rgba(var(--edition-accent), .2);
+}
+html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) :is(.btn-primary, .primary-btn) {
+  background-image: linear-gradient(110deg, transparent 12%, rgba(255, 255, 255, .19) 45%, transparent 72%);
+  background-size: 220% 100%;
+  background-position: 100% 0;
+  box-shadow: 0 5px 15px rgba(var(--edition-accent), .18);
+}
+html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) :is(input, textarea, select):focus-visible {
+  outline: 2px solid var(--theme-color);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(var(--edition-accent), .13);
+}
+html[data-brand-theme='Xboard'] .dashboard-card { position: relative; }
+html[data-brand-theme='Xboard'] .dashboard-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 22px; right: 22px;
+  height: 2px;
+  border-radius: 0 0 5px 5px;
+  background: linear-gradient(90deg, transparent, rgba(var(--edition-accent), .58), transparent);
+  pointer-events: none;
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) body {
+    background-size: 115% 115%;
+    animation: edition-drift 32s ease-in-out infinite alternate;
+  }
+  html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) :is(.dashboard-card, .plan-card, .profile-card, .auth-card, .slide-tabs-wrapper) {
+    transition: transform .3s ease, box-shadow .3s ease, border-color .3s ease, background-position .6s ease;
+  }
+  html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) :is(.dashboard-card, .plan-card, .profile-card, .auth-card):hover {
+    transform: translateY(-3px);
+    border-color: rgba(var(--edition-accent), .36);
+    box-shadow: inset 0 1px 0 var(--edition-glint), 0 18px 38px var(--shadow-color), 0 0 0 1px rgba(var(--edition-accent), .08);
+  }
+  html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) :is(.btn-primary, .primary-btn):not(:disabled):hover {
+    background-position: 0 0;
+    box-shadow: 0 8px 23px rgba(var(--edition-accent), .29);
+  }
+  html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) .slide-tabs-wrapper .nav-item:hover .nav-icon {
+    transform: translateY(-2px) scale(1.06);
+  }
+}
+@keyframes edition-drift {
+  from { background-position: 0% 0%; }
+  to { background-position: 100% 100%; }
+}
+@media (max-width: 600px), (prefers-reduced-motion: reduce) {
+  html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) body {
+    background-attachment: scroll;
+    animation: none;
+  }
+  html:is([data-brand-theme='DBoard-Tide'], [data-brand-theme='DBoard-Copper'], [data-brand-theme='DBoard-Iris'], [data-brand-theme='Xboard']) :is(.dashboard-card, .plan-card, .profile-card, .auth-card) {
+    transition: none;
+  }
+}
 body.dark-theme :is(input, textarea)::placeholder {
   color: #b5c3ce;
   opacity: 1;
