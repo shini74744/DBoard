@@ -87,6 +87,8 @@
   <script>{!! file_get_contents(resource_path('js/dboard-telegram-settings.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-outbound-sort.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-marketing-notifications.js')) !!}</script>
+  <script>{!! file_get_contents(resource_path('js/dboard-telegram-binding.js')) !!}</script>
+  <script>{!! file_get_contents(resource_path('js/dboard-user-traffic.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-machine-sort.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-admin-groups.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-admin-theme.js')) !!}</script>

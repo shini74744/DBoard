@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Plugin\AbstractPlugin;
 use App\Services\Plugin\HookManager;
 use App\Services\TelegramService;
+use App\Services\TelegramBindingRewardService;
 use App\Services\TicketService;
 use App\Utils\Helper;
 use Illuminate\Support\Facades\Log;
@@ -386,13 +387,21 @@ class Plugin extends AbstractPlugin
     }
 
     $user->telegram_id = $msg->chat_id;
+    $user->telegram_username = $msg->telegram_username ?? null;
+    $user->telegram_username_synced_at = time();
     if (!$user->save()) {
       $this->sendMessage($msg, '设置失败');
       return;
     }
 
     HookManager::call('user.telegram.bind.after', [$user]);
-    $this->sendMessage($msg, '绑定成功');
+    try {
+      TelegramBindingRewardService::rewardOnBind($user);
+      $this->sendMessage($msg, '绑定成功');
+    } catch (\Throwable $error) {
+      Log::error('Telegram binding reward failed', ['user_id' => $user->id, 'error' => $error->getMessage()]);
+      $this->sendMessage($msg, '绑定成功，赠送流量暂未处理，请联系管理员');
+    }
   }
 
   protected function extractTokenFromUrl(string $url): ?string
@@ -471,6 +480,8 @@ class Plugin extends AbstractPlugin
     }
 
     $user->telegram_id = null;
+    $user->telegram_username = null;
+    $user->telegram_username_synced_at = null;
     if (!$user->save()) {
       $this->sendMessage($msg, '解绑失败');
       return;

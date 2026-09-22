@@ -74,7 +74,7 @@ class AuthController extends Controller
         $email = $request->input('email');
         $password = $request->input('password');
 
-        [$success, $result] = $this->loginService->login($email, $password);
+        [$success, $result] = $this->loginService->login($email, $password, $request->ip());
 
         if (!$success) {
             return $this->fail($result);
@@ -118,6 +118,7 @@ class AuthController extends Controller
                 ], 400);
             }
 
+            $this->loginService->recordLogin($user, $request->ip());
             $authService = new AuthService($user);
 
             return response()->json([

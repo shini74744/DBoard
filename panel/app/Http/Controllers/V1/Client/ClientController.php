@@ -7,6 +7,7 @@ use App\Models\Server;
 use App\Protocols\General;
 use App\Services\Plugin\HookManager;
 use App\Services\ServerService;
+use App\Services\TelegramUserAlertService;
 use App\Services\UserService;
 use App\Utils\Helper;
 use Illuminate\Http\Request;
@@ -48,7 +49,11 @@ class ClientController extends Controller
             return response('', 403, ['Content-Type' => 'text/plain']);
         }
 
-        return $this->doSubscribe($request, $user);
+        $response = $this->doSubscribe($request, $user);
+        if ($response->getStatusCode() < 400) {
+            TelegramUserAlertService::recordSubscriptionAccess($user, (string) $request->ip());
+        }
+        return $response;
     }
 
     public function doSubscribe(Request $request, $user, $servers = null)

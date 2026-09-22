@@ -23,6 +23,7 @@ use App\Http\Controllers\V2\Admin\SystemController;
 use App\Http\Controllers\V2\Admin\ThemeController;
 use App\Http\Controllers\V2\Admin\ShopPromotionController;
 use App\Http\Controllers\V2\Admin\TelegramCampaignController;
+use App\Http\Controllers\V2\Admin\TelegramBindingController;
 use App\Http\Controllers\V2\Admin\TrafficResetController;
 use Illuminate\Contracts\Routing\Registrar;
 
@@ -55,6 +56,11 @@ class AdminRoute
             $router->get('/notification-center/fetch', [TelegramCampaignController::class, 'fetch']);
             $router->post('/notification-center/create', [TelegramCampaignController::class, 'create']);
             $router->post('/notification-center/cancel', [TelegramCampaignController::class, 'cancel']);
+            $router->get('/telegram-binding/fetch', [TelegramBindingController::class, 'fetch']);
+            $router->get('/telegram-binding/history', [TelegramBindingController::class, 'history']);
+            $router->post('/telegram-binding/settings', [TelegramBindingController::class, 'saveSettings']);
+            $router->post('/telegram-binding/grant', [TelegramBindingController::class, 'grant']);
+            $router->post('/telegram-binding/refresh-username', [TelegramBindingController::class, 'refreshUsername']);
 
             // Mail Templates
             $router->group([
@@ -165,6 +171,7 @@ class AdminRoute
                 $router->any('/fetch', [UserController::class, 'fetch']);
                 $router->post('/update', [UserController::class, 'update']);
                 $router->get('/getUserInfoById', [UserController::class, 'getUserInfoById']);
+                $router->get('/traffic-breakdown', [UserController::class, 'trafficBreakdown']);
                 $router->post('/generate', [UserController::class, 'generate']);
                 $router->post('/dumpCSV', [UserController::class, 'dumpCSV']);
                 $router->post('/sendMail', [UserController::class, 'sendMail']);

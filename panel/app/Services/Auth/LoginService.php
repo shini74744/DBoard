@@ -15,9 +15,10 @@ class LoginService
      *
      * @param string $email 用户邮箱
      * @param string $password 用户密码
+     * @param string|null $ip 登录请求的客户端 IP
      * @return array [成功状态, 用户对象或错误信息]
      */
-    public function login(string $email, string $password): array
+    public function login(string $email, string $password, ?string $ip = null): array
     {
         // 检查密码错误限制
         if ((int) admin_setting('password_limit_enable', true)) {
@@ -67,12 +68,19 @@ class LoginService
             return [false, [400, __('Your account has been suspended')]];
         }
 
-        // 更新最后登录时间
-        $user->last_login_at = time();
-        $user->save();
+        $this->recordLogin($user, $ip);
 
         HookManager::call('user.login.after', $user);
         return [true, $user];
+    }
+
+    public function recordLogin(User $user, ?string $ip): void
+    {
+        $user->last_login_at = time();
+        if ($ip !== null && filter_var($ip, FILTER_VALIDATE_IP)) {
+            $user->last_login_ip = $ip;
+        }
+        $user->save();
     }
 
     /**

@@ -153,8 +153,11 @@
                   }}
                 </span>
               </div>
-              <div class="info-item">
-                <span class="info-label">{{ $t('dashboard.planTraffic') }}</span>
+              <div class="info-item traffic-breakdown-trigger" role="button" tabindex="0"
+                   :aria-label="$t('dashboard.viewTrafficBreakdown')"
+                   @click="showTrafficBreakdown = true" @keydown.enter.prevent="showTrafficBreakdown = true"
+                   @keydown.space.prevent="showTrafficBreakdown = true">
+                <span class="info-label">{{ $t('dashboard.planTraffic') }} <small>{{ $t('dashboard.viewDetails') }}</small></span>
                 <span class="info-value">{{ userPlan.totalTraffic || '0 GB' }}</span>
               </div>
               <!-- 添加下次重置时间，只有当resetDay存在时才显示 -->
@@ -494,15 +497,18 @@
         </template>
 
         <template v-else>
-          <div class="stats-card usage-gradient-card"
+          <div class="stats-card usage-gradient-card traffic-breakdown-trigger"
                :class="{'card-animate': !loading.userStats}"
-               :style="[trafficHueStyle, {animationDelay: '0.5s'}]">
+               :style="[trafficHueStyle, {animationDelay: '0.5s'}]"
+               role="button" tabindex="0" :aria-label="$t('dashboard.viewTrafficBreakdown')"
+               @click="showTrafficBreakdown = true" @keydown.enter.prevent="showTrafficBreakdown = true"
+               @keydown.space.prevent="showTrafficBreakdown = true">
             <div class="stats-icon">
               <IconTransferVertical :size="32"/>
             </div>
             <div class="stats-info">
               <div class="stats-value">{{ userStats.remainingTraffic }}</div>
-              <div class="stats-label">{{ $t('dashboard.remainingTraffic') }}</div>
+              <div class="stats-label">{{ $t('dashboard.remainingTraffic') }} · {{ $t('dashboard.viewDetails') }}</div>
             </div>
 
             <!-- 水流进度条效果 -->
@@ -639,6 +645,45 @@
     />
 
   </div>
+
+  <!-- 当前套餐和赠送流量明细 -->
+  <transition name="modal-fade">
+    <div class="modal-overlay" v-if="showTrafficBreakdown" @click.self="showTrafficBreakdown = false">
+      <div class="modal-container traffic-breakdown-modal">
+        <div class="modal-card">
+          <div class="modal-header">
+            <h3>{{ $t('dashboard.trafficBreakdownTitle') }}</h3>
+            <button class="close-button" :aria-label="$t('common.close')" @click="showTrafficBreakdown = false">×</button>
+          </div>
+          <div class="modal-body">
+            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.baseTraffic') }}</span><strong>{{ formatTraffic(trafficBreakdown.base_bytes) }}</strong></div>
+            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.timedBonus') }}</span><strong>+{{ formatTraffic(trafficBreakdown.timed_bonus_bytes) }}</strong></div>
+            <div v-for="(entry, index) in trafficBreakdown.entries.filter(item => item.bucket === 'timed')" :key="'timed-' + index" class="traffic-breakdown-entry">
+              <span>{{ entry.reason }}<template v-if="entry.expires_at"> · {{ $t('dashboard.expiresOn') }} {{ formatDate(entry.expires_at) }}</template></span><strong>+{{ formatTraffic(entry.amount_bytes) }}</strong>
+            </div>
+            <div v-if="trafficBreakdown.cycle_bonus_bytes > 0" class="traffic-breakdown-row"><span>{{ $t('dashboard.cycleBonus') }}</span><strong>+{{ formatTraffic(trafficBreakdown.cycle_bonus_bytes) }}</strong></div>
+            <div v-for="(entry, index) in trafficBreakdown.entries.filter(item => item.bucket === 'cycle')" :key="'cycle-' + index" class="traffic-breakdown-entry">
+              <span>{{ entry.reason }}</span><strong>+{{ formatTraffic(entry.amount_bytes) }}</strong>
+            </div>
+            <div v-if="trafficBreakdown.permanent_bonus_bytes > 0" class="traffic-breakdown-row"><span>{{ $t('dashboard.continuingBonus') }}</span><strong>+{{ formatTraffic(trafficBreakdown.permanent_bonus_bytes) }}</strong></div>
+            <div v-for="(entry, index) in trafficBreakdown.entries.filter(item => item.bucket === 'permanent')" :key="'permanent-' + index" class="traffic-breakdown-entry">
+              <span>{{ entry.reason }}</span><strong>+{{ formatTraffic(entry.amount_bytes) }}</strong>
+            </div>
+            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.giftCardBonus') }}</span><strong>+{{ formatTraffic(trafficBreakdown.gift_card_bonus_bytes) }}</strong></div>
+            <div v-for="(entry, index) in trafficBreakdown.entries.filter(item => item.bucket === 'gift_card')" :key="'gift-' + index" class="traffic-breakdown-entry">
+              <span>{{ entry.reason }}</span><strong>+{{ formatTraffic(entry.amount_bytes) }}</strong>
+            </div>
+            <div class="traffic-breakdown-row traffic-breakdown-total"><span>{{ $t('dashboard.totalQuota') }}</span><strong>{{ formatTraffic(trafficBreakdown.total_bytes) }}</strong></div>
+            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.usedTraffic') }}</span><strong>{{ formatTraffic(trafficBreakdown.used_bytes) }}</strong></div>
+            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.remainingTraffic') }}</span><strong>{{ formatTraffic(trafficBreakdown.remaining_bytes) }}</strong></div>
+            <p v-if="trafficBreakdown.status === 'no_plan'">{{ $t('dashboard.pendingTrafficHint') }}</p>
+            <p v-else-if="trafficBreakdown.status === 'expired'">{{ $t('dashboard.expiredTrafficHint') }}</p>
+            <p v-else-if="trafficBreakdown.permanent_bonus_bytes">{{ $t('dashboard.continuingBonusHint') }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </transition>
 
   <!-- 重置流量确认弹窗 -->
   <transition name="modal-fade">
@@ -875,6 +920,11 @@ export default {
     });
     const qrCodeLoading = ref(true);
     const showDailyTraffic = ref(false);
+    const showTrafficBreakdown = ref(false);
+    const trafficBreakdown = reactive({
+      base_bytes: 0, cycle_bonus_bytes: 0, permanent_bonus_bytes: 0, timed_bonus_bytes: 0, gift_card_bonus_bytes: 0,
+      total_bytes: 0, used_bytes: 0, remaining_bytes: 0, status: 'no_plan', entries: []
+    });
     const trafficBytes = ref({total: 0, remaining: 0});
     const subscriptionPeriod = ref({start: 0, expires: 0});
     const nowMs = ref(Date.now());
@@ -1324,6 +1374,10 @@ export default {
           trafficBytes.value = {total, remaining};
           userPlan.value.totalTraffic = formatTraffic(total);
           userStats.remainingTraffic = formatTraffic(remaining);
+          Object.assign(trafficBreakdown, subscribe.traffic_breakdown || {
+            base_bytes: total, cycle_bonus_bytes: 0, permanent_bonus_bytes: 0, timed_bonus_bytes: 0, gift_card_bonus_bytes: 0,
+            total_bytes: total, used_bytes: used, remaining_bytes: remaining, status: 'active', entries: []
+          });
           userPlan.value.resetDay = subscribe.reset_day ?? null;
           if (subscribe.subscribe_url) {
             userPlan.value.subscribeUrl = subscribe.subscribe_url;
@@ -1842,6 +1896,8 @@ export default {
       currencySymbol,
       userPlan,
       showDailyTraffic,
+      showTrafficBreakdown,
+      trafficBreakdown,
       expiryHueStyle,
       trafficHueStyle,
       clientConfig,
@@ -4059,4 +4115,23 @@ a.eztheme-btn {
 .stats-card.balance-card .stats-value {
   color: var(--theme-color);
 }
+
+.dashboard-container .traffic-breakdown-trigger { cursor: pointer; }
+.dashboard-container .traffic-breakdown-trigger:hover { filter: brightness(1.04); }
+.dashboard-container .traffic-breakdown-trigger:focus-visible { outline: 3px solid var(--theme-color); outline-offset: 3px; }
+.dashboard-container .traffic-breakdown-trigger small { margin-left: .35rem; color: var(--theme-color); font-size: .7rem; white-space: nowrap; }
+.traffic-breakdown-modal { max-width: 460px; }
+.traffic-breakdown-modal .modal-card { background: color-mix(in srgb, var(--card-background) 75%, white); color: var(--text-color); }
+body.dark-theme .traffic-breakdown-modal .modal-card { background: color-mix(in srgb, var(--card-background) 75%, #111827); }
+.traffic-breakdown-modal .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color); }
+.traffic-breakdown-modal .modal-header h3 { margin: 0; font-size: 1.1rem; }
+.traffic-breakdown-modal .close-button { border: 0; background: transparent; color: inherit; font-size: 1.5rem; cursor: pointer; }
+.traffic-breakdown-modal .modal-body { display: block; padding: 1rem 1.25rem; }
+.traffic-breakdown-row { display: flex; justify-content: space-between; gap: 1rem; padding: .65rem 0; border-bottom: 1px solid var(--border-color); }
+.traffic-breakdown-row strong { white-space: nowrap; }
+.traffic-breakdown-entry { display: flex; justify-content: space-between; gap: 1rem; padding: .3rem 0 .55rem 1rem; color: var(--secondary-text-color); font-size: .83rem; }
+.traffic-breakdown-entry span { overflow-wrap: anywhere; }
+.traffic-breakdown-entry strong { white-space: nowrap; color: var(--text-color); }
+.traffic-breakdown-total { font-weight: 700; }
+.traffic-breakdown-modal p { margin: .8rem 0 0; color: var(--secondary-text-color); font-size: .85rem; line-height: 1.5; }
 </style>

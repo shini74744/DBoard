@@ -134,12 +134,16 @@ class UserController extends Controller
     {
         $user = User::where('id', $request->user()->id)
             ->select([
+                'id',
                 'plan_id',
                 'token',
                 'expired_at',
                 'u',
                 'd',
                 'transfer_enable',
+                'telegram_bonus_cycle',
+                'telegram_bonus_permanent',
+                'telegram_bonus_timed',
                 'email',
                 'uuid',
                 'device_limit',
@@ -174,6 +178,7 @@ class UserController extends Controller
                 return $this->fail([400, __('Subscription plan does not exist')]);
             }
         }
+        $user['traffic_breakdown'] = \App\Services\TrafficQuotaBreakdown::forUser($user);
         $user['subscribe_url'] = Helper::getSubscribeUrl($user['token']);
         $userService = new UserService();
         $user['reset_day'] = $userService->getResetDay($user);

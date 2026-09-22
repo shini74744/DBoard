@@ -122,7 +122,11 @@ class GiftCardTemplate extends Model
             case self::TYPE_GENERAL:
                 $rewards = $this->rewards ?? [];
                 if (isset($rewards['transfer_enable']) || isset($rewards['expire_days']) || isset($rewards['reset_package'])) {
-                    if (!$user->plan_id) {
+                    if (!$user->plan_id && empty($rewards['plan_id'])) {
+                        return false;
+                    }
+                    if (!empty($rewards['transfer_enable']) && !$user->isActive()
+                        && empty($rewards['plan_id']) && empty($rewards['expire_days'])) {
                         return false;
                     }
                 }

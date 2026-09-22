@@ -41,6 +41,14 @@ class TelegramController extends Controller
         if (!$this->msg)
             return;
         $msg = $this->msg;
+        if ($msg->is_private) {
+            $user = User::where('telegram_id', $msg->chat_id)->first();
+            if ($user && $user->telegram_username !== $msg->telegram_username) {
+                $user->telegram_username = $msg->telegram_username;
+                $user->telegram_username_synced_at = time();
+                $user->save();
+            }
+        }
         $this->processBotName($msg);
         try {
             HookManager::call('telegram.message.before', [$msg]);
@@ -89,6 +97,7 @@ class TelegramController extends Controller
             'message_type' => 'message',
             'text' => $message['text'],
             'is_private' => $message['chat']['type'] === 'private',
+            'telegram_username' => $message['from']['username'] ?? null,
         ];
 
         if (isset($message['reply_to_message']['text'])) {

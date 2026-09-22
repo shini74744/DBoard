@@ -79,6 +79,16 @@ class GiftCardService
             ];
         }
 
+        $rewards = $this->template->rewards ?? [];
+        if (!empty($rewards['transfer_enable']) && !$this->user->isActive()
+            && empty($rewards['plan_id'])
+            && (empty($rewards['expire_days']) || !$this->user->plan_id)) {
+            return [
+                'can_redeem' => false,
+                'reason' => '请先开通有效套餐后使用流量礼品卡'
+            ];
+        }
+
         if (!$this->template->checkUserConditions($this->user)) {
             return [
                 'can_redeem' => false,
@@ -164,13 +174,30 @@ class GiftCardService
     {
         $userService = app(UserService::class);
 
+        // 同一张卡同时送套餐和流量时，先开通套餐，避免套餐额度覆盖赠送流量。
+        if (!empty($rewards['plan_id'])) {
+            $plan = Plan::find($rewards['plan_id'])
+                ?? throw new ApiException('礼品卡指定的套餐不存在');
+            $this->user = $userService->assignPlan(
+                $this->user,
+                $plan,
+                $rewards['plan_validity_days'] ?? 0
+            );
+        } elseif (!empty($rewards['expire_days'])) {
+            $userService->extendSubscription($this->user, $rewards['expire_days']);
+        }
+
+        if (!empty($rewards['transfer_enable']) && !$this->user->isActive()) {
+            throw new ApiException('请先开通有效套餐后使用流量礼品卡');
+        }
+
         if (isset($rewards['balance']) && $rewards['balance'] > 0) {
             if (!$userService->addBalance($this->user->id, $rewards['balance'])) {
                 throw new ApiException('余额发放失败');
             }
         }
 
-        if (isset($rewards['transfer_enable']) && $rewards['transfer_enable'] > 0) {
+        if (!empty($rewards['transfer_enable'])) {
             $this->user->transfer_enable = ($this->user->transfer_enable ?? 0) + $rewards['transfer_enable'];
         }
 
@@ -178,29 +205,10 @@ class GiftCardService
             $this->user->device_limit = ($this->user->device_limit ?? 0) + $rewards['device_limit'];
         }
 
-        if (isset($rewards['reset_package']) && $rewards['reset_package']) {
-            if ($this->user->plan_id) {
-                app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_GIFT_CARD);
-            }
+        if (!empty($rewards['reset_package']) && $this->user->plan_id) {
+            app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_GIFT_CARD);
         }
 
-        if (isset($rewards['plan_id'])) {
-            $plan = Plan::find($rewards['plan_id']);
-            if ($plan) {
-                $userService->assignPlan(
-                    $this->user,
-                    $plan,
-                    $rewards['plan_validity_days'] ?? 0
-                );
-            }
-        } else {
-            // 只有在不是套餐卡的情况下，才处理独立的有效期奖励
-            if (isset($rewards['expire_days']) && $rewards['expire_days'] > 0) {
-                $userService->extendSubscription($this->user, $rewards['expire_days']);
-            }
-        }
-
-        // 保存用户更改
         if (!$this->user->save()) {
             throw new ApiException('用户信息更新失败');
         }
@@ -236,12 +244,14 @@ class GiftCardService
             }
         }
 
-        // 邀请人流量奖励
-        if (isset($rewards['transfer_enable']) && $rewards['transfer_enable'] > 0) {
+        // 邀请人没有有效套餐时只发放其他奖励，不产生无法使用的流量额度。
+        if (!empty($rewards['transfer_enable']) && $inviteUser->isActive()) {
             $inviteTransfer = intval($rewards['transfer_enable'] * $rate);
             if ($inviteTransfer > 0) {
                 $inviteUser->transfer_enable = ($inviteUser->transfer_enable ?? 0) + $inviteTransfer;
-                $inviteUser->save();
+                if (!$inviteUser->save()) {
+                    throw new ApiException('邀请人流量发放失败');
+                }
                 $inviteRewards['transfer_enable'] = $inviteTransfer;
             }
         }

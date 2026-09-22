@@ -35,15 +35,25 @@ class TrafficResetService
   {
     try {
       $result = DB::transaction(function () use ($user, $triggerSource) {
+        // Scheduled resets must read the latest quota before removing a cycle gift.
+        // Order flows pass a dirty model that is already locked by the order transaction.
+        if (!$user->isDirty()) {
+          $user = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
+        }
         $oldUpload = $user->u ?? 0;
         $oldDownload = $user->d ?? 0;
         $oldTotal = $oldUpload + $oldDownload;
 
         $nextResetTime = $this->calculateNextResetTime($user);
+        $cycleToExpire = ($user->plan_id === null
+          || ($user->expired_at !== null && (int) $user->expired_at < time()))
+          ? 0 : (int) $user->telegram_bonus_cycle;
 
         $user->update([
           'u' => 0,
           'd' => 0,
+          'transfer_enable' => max(0, (int) $user->transfer_enable - $cycleToExpire),
+          'telegram_bonus_cycle' => (int) $user->telegram_bonus_cycle - $cycleToExpire,
           'last_reset_at' => time(),
           'reset_count' => $user->reset_count + 1,
           'next_reset_at' => $nextResetTime ? $nextResetTime->timestamp : null,

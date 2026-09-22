@@ -13,6 +13,7 @@ use App\Services\AuthService;
 use App\Services\NodeSyncService;
 use App\Services\Plugin\HookManager;
 use App\Services\UserService;
+use App\Services\TrafficQuotaBreakdown;
 use App\Traits\QueryOperators;
 use App\Utils\Helper;
 use Illuminate\Database\Eloquent\Builder;
@@ -211,6 +212,13 @@ class UserController extends Controller
         $user['commission_balance'] = $user['commission_balance'] / 100;
         $user['subscribe_url'] = Helper::getSubscribeUrl($user['token']);
         return HookManager::filter('admin.user.transform', $user, $model);
+    }
+
+    public function trafficBreakdown(Request $request)
+    {
+        $data = $request->validate(['id' => 'required|integer|exists:v2_user,id']);
+        $user = User::findOrFail($data['id']);
+        return $this->success(TrafficQuotaBreakdown::forUser($user));
     }
 
     public function getUserInfoById(Request $request)

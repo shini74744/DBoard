@@ -59,6 +59,11 @@ class TelegramService
         return $this->request('getMe');
     }
 
+    public function getChat(int $chatId): object
+    {
+        return $this->request('getChat', ['chat_id' => $chatId]);
+    }
+
     public function setWebhook(string $url): object
     {
         $result = $this->request('setWebhook', ['url' => $url]);

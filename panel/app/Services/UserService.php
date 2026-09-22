@@ -241,9 +241,13 @@ class UserService
      */
     public function assignPlan(User $user, Plan $plan, int $validityDays): User
     {
+        [$carryCycle, $permanent, $timed] = TelegramBindingRewardService::bonusesForPlanActivation($user);
         $user->plan_id = $plan->id;
         $user->group_id = $plan->group_id;
-        $user->transfer_enable = $plan->transfer_enable * 1073741824;
+        $user->telegram_bonus_cycle = $carryCycle;
+        $user->telegram_bonus_permanent = $permanent;
+        $user->telegram_bonus_timed = $timed;
+        $user->transfer_enable = $plan->transfer_enable * 1073741824 + $permanent + $carryCycle + $timed;
         $user->speed_limit = $plan->speed_limit;
         $user->device_limit = $plan->device_limit;
 

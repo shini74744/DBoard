@@ -2,6 +2,7 @@
   const items = [
     ['store', '商店宣传'],
     ['notice', '通知中心'],
+    ['binding', '机器人绑定'],
   ];
   const promoFields = [
     ['hero_title', '页面标题'], ['hero_description', '页面介绍'],
@@ -43,8 +44,50 @@
   document.body.append(panel);
   let page = '';
   let openedUrl = '';
+  let backgroundScroll = null;
+  function lockBackgroundScroll() {
+    if (backgroundScroll !== null) return;
+    backgroundScroll = [window.scrollX, window.scrollY];
+    window.scrollTo(0, 0);
+    document.documentElement.classList.add('dboard-marketing-open');
+  }
+  function unlockBackgroundScroll(restorePosition) {
+    document.documentElement.classList.remove('dboard-marketing-open');
+    const position = backgroundScroll;
+    backgroundScroll = null;
+    if (restorePosition && position) window.scrollTo(...position);
+  }
+  const pageQueryKey = 'dboard_page';
+  const pageFromUrl = () => {
+    const key = new URL(location.href).searchParams.get(pageQueryKey);
+    return items.some(([value]) => value === key) ? key : '';
+  };
+  function setPageUrl(key) {
+    const url = new URL(location.href);
+    if (key) url.searchParams.set(pageQueryKey, key);
+    else url.searchParams.delete(pageQueryKey);
+    if (url.href !== location.href) history.replaceState(history.state, '', url.href);
+  }
   let selectedUsers = new Set();
   let observedContent = null;
+  let nativeHeading = null;
+  let nativeHeadingVisibility = '';
+  function syncNativeHeading() {
+    if (panel.hidden || nativeHeading?.isConnected) return;
+    const root = document.getElementById('root');
+    if (!root) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let textNode;
+    while ((textNode = walker.nextNode())) {
+      if (textNode.textContent.trim() !== '仪表盘') continue;
+      const element = textNode.parentElement;
+      if (!element || element.getBoundingClientRect().top > 110) continue;
+      nativeHeading = element;
+      nativeHeadingVisibility = element.style.visibility;
+      element.style.visibility = 'hidden';
+      break;
+    }
+  }
   const layoutObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(syncPanelPosition) : null;
   function syncPanelPosition() {
     const content = document.getElementById('content');
@@ -57,9 +100,14 @@
   }
   window.addEventListener('resize', syncPanelPosition);
   function close() {
+    const restorePosition = location.href === openedUrl;
     panel.hidden = true;
     page = '';
     panel.replaceChildren();
+    unlockBackgroundScroll(restorePosition);
+    if (nativeHeading?.isConnected) nativeHeading.style.visibility = nativeHeadingVisibility;
+    nativeHeading = null;
+    if (pageFromUrl()) setPageUrl('');
   }
   function closeOnNavigation() {
     if (!panel.hidden && location.href !== openedUrl) close();
@@ -67,8 +115,8 @@
   document.addEventListener('click', event => {
     if (!panel.hidden && !panel.contains(event.target) && !event.target.closest('.dboard-custom-menu-link')) close();
   }, true);
-  window.addEventListener('popstate', closeOnNavigation);
-  window.addEventListener('hashchange', closeOnNavigation);
+  window.addEventListener('popstate', () => { closeOnNavigation(); restorePageFromUrl(); });
+  window.addEventListener('hashchange', () => { closeOnNavigation(); restorePageFromUrl(); });
   function shell(title, description) {
     openedUrl = location.href;
     panel.replaceChildren();
@@ -81,6 +129,8 @@
     panel.append(head);
     syncPanelPosition();
     panel.hidden = false;
+    lockBackgroundScroll();
+    syncNativeHeading();
     return panel;
   }
   async function openStore() {
@@ -273,6 +323,22 @@
       await loadHistory();
     } catch (error) { status.textContent = error.message; }
   }
+  function openBinding() {
+    if (!window.DBoardTelegramBinding) return;
+    page = 'binding';
+    window.DBoardTelegramBinding.open({ panel, shell, request, el, isCurrent: () => page === 'binding' });
+  }
+  function openPage(key) {
+    if (key === 'store') openStore();
+    else if (key === 'notice') openNotice();
+    else if (key === 'binding') openBinding();
+  }
+  function restorePageFromUrl() {
+    const key = pageFromUrl();
+    if (!key || !panel.hidden || !document.getElementById(`dboard-menu-${key}`)) return;
+    if (key === 'binding' && !window.DBoardTelegramBinding) return;
+    openPage(key);
+  }
   function mountMenu() {
     const anchors = [...document.querySelectorAll('#root a, #root button')];
     const knowledge = anchors.find(node => ['知识库管理', 'Knowledge Management'].includes(node.textContent.trim()));
@@ -297,7 +363,8 @@
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', key === 'store'
         ? 'M3 3h2l2.4 11h10.8l2-8H6 M8 20h.01 M18 20h.01'
-        : 'M18 8a6 6 0 0 0-12 0c0 7-3 8-3 9h18c0-1-3-2-3-9 M10 21h4');
+        : key === 'notice' ? 'M18 8a6 6 0 0 0-12 0c0 7-3 8-3 9h18c0-1-3-2-3-9 M10 21h4'
+        : 'M8 12a4 4 0 0 1 4-4h7v8h-7a4 4 0 0 1-4-4z M8 12H5a2 2 0 0 0 0 4h2 M14 8V5a2 2 0 0 0-4 0v3 M15 12h.01');
       svg.append(path);
       control.classList.add('dboard-custom-menu-link');
       control.replaceChildren(svg, el('span', '', label));
@@ -305,7 +372,8 @@
       else { control.type = 'button'; }
       const activate = event => {
         event.preventDefault(); event.stopPropagation();
-        if (key === 'store') openStore(); else openNotice();
+        setPageUrl(key);
+        openPage(key);
       };
       control.addEventListener('click', activate);
       cursor.after(clone); cursor = clone;
@@ -316,9 +384,11 @@
     closeOnNavigation();
     if (pending) return;
     pending = true;
-    requestAnimationFrame(() => { pending = false; closeOnNavigation(); mountMenu(); });
+    requestAnimationFrame(() => { pending = false; closeOnNavigation(); mountMenu(); restorePageFromUrl(); syncNativeHeading(); });
   });
   const root = document.getElementById('root');
   if (root) observer.observe(root, { childList: true, subtree: true });
   mountMenu();
+  restorePageFromUrl();
+  window.addEventListener('load', restorePageFromUrl, { once: true });
 })();

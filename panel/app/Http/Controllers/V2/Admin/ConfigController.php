@@ -94,6 +94,11 @@ class ConfigController extends Controller
             'telegram_user_notify_node_new' => 'sometimes|required|boolean',
             'telegram_user_notify_node_offline' => 'sometimes|required|boolean',
             'telegram_user_notify_manual_reset' => 'sometimes|required|boolean',
+            'telegram_user_notify_traffic_low' => 'sometimes|required|boolean',
+            'telegram_user_notify_device_over_limit' => 'sometimes|required|boolean',
+            'telegram_user_notify_subscription_sharing' => 'sometimes|required|boolean',
+            'telegram_traffic_warn_percent' => 'sometimes|required|integer|min:50|max:99',
+            'telegram_subscribe_ip_limit' => 'sometimes|required|integer|min:2|max:50',
             'telegram_node_offline_reminders' => 'sometimes|required|integer|min:1|max:10',
             'telegram_node_offline_interval' => 'sometimes|required|integer|min:5|max:1440',
         ]);
@@ -111,6 +116,11 @@ class ConfigController extends Controller
             'telegram_user_notify_node_new' => (bool) admin_setting('telegram_user_notify_node_new', 0),
             'telegram_user_notify_node_offline' => (bool) admin_setting('telegram_user_notify_node_offline', 0),
             'telegram_user_notify_manual_reset' => (bool) admin_setting('telegram_user_notify_manual_reset', 0),
+            'telegram_user_notify_traffic_low' => (bool) admin_setting('telegram_user_notify_traffic_low', 0),
+            'telegram_user_notify_device_over_limit' => (bool) admin_setting('telegram_user_notify_device_over_limit', 0),
+            'telegram_user_notify_subscription_sharing' => (bool) admin_setting('telegram_user_notify_subscription_sharing', 0),
+            'telegram_traffic_warn_percent' => (int) admin_setting('telegram_traffic_warn_percent', 80),
+            'telegram_subscribe_ip_limit' => (int) admin_setting('telegram_subscribe_ip_limit', 5),
             'telegram_node_offline_reminders' => (int) admin_setting('telegram_node_offline_reminders', 3),
             'telegram_node_offline_interval' => (int) admin_setting('telegram_node_offline_interval', 60),
         ];

@@ -177,9 +177,8 @@ class RegisterService
             Cache::forget(CacheKey::get('EMAIL_VERIFY_CODE', $email));
         }
 
-        // 更新最近登录时间
-        $user->last_login_at = time();
-        $user->save();
+        // 注册成功后立即登录，记录首次登录时间和来源 IP。
+        app(LoginService::class)->recordLogin($user, $request->ip());
 
         // 更新IP注册计数
         if ((int) admin_setting('register_limit_by_ip_enable', 0)) {

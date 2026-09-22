@@ -82,6 +82,11 @@ class ConfigSave extends FormRequest
         'telegram_user_notify_node_new' => 'boolean',
         'telegram_user_notify_node_offline' => 'boolean',
         'telegram_user_notify_manual_reset' => 'boolean',
+        'telegram_user_notify_traffic_low' => 'boolean',
+        'telegram_user_notify_device_over_limit' => 'boolean',
+        'telegram_user_notify_subscription_sharing' => 'boolean',
+        'telegram_traffic_warn_percent' => 'integer|min:50|max:99',
+        'telegram_subscribe_ip_limit' => 'integer|min:2|max:50',
         'telegram_node_offline_reminders' => 'integer|min:1|max:10',
         'telegram_node_offline_interval' => 'integer|min:5|max:1440',
         // app

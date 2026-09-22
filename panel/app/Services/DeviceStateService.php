@@ -196,12 +196,17 @@ class DeviceStateService
         // if (Redis::setnx($dbThrottleKey, 1)) {
         //     Redis::expire($dbThrottleKey, self::DB_THROTTLE);
 
+            $count = $this->getDeviceCount($userId);
             User::query()
                 ->whereKey($userId)
                 ->update([
-                    'online_count' => $this->getDeviceCount($userId),
+                    'online_count' => $count,
                     'last_online_at' => now(),
                 ]);
+            if (admin_setting('telegram_user_notify_device_over_limit', false)) {
+                $user = User::find($userId);
+                if ($user) TelegramUserAlertService::checkDeviceCount($user, $count);
+            }
         // }
     }
 }
