@@ -1,4 +1,4 @@
-# DUI-node
+# DBoard-node
 
 DBoard node backend. Supports `sing-box` / `xray-core` dual kernels.
 
@@ -17,18 +17,12 @@ DBoard node backend. Supports `sing-box` / `xray-core` dual kernels.
 ### Docker
 
 ```bash
-docker run -d --restart=always --network=host \
-  -e apiHost=https://panel.com -e apiKey=TOKEN -e nodeID=1 \
-  ghcr.io/shini74744/dboard-node:latest
-```
-
-### Docker Compose
-
-```bash
 git clone --depth 1 https://github.com/shini74744/DBoard.git
 cd DBoard/node
-vim config/config.yml   # set panel.url / token / node_id
-docker compose up -d
+docker build -t dboard-node:local .
+docker run -d --restart=always --network=host \
+  -e apiHost=https://panel.com -e apiKey=TOKEN -e nodeID=1 \
+  dboard-node:local
 ```
 
 ### Installer (Linux systemd)
@@ -44,7 +38,8 @@ curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/node/install
 ```
 
 The panel URL may be an IP plus port, for example `http://203.0.113.10:8888`.
-The installer downloads `DUI-node` and `xbctl` from the latest DBoard GitHub Release.
+The installer downloads `DBoard-node` and `xbctl` from the latest DBoard GitHub Release.
+Existing `DUI-node` and `xboard-node` systemd installs can migrate with `sudo bash install.sh upgrade`. The installer copies their config to `/etc/DBoard-node`, enables `DBoard-node.service`, checks health, then disables the previous service. The old config and binary remain as a recovery copy.
 
 ## xbctl
 

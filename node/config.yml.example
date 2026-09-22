@@ -1,4 +1,4 @@
-# DUI-node Configuration
+# DBoard-node Configuration
 # Top-level settings are inherited by all instances. Instance overrides take precedence.
 
 # ── Single node (simplest) ──

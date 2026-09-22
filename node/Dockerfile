@@ -14,18 +14,18 @@ RUN CGO_ENABLED=0 go build -ldflags "-s -w \
     -X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev) \
     -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     -tags "with_quic with_utls with_wireguard with_clash_api" \
-    -o DUI-node ./cmd/DUI-node
+    -o DBoard-node ./cmd/DBoard-node
 
 # Runtime stage — sing-box & xray-core are embedded as Go libraries
 FROM alpine:3.20
 
 RUN apk add --no-cache ca-certificates tzdata
 
-COPY --from=builder /build/DUI-node /usr/local/bin/DUI-node
+COPY --from=builder /build/DBoard-node /usr/local/bin/DBoard-node
 
-RUN mkdir -p /etc/DUI-node
+RUN mkdir -p /etc/DBoard-node
 
-WORKDIR /etc/DUI-node
+WORKDIR /etc/DBoard-node
 
 # Config can be provided via file mount OR environment variables.
 # Env var mode (no config file needed):
@@ -33,7 +33,7 @@ WORKDIR /etc/DUI-node
 #     -e apiHost=https://panel.example.com \
 #     -e apiKey=YOUR_TOKEN \
 #     -e nodeID=1 \
-#     ghcr.io/cedar2025/dui-node:latest
+#     dboard-node:local
 #
 # Supported env vars:
 #   apiHost  / API_HOST    → panel URL
@@ -46,5 +46,5 @@ WORKDIR /etc/DUI-node
 #   keyFile  / KEY_FILE    → TLS key path
 #   logLevel / LOG_LEVEL   → log level
 
-ENTRYPOINT ["DUI-node"]
-CMD ["-c", "/etc/DUI-node/config.yml"]
+ENTRYPOINT ["DBoard-node"]
+CMD ["-c", "/etc/DBoard-node/config.yml"]

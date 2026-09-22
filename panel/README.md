@@ -4,7 +4,7 @@
 
 DBoard 面板基于 Laravel 12 + Octane，包含管理后台编译资源、插件系统、节点管理、出站规则、路由规则和负载均衡等定制。
 
-> 完整安装、升级、Docker、独立部署、DUI-node、DUI-Gateway、备份与迁移说明统一维护在仓库根目录 [README.md](../README.md)。
+> 完整安装、升级、Docker、独立部署、DBoard-node、DUI-Gateway、备份与迁移说明统一维护在仓库根目录 [README.md](../README.md)。
 
 ## 部署方式
 
@@ -102,7 +102,7 @@ Redis 8.4.2
 public/assets/admin/
 ```
 
-当前仓库保留的是可直接部署的编译资源。若重新构建前端，请确保 DBoard 的 DUI-node、路由、出站和负载均衡相关改动仍然存在。
+当前仓库保留的是可直接部署的编译资源。若重新构建前端，请确保 DBoard 的 DBoard-node、路由、出站和负载均衡相关改动仍然存在。
 
 ## 上游与许可证
 

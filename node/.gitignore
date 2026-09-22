@@ -1,8 +1,12 @@
 # Binaries
+/DBoard-node
+/DBoard-node-linux-*
 /DUI-node
 /DUI-node-linux-*
+/xboard-node-linux-*
 /xbctl
 /xbctl-linux-*
+/SHA256SUMS
 *.exe
 
 # Config files (may contain secrets)
@@ -35,6 +39,6 @@ internal/kernel/singbox/config_bench_test.go
 internal/kernel/xray/config_bench_test.go
 internal/service/service_bench_test.go
 internal/tracker/tracker_bench_test.go
-cmd/DUI-node-bench-compare
-cmd/DUI-node-bench
+cmd/DBoard-node-bench-compare
+cmd/DBoard-node-bench
 .env

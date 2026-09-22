@@ -8,24 +8,21 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-APP_NAME="DUI-node"
-INSTALL_ROOT="/etc/DUI-node"
+APP_NAME="DBoard-node"
+INSTALL_ROOT="/etc/DBoard-node"
 BACKUP_DIR="${INSTALL_ROOT}/backups"
 INSTALL_META="${INSTALL_ROOT}/install-meta.json"
 CONFIG_FILE="${INSTALL_ROOT}/config.yml"
 CREDENTIALS_FILE="${INSTALL_ROOT}/credentials.env"
-BINARY_PATH="/usr/local/bin/DUI-node"
-SERVICE_NAME="DUI-node.service"
+BINARY_PATH="/usr/local/bin/DBoard-node"
+SERVICE_NAME="DBoard-node.service"
 SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
 CLI_PATH="/usr/local/bin/xbctl"
 
-# One-time migration support for installations created before the DUI-node rename.
-LEGACY_INSTALL_ROOT="/etc/xboard-node"
-LEGACY_CONFIG_FILE="$LEGACY_INSTALL_ROOT/config.yml"
-LEGACY_CREDENTIALS_FILE="$LEGACY_INSTALL_ROOT/credentials.env"
-LEGACY_BINARY_PATH="/usr/local/bin/xboard-node"
-LEGACY_SERVICE_NAME="xboard-node.service"
-LEGACY_SERVICE_PATH="/etc/systemd/system/$LEGACY_SERVICE_NAME"
+# Preserve existing DUI-node and older xboard-node installations during migration.
+LEGACY_INSTALL_ROOT=""
+LEGACY_SERVICE_NAME=""
+LEGACY_SERVICE_PATH=""
 LEGACY_DETECTED=0
 INSTALLER_COPY_PATH="${INSTALL_ROOT}/install.sh"
 CLI_BINARY_SOURCE=""
@@ -103,9 +100,10 @@ load_health_port_from_config() {
 
 rollback_install() {
     log_warn "Rolling back installation"
+    systemctl stop "$SERVICE_NAME" >/dev/null 2>&1 || true
     if [ -n "$BACKUP_PATH" ] && [ -d "$BACKUP_PATH" ]; then
-        if [ -f "$BACKUP_PATH/DUI-node" ]; then
-            install -m 755 "$BACKUP_PATH/DUI-node" "$BINARY_PATH"
+        if [ -f "$BACKUP_PATH/DBoard-node" ]; then
+            install -m 755 "$BACKUP_PATH/DBoard-node" "$BINARY_PATH"
         else
             rm -f "$BINARY_PATH"
         fi
@@ -174,7 +172,7 @@ trap cleanup_tmp EXIT
 usage() {
     cat <<'HELP'
 
-  DUI-node Installer
+  DBoard-node Installer
 
   ACTIONS:
     install      Install or reconcile the configured deployment (default)
@@ -201,13 +199,13 @@ usage() {
     --node-type, -T     Explicit node type for node mode
     --kernel, -k        singbox or xray (default: singbox)
     --version           Release version or latest (default: latest)
-    --binary            Use a local DUI-node binary path instead of downloading
+    --binary            Use a local DBoard-node binary path instead of downloading
     --xbctl-binary      Use a local xbctl binary path instead of downloading
     --health-port       Local health port (default: 65530, use 0 to disable)
     --gomemlimit        Runtime GOMEMLIMIT value, e.g. 256MiB
     --gogc              Runtime GOGC value, e.g. 50
     --force-reconfigure Overwrite an existing install even if mode/target changed
-    --purge             With uninstall, delete /etc/DUI-node too
+    --purge             With uninstall, delete /etc/DBoard-node too
     --yes, -y           Non-interactive confirmation for destructive operations
 
   EXAMPLES:
@@ -413,32 +411,37 @@ ensure_dirs() {
     chmod 700 "$INSTALL_ROOT"
 }
 
-migrate_legacy_layout() {
-    if [ -d "$INSTALL_ROOT" ] || [ ! -d "$LEGACY_INSTALL_ROOT" ]; then
+detect_legacy_layout() {
+    local name
+    if [ -f "$CONFIG_FILE" ] && systemctl is-active "$SERVICE_NAME" >/dev/null 2>&1; then
         return
     fi
+    for name in DUI-node xboard-node; do
+        if [ -f "/etc/${name}/config.yml" ] && { [ ! -f "$CONFIG_FILE" ] || systemctl is-active "${name}.service" >/dev/null 2>&1; }; then
+            LEGACY_INSTALL_ROOT="/etc/${name}"
+            LEGACY_SERVICE_NAME="${name}.service"
+            LEGACY_SERVICE_PATH="/etc/systemd/system/${LEGACY_SERVICE_NAME}"
+            LEGACY_DETECTED=1
+            return
+        fi
+    done
+}
 
-    LEGACY_DETECTED=1
-    log_step "Migrating legacy node layout to DUI-node"
+migrate_legacy_layout() {
+    detect_legacy_layout
+    [ "$LEGACY_DETECTED" -eq 0 ] && return
+    log_step "Migrating ${LEGACY_SERVICE_NAME} to DBoard-node"
     mkdir -p "$INSTALL_ROOT"
     cp -a "$LEGACY_INSTALL_ROOT/." "$INSTALL_ROOT/"
-
-    if [ -f "$CONFIG_FILE" ]; then
-        sed -i "s#$LEGACY_INSTALL_ROOT#$INSTALL_ROOT#g" "$CONFIG_FILE"
-    fi
+    sed -i "s#$LEGACY_INSTALL_ROOT#$INSTALL_ROOT#g" "$CONFIG_FILE"
 }
 
 cleanup_legacy_layout() {
-    if [ "$LEGACY_DETECTED" -ne 1 ]; then
-        return
-    fi
-
+    [ "$LEGACY_DETECTED" -eq 0 ] && return
     systemctl stop "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
     systemctl disable "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
-    rm -f "$LEGACY_SERVICE_PATH" "$LEGACY_BINARY_PATH"
-    rm -rf "$LEGACY_INSTALL_ROOT"
-    systemctl daemon-reload || true
-    log_info "Legacy node layout migrated to DUI-node"
+    # Keep the old config and binary as a recovery copy.
+    log_info "${LEGACY_SERVICE_NAME} disabled; previous files preserved in ${LEGACY_INSTALL_ROOT}"
 }
 
 validate_positive_int() {
@@ -511,12 +514,12 @@ select_binary_source() {
         echo "$BINARY_SOURCE"
         return
     fi
-    if [ -f "./DUI-node" ]; then
-        echo "./DUI-node"
+    if [ -f "./DBoard-node" ]; then
+        echo "./DBoard-node"
         return
     fi
-    if [ -f "./DUI-node-linux-${ARCH}" ]; then
-        echo "./DUI-node-linux-${ARCH}"
+    if [ -f "./DBoard-node-linux-${ARCH}" ]; then
+        echo "./DBoard-node-linux-${ARCH}"
         return
     fi
     echo ""
@@ -532,14 +535,14 @@ resolve_download_url() {
 }
 
 stage_binary() {
-    local staged="$TMP_DIR/DUI-node"
+    local staged="$TMP_DIR/DBoard-node"
     local local_src
     local_src=$(select_binary_source)
     if [ -n "$local_src" ]; then
         log_step "Using local binary: ${local_src}"
         cp "$local_src" "$staged"
     else
-        resolve_download_url "DUI-node-linux-${ARCH}"
+        resolve_download_url "DBoard-node-linux-${ARCH}"
         log_step "Downloading binary: ${DOWNLOAD_URL}"
         if ! curl -fsSL "$DOWNLOAD_URL" -o "$staged"; then
             log_error "Failed to download binary from ${DOWNLOAD_URL}"
@@ -633,7 +636,7 @@ render_config() {
 render_service() {
     cat >"$TMP_DIR/${SERVICE_NAME}" <<EOF_UNIT
 [Unit]
-Description=DUI-node Backend
+Description=DBoard-node Backend
 Documentation=https://github.com/shini74744/DBoard
 After=network-online.target
 Wants=network-online.target
@@ -659,7 +662,7 @@ backup_existing_state() {
     BACKUP_PATH="${BACKUP_DIR}/$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$BACKUP_PATH"
     if [ -x "$BINARY_PATH" ]; then
-        cp "$BINARY_PATH" "$BACKUP_PATH/DUI-node"
+        cp "$BINARY_PATH" "$BACKUP_PATH/DBoard-node"
     fi
     if [ -x "$CLI_PATH" ]; then
         cp "$CLI_PATH" "$BACKUP_PATH/xbctl"
@@ -685,14 +688,14 @@ stop_existing_service() {
     if [ -f "$SERVICE_PATH" ] || systemctl is-active "$SERVICE_NAME" >/dev/null 2>&1; then
         systemctl stop "$SERVICE_NAME" >/dev/null 2>&1 || true
     fi
-    if [ -f "$LEGACY_SERVICE_PATH" ] || systemctl is-active "$LEGACY_SERVICE_NAME" >/dev/null 2>&1; then
+    if [ "$LEGACY_DETECTED" -eq 1 ] && { [ -f "$LEGACY_SERVICE_PATH" ] || systemctl is-active "$LEGACY_SERVICE_NAME" >/dev/null 2>&1; }; then
         systemctl stop "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
     fi
 }
 
 install_staged_files() {
     stop_existing_service
-    install -m 755 "$TMP_DIR/DUI-node" "$BINARY_PATH"
+    install -m 755 "$TMP_DIR/DBoard-node" "$BINARY_PATH"
     install -m 600 "$TMP_DIR/config.yml" "$CONFIG_FILE"
     install -m 600 "$TMP_DIR/credentials.env" "$CREDENTIALS_FILE"
     install -m 644 "$TMP_DIR/install-meta.json" "$INSTALL_META"
@@ -776,6 +779,7 @@ perform_install() {
 perform_upgrade() {
     migrate_legacy_layout
     detect_current_state
+    load_health_port_from_config "$CONFIG_FILE"
     if [ "$CURRENT_STATE" = "fresh" ]; then
         log_warn "No existing install found; falling back to install"
         perform_install
@@ -787,11 +791,16 @@ perform_upgrade() {
     stage_xbctl
     render_service
     backup_existing_state
-    install -m 755 "$TMP_DIR/DUI-node" "$BINARY_PATH"
+    stop_existing_service
+    install -m 755 "$TMP_DIR/DBoard-node" "$BINARY_PATH"
     install -m 755 "$TMP_DIR/xbctl" "$CLI_PATH"
     ln -sf "$CLI_PATH" /usr/bin/xbctl 2>/dev/null || true
+    if [ -f "$0" ] && [ "$(realpath "$0")" != "$(realpath "$INSTALLER_COPY_PATH" 2>/dev/null || echo "$INSTALLER_COPY_PATH")" ]; then
+        install -m 755 "$0" "$INSTALLER_COPY_PATH"
+    fi
     install -m 644 "$TMP_DIR/${SERVICE_NAME}" "$SERVICE_PATH"
     systemctl daemon-reload
+    systemctl enable "$SERVICE_NAME" >/dev/null 2>&1
     systemctl restart "$SERVICE_NAME"
     if ! wait_for_health; then
         log_error "Upgrade health check failed"
@@ -838,7 +847,7 @@ perform_uninstall() {
 perform_status() {
     detect_current_state
     echo
-    echo -e "${BOLD}DUI-node install status${NC}"
+    echo -e "${BOLD}DBoard-node install status${NC}"
     echo "  state:   ${CURRENT_STATE}"
     if [ -f "$INSTALL_META" ]; then
         echo "  meta:    ${INSTALL_META}"

@@ -939,7 +939,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "server_ws_enable": {
         "title": "Enable WebSocket Communication",
         "description": "When enabled, nodes will communicate with the panel via WebSocket for lower latency and more timely pushes.",
-        "supported_clients": "Node clients that currently support WebSocket communication: DUI-node"
+        "supported_clients": "Node clients that currently support WebSocket communication: DBoard-node"
       },
       "server_ws_url": {
         "title": "WebSocket URL",
@@ -2876,19 +2876,19 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "notes": "Notes",
       "notesPlaceholder": "Optional notes about this server",
       "isActive": "Enable Server",
-      "isActiveDescription": "Disabled servers will not be used by DUI-node.",
+      "isActiveDescription": "Disabled servers will not be used by DBoard-node.",
       "cancel": "Cancel",
       "submit": "Submit",
       "update": "Update"
     },
     "token": {
       "title": "Server Token",
-      "description": "This token is used by DUI-node to authenticate with the panel. Keep it safe.",
+      "description": "This token is used by DBoard-node to authenticate with the panel. Keep it safe.",
       "show": "View Token",
       "hide": "Hide Token",
       "reset": "Reset Token",
       "resetConfirm": "Reset Token?",
-      "resetDescription": "The old token will be invalidated immediately. DUI-node must be reconfigured with the new token.",
+      "resetDescription": "The old token will be invalidated immediately. DBoard-node must be reconfigured with the new token.",
       "copy": "Copy",
       "copied": "Token copied to clipboard",
       "copiedInline": "Copied!",
@@ -2898,8 +2898,8 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "createdHint": "Token generated. You can view it anytime in the server detail page."
     },
     "install": {
-      "title": "Install DUI-node",
-      "description": "Run this command on the target server to install DUI-node in machine mode and connect it to this server record.",
+      "title": "Install DBoard-node",
+      "description": "Run this command on the target server to install DBoard-node in machine mode and connect it to this server record.",
       "copy": "Copy install command",
       "copied": "Install command copied",
       "copiedInline": "Copied!",

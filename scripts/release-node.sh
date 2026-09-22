@@ -15,19 +15,20 @@ gh auth status >/dev/null
 
 VERSION="$VERSION" make build-all
 
+for arch in amd64 arm64; do
+  cp "DBoard-node-linux-${arch}" "DUI-node-linux-${arch}"
+  cp "DBoard-node-linux-${arch}" "xboard-node-linux-${arch}"
+done
+
 sha256sum \
-  DUI-node-linux-amd64 \
-  xbctl-linux-amd64 \
-  DUI-node-linux-arm64 \
-  xbctl-linux-arm64 > SHA256SUMS
+  DBoard-node-linux-amd64 DUI-node-linux-amd64 xboard-node-linux-amd64 xbctl-linux-amd64 \
+  DBoard-node-linux-arm64 DUI-node-linux-arm64 xboard-node-linux-arm64 xbctl-linux-arm64 > SHA256SUMS
 gh release create "$VERSION" \
   --repo shini74744/DBoard \
   --target main \
   --title "DBoard $VERSION" \
   --generate-notes \
   --latest \
-  DUI-node-linux-amd64 \
-  xbctl-linux-amd64 \
-  DUI-node-linux-arm64 \
-  xbctl-linux-arm64 \
+  DBoard-node-linux-amd64 DUI-node-linux-amd64 xboard-node-linux-amd64 xbctl-linux-amd64 \
+  DBoard-node-linux-arm64 DUI-node-linux-arm64 xboard-node-linux-arm64 xbctl-linux-arm64 \
   SHA256SUMS

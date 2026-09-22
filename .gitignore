@@ -17,6 +17,8 @@ storage/framework/views/*
 /panel/storage/framework/
 
 # Build outputs
+/DBoard-node
+/DBoard-node-linux-*
 /DUI-node
 /DUI-node-linux-*
 /xbctl

@@ -21,22 +21,40 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const (
-	defaultConfigPath      = "/etc/DUI-node/config.yml"
-	defaultMetaPath        = "/etc/DUI-node/install-meta.json"
-	defaultCredentialsPath = "/etc/DUI-node/credentials.env"
-	defaultBinaryPath      = "/usr/local/bin/DUI-node"
-	defaultCLIPath         = "/usr/local/bin/xbctl"
-	serviceName            = "DUI-node.service"
-	serviceFilePath        = "/etc/systemd/system/DUI-node.service"
-	defaultInstallRoot     = "/etc/DUI-node"
-	downloadBase           = "https://github.com/shini74744/DBoard/releases"
-)
+const downloadBase = "https://github.com/shini74744/DBoard/releases"
 
 var (
-	version   = "dev"
-	buildTime = "unknown"
+	defaultInstallRoot     = "/etc/DBoard-node"
+	defaultConfigPath      = defaultInstallRoot + "/config.yml"
+	defaultMetaPath        = defaultInstallRoot + "/install-meta.json"
+	defaultCredentialsPath = defaultInstallRoot + "/credentials.env"
+	defaultBinaryPath      = "/usr/local/bin/DBoard-node"
+	defaultCLIPath         = "/usr/local/bin/xbctl"
+	serviceName            = "DBoard-node.service"
+	serviceFilePath        = "/etc/systemd/system/DBoard-node.service"
+	version                = "dev"
+	buildTime              = "unknown"
 )
+
+func detectLegacyLayout() {
+	if fileExists(defaultConfigPath) {
+		return
+	}
+	for _, name := range []string{"DUI-node", "xboard-node"} {
+		root := "/etc/" + name
+		if !fileExists(root + "/config.yml") {
+			continue
+		}
+		defaultInstallRoot = root
+		defaultConfigPath = root + "/config.yml"
+		defaultMetaPath = root + "/install-meta.json"
+		defaultCredentialsPath = root + "/credentials.env"
+		defaultBinaryPath = "/usr/local/bin/" + name
+		serviceName = name + ".service"
+		serviceFilePath = "/etc/systemd/system/" + serviceName
+		return
+	}
+}
 
 type instanceRow struct {
 	ID      string `json:"id"`
@@ -149,6 +167,7 @@ func main() {
 }
 
 func run(args []string) error {
+	detectLegacyLayout()
 	if len(args) == 0 {
 		printUsage()
 		return nil
@@ -225,7 +244,7 @@ shortcuts:
 }
 
 func runStatus() error {
-	fmt.Println("DUI-node status")
+	fmt.Println("DBoard-node status")
 	fmt.Println()
 
 	// Version from install-meta.json
@@ -403,10 +422,16 @@ func runUpgrade(args []string) error {
 
 	binaryDir := filepath.Dir(defaultBinaryPath)
 	cliDir := filepath.Dir(defaultCLIPath)
-	newBinary := filepath.Join(binaryDir, ".DUI-node.new")
+	newBinary := filepath.Join(binaryDir, ".DBoard-node.new")
 	newCLI := filepath.Join(cliDir, ".xbctl.new")
 
-	binaryURL := resolveDownloadURL(fmt.Sprintf("DUI-node-linux-%s", arch), version)
+	assetName := "DBoard-node"
+	if strings.HasSuffix(defaultBinaryPath, "/DUI-node") {
+		assetName = "DUI-node"
+	} else if strings.HasSuffix(defaultBinaryPath, "/xboard-node") {
+		assetName = "xboard-node"
+	}
+	binaryURL := resolveDownloadURL(fmt.Sprintf("%s-linux-%s", assetName, arch), version)
 	cliURL := resolveDownloadURL(fmt.Sprintf("xbctl-linux-%s", arch), version)
 
 	fmt.Printf("Downloading %s...\n", binaryURL)
@@ -1156,7 +1181,7 @@ func latestInstanceID(instances []*config.Config) string {
 
 func regenerateServiceFile() error {
 	unit := fmt.Sprintf(`[Unit]
-Description=DUI-node Backend
+Description=DBoard-node Backend
 Documentation=https://github.com/shini74744/DBoard
 After=network-online.target
 Wants=network-online.target
@@ -1348,7 +1373,7 @@ func runConfigInit(args []string) error {
 	inst.InstanceID = instanceID
 
 	if installRoot == "" {
-		installRoot = "/etc/DUI-node"
+		installRoot = "/etc/DBoard-node"
 	}
 	inst.Kernel.ConfigDir = filepath.Join(installRoot, "instances", instanceID)
 

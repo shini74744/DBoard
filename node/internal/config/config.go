@@ -303,7 +303,7 @@ func (rc *RootConfig) assignInstanceIDs() error {
 func configBaseDir(configPath string) string {
 	abs, err := filepath.Abs(configPath)
 	if err != nil {
-		return "/etc/DUI-node"
+		return "/etc/DBoard-node"
 	}
 	return filepath.Dir(abs)
 }

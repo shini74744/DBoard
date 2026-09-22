@@ -1,6 +1,6 @@
 # DBoard
 
-DBoard 是基于 XBoard 持续二次开发的面板项目，配套 **DUI-node** 节点程序与可选的 **DUI-Gateway** API 加密中间层。
+DBoard 是基于 XBoard 持续二次开发的面板项目，配套 **DBoard-node** 节点程序与可选的 **DUI-Gateway** API 加密中间层。
 
 本仓库提供两种正式部署方式：
 
@@ -14,7 +14,7 @@ DBoard 是基于 XBoard 持续二次开发的面板项目，配套 **DUI-node** 
 ```text
 DBoard/
 ├── panel/        # DBoard 面板、Dockerfile、Compose 示例
-├── node/         # DUI-node、xbctl、Xray / sing-box 双内核
+├── node/         # DBoard-node、xbctl、Xray / sing-box 双内核
 ├── gateway/      # DUI-Gateway 加密 API 中间层
 ├── deploy/       # 部署与持久数据说明
 ├── scripts/      # 构建、发布、数据目录初始化工具
@@ -308,7 +308,7 @@ curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/gateway/inst
 
 ---
 
-# DUI-node
+# DBoard-node
 DBoard 的节点程序独立于面板部署。
 
 Machine Mode 示例：
@@ -325,7 +325,7 @@ curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/node/install
 安装器会从 DBoard GitHub Release 下载对应架构的：
 
 ```text
-DUI-node
+DBoard-node
 xbctl
 ```
 
@@ -416,7 +416,7 @@ go test ./...
 ./scripts/release-gateway.sh gateway-v0.1.0
 ```
 
-Docker 镜像由独立 GitHub Actions workflow 发布，不会改变 DUI-node 的 latest Release 逻辑。
+Docker 镜像由独立 GitHub Actions workflow 发布，不会改变 DBoard-node 的 latest Release 逻辑。
 ## 主要定制
 
 - 出站规则管理与 VMess / VLESS / Trojan / Shadowsocks 链接解析。
@@ -426,7 +426,7 @@ Docker 镜像由独立 GitHub Actions workflow 发布，不会改变 DUI-node �
 - GeoSite / GeoIP 统一规则处理及 IPv4 / IPv6。
 - 管理后台路由、出站与负载均衡 UI。
 - Telegram 管理通知、套餐快照字段继承等面板定制。
-- DUI-node Machine Mode 与 WebSocket 实时通信。
+- DBoard-node Machine Mode 与 WebSocket 实时通信。
 - 可选 DUI-Gateway 加密 API 中间层。
 
 ## 安全
