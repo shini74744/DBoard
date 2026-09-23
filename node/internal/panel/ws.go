@@ -203,6 +203,7 @@ func (w *WSClient) connect(ctx context.Context) error {
 	}
 	q := u.Query()
 	q.Set("token", w.token)
+	q.Set("user_routes", "1")
 	if w.cfg.MachineID > 0 {
 		q.Set("machine_id", strconv.Itoa(w.cfg.MachineID))
 	} else {

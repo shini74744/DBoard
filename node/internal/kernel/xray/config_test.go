@@ -633,3 +633,23 @@ func TestExtractECHServerKeys(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildRouting_UserSpecificDomainOverridesNodeDefault(t *testing.T) {
+	rules := []model.CustomRouteRule{
+		{Match: model.RouteMatch{UserIDs: []int{11}, DomainSuffixes: []string{"example.com"}}, Action: model.RouteAction{Type: "route", Target: "exit-b"}},
+		{Action: model.RouteAction{Type: "route", Target: "exit-a"}},
+	}
+	compiled := buildRouting(nil, rules, nil)["rules"].([]M)
+	if compiled[0]["outboundTag"] != "exit-b" || compiled[1]["outboundTag"] != "exit-a" {
+		t.Fatalf("specific rule must precede node default: %#v", compiled[:2])
+	}
+	if got := compiled[0]["user"].([]string); len(got) != 1 || got[0] != "user@11" {
+		t.Fatalf("wrong authenticated user match: %#v", got)
+	}
+	if got := compiled[0]["domain"].([]string); len(got) != 1 || got[0] != "domain:example.com" {
+		t.Fatalf("wrong domain match: %#v", got)
+	}
+	if _, restricted := compiled[1]["user"]; restricted {
+		t.Fatal("node default should still apply to other users")
+	}
+}

@@ -6,6 +6,7 @@ use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Models\Server;
 use App\Models\ServerOutbound;
+use App\Models\User;
 use App\Services\OutboundLinkParser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,38 @@ class RouteController extends Controller
                 ->orderByDesc('id')
                 ->get(),
         ];
+    }
+
+    public function users(Request $request)
+    {
+        $data = $request->validate([
+            'search' => 'nullable|string|max:255',
+            'selected' => 'nullable|string|max:600',
+        ]);
+        $search = trim((string) ($data['search'] ?? ''));
+        $selected = array_values(array_unique(array_filter(
+            array_map('intval', explode(',', (string) ($data['selected'] ?? ''))),
+            fn (int $id) => $id > 0
+        )));
+        $selected = array_slice($selected, 0, 100);
+
+        $users = User::query()->select(['id', 'email'])
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('email', 'like', '%' . $search . '%');
+                    if (ctype_digit($search)) {
+                        $query->orWhere('id', (int) $search);
+                    }
+                });
+            })
+            ->orderByDesc('id')
+            ->limit(30)
+            ->get();
+        if ($selected) {
+            $users = User::query()->select(['id', 'email'])->whereIn('id', $selected)
+                ->get()->concat($users)->unique('id')->values();
+        }
+        return $this->success($users);
     }
 
     public function sort(Request $request)

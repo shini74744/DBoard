@@ -19,6 +19,9 @@ class NodeEventHandlers
     public static function handlePong(TcpConnection $conn, int $nodeId, array $data = []): void
     {
         Cache::put("node_ws_alive:{$nodeId}", true, 86400);
+        if ($conn->userRoutesCapable ?? false) {
+            Cache::put('dboard_user_routes_capable:' . $nodeId, true, now()->addMinutes(10));
+        }
     }
 
     /**

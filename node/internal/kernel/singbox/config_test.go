@@ -894,3 +894,29 @@ func TestExtractECHInbound(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildRoutes_UserSpecificDomainOverridesNodeDefault(t *testing.T) {
+	rules := []model.CustomRouteRule{
+		{Match: model.RouteMatch{UserIDs: []int{11}, DomainSuffixes: []string{"example.com"}}, Action: model.RouteAction{Type: "route", Target: "exit-b"}},
+		{Action: model.RouteAction{Type: "route", Target: "exit-a"}},
+	}
+	route := buildRoutes(nil, rules, nil, model.UserSpec{ID: 11, UUID: "user-eleven"}, model.UserSpec{ID: 12, UUID: "user-twelve"})
+	compiled := route["rules"].([]M)
+	if compiled[0]["outbound"] != "exit-b" || compiled[1]["outbound"] != "exit-a" {
+		t.Fatalf("specific rule must precede node default: %#v", compiled[:2])
+	}
+	children := compiled[0]["rules"].([]M)
+	if got := children[0]["auth_user"].([]string); !reflect.DeepEqual(got, []string{"user-eleven", "11"}) {
+		t.Fatalf("wrong authenticated user match: %#v", got)
+	}
+	if got := children[1]["domain_suffix"].([]string); !reflect.DeepEqual(got, []string{"example.com"}) {
+		t.Fatalf("wrong domain match: %#v", got)
+	}
+	if _, restricted := compiled[1]["auth_user"]; restricted {
+		t.Fatal("node default should still apply to other users")
+	}
+	withoutUser := buildRoutes(nil, rules[:1], nil)["rules"].([]M)[0]
+	if got := withoutUser["rules"].([]M)[0]["auth_user"].([]string); len(got) != 1 || got[0] != "__dboard_no_active_user__" {
+		t.Fatalf("missing user widened the rule: %#v", got)
+	}
+}

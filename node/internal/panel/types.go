@@ -239,6 +239,7 @@ type CustomRouteRule struct {
 }
 
 type RouteMatch struct {
+	UserIDs        []int    `json:"user_ids,omitempty"`
 	Domains        []string `json:"domains,omitempty"`
 	DomainSuffixes []string `json:"domain_suffixes,omitempty"`
 	IPCIDRs        []string `json:"ip_cidrs,omitempty"`

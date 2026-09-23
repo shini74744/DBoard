@@ -72,7 +72,7 @@ func buildConfig(kcfg config.KernelConfig, nc *model.NodeSpec, users []model.Use
 	}
 
 	// Merge panel routes and static config routes
-	cfg["route"] = buildRoutes(nc.Routes, nc.CustomRouteRules, mergeRouteList(nc.CustomRoutes, kcfg.CustomRoute))
+	cfg["route"] = buildRoutes(nc.Routes, nc.CustomRouteRules, mergeRouteList(nc.CustomRoutes, kcfg.CustomRoute), users...)
 
 	// Automatically enable rule_set caching (cache_file) when panel routes
 	// reference geoip:/geosite: entries so that the downloaded .srs rule_set
@@ -158,7 +158,7 @@ func mergeRouteList(a, b []map[string]any) []map[string]any {
 	return res
 }
 
-func buildRoutes(panelRoutes []model.RouteRule, customRules []model.CustomRouteRule, custom []map[string]any) M {
+func buildRoutes(panelRoutes []model.RouteRule, customRules []model.CustomRouteRule, custom []map[string]any, users ...model.UserSpec) M {
 	var rules []M
 
 	// Structured custom routes now take the highest priority for panel-managed overrides.
@@ -166,7 +166,7 @@ func buildRoutes(panelRoutes []model.RouteRule, customRules []model.CustomRouteR
 		if rule.Disabled {
 			continue
 		}
-		rules = append(rules, compileManagedRouteWithResolution(rule)...)
+		rules = append(rules, compileManagedRouteWithResolution(rule, users...)...)
 	}
 
 	// Raw custom routes remain the escape hatch, but no longer outrank structured rules.
@@ -264,6 +264,10 @@ func compilePanelRouteRule(pr model.RouteRule) []M {
 // destination address/port matchers differently; flattening these changes the
 // meaning of (domain OR ip) AND port, or domain AND ip.
 func compileCustomRouteRule(rule model.CustomRouteRule) []M {
+	return compileCustomRouteRuleForUsers(rule, nil)
+}
+
+func compileCustomRouteRuleForUsers(rule model.CustomRouteRule, users []model.UserSpec) []M {
 	if rule.Disabled {
 		return nil
 	}
@@ -287,6 +291,22 @@ func compileCustomRouteRule(rule model.CustomRouteRule) []M {
 	}
 	if len(rule.Match.SourceCIDRs) > 0 {
 		common = append(common, M{"source_ip_cidr": copyStrings(rule.Match.SourceCIDRs)})
+	}
+	if len(rule.Match.UserIDs) > 0 {
+		selected := make(map[int]bool, len(rule.Match.UserIDs))
+		for _, id := range rule.Match.UserIDs {
+			selected[id] = true
+		}
+		names := make([]string, 0, len(selected)*2)
+		for _, user := range users {
+			if selected[user.ID] {
+				names = append(names, user.UUID, strconv.Itoa(user.ID))
+			}
+		}
+		if len(names) == 0 {
+			names = append(names, "__dboard_no_active_user__")
+		}
+		common = append(common, M{"auth_user": names})
 	}
 	if len(rule.Match.SourcePorts) > 0 {
 		p, r := splitPorts(rule.Match.SourcePorts)

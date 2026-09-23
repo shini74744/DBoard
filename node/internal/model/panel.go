@@ -72,6 +72,7 @@ func NodeSpecFromPanel(nc *panel.NodeConfig) *NodeSpec {
 			Disabled:         rule.Disabled,
 			IPDomainRelation: rule.IPDomainRelation,
 			Match: RouteMatch{
+				UserIDs:        append([]int(nil), rule.Match.UserIDs...),
 				Domains:        cloneStringSlice(rule.Match.Domains),
 				DomainSuffixes: cloneStringSlice(rule.Match.DomainSuffixes),
 				IPCIDRs:        cloneStringSlice(rule.Match.IPCIDRs),
@@ -227,6 +228,7 @@ func (n *NodeSpec) ToPanel() *panel.NodeConfig {
 			Disabled:         rule.Disabled,
 			IPDomainRelation: rule.IPDomainRelation,
 			Match: panel.RouteMatch{
+				UserIDs:        append([]int(nil), rule.Match.UserIDs...),
 				Domains:        cloneStringSlice(rule.Match.Domains),
 				DomainSuffixes: cloneStringSlice(rule.Match.DomainSuffixes),
 				IPCIDRs:        cloneStringSlice(rule.Match.IPCIDRs),

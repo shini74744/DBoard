@@ -72,6 +72,18 @@ class NodeRegistry
             return false;
         }
 
+        // HTTP capability and WebSocket capability can briefly differ during a
+        // node upgrade. Never send a user-scoped rule to an older WS client.
+        if ($event === 'sync.config' && !($conn->userRoutesCapable ?? false)
+            && isset($data['config']['custom_route_rules'])) {
+            $rules = ServerService::compatibleRouteRules((array) $data['config']['custom_route_rules'], false);
+            if ($rules) {
+                $data['config']['custom_route_rules'] = $rules;
+            } else {
+                unset($data['config']['custom_route_rules']);
+            }
+        }
+
         // Machine-mode connections multiplex multiple node IDs through the same
         // socket, so node-scoped events must carry node_id for the client mux.
         if (!empty($conn->machineNodeIds) && $event !== 'sync.nodes' && !array_key_exists('node_id', $data)) {

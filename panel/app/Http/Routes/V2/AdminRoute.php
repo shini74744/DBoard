@@ -96,6 +96,7 @@ class AdminRoute
                 'prefix' => 'server/route'
             ], function ($router) {
                 $router->get('/fetch', [RouteController::class, 'fetch']);
+                $router->get('/users', [RouteController::class, 'users']);
                 $router->post('/sort', [RouteController::class, 'sort']);
                 $router->post('/parse', [RouteController::class, 'parse']);
                 $router->post('/save', [RouteController::class, 'save']);

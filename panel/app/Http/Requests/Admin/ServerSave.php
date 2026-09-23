@@ -5,6 +5,7 @@ namespace App\Http\Requests\Admin;
 
 use App\Models\Server;
 use App\Models\ServerOutbound;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ServerSave extends FormRequest
@@ -141,6 +142,8 @@ class ServerSave extends FormRequest
             'custom_route_rules.*.disabled' => 'nullable|boolean',
             'custom_route_rules.*.ip_domain_relation' => 'nullable|in:or,and',
             'custom_route_rules.*.match' => 'nullable|array',
+            'custom_route_rules.*.match.user_ids' => 'nullable|array|max:100',
+            'custom_route_rules.*.match.user_ids.*' => 'required|integer|min:1|distinct|exists:v2_user,id',
             'custom_route_rules.*.match.domains' => 'nullable|array',
             'custom_route_rules.*.match.domain_suffixes' => 'nullable|array',
             'custom_route_rules.*.match.ip_cidrs' => 'nullable|array',
@@ -358,6 +361,12 @@ class ServerSave extends FormRequest
             }
 
             foreach ((array) $this->input('custom_route_rules', []) as $index => $rule) {
+                if (!empty(data_get($rule, 'match.user_ids')) && !Cache::get('dboard_user_routes_capable:' . (int) $this->input('id'))) {
+                    $validator->errors()->add(
+                        "custom_route_rules.{$index}.match.user_ids",
+                        '节点程序需要先升级到支持按用户分流的版本，升级并重新连接后才能保存此规则'
+                    );
+                }
                 $action = trim((string) data_get($rule, 'action.type', ''));
                 $target = trim((string) data_get($rule, 'action.target', ''));
 

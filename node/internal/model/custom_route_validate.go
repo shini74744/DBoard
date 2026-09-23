@@ -31,6 +31,14 @@ func ValidateCustomRouteRules(rules []CustomRouteRule, kernelType string, availa
 		if rule.Disabled {
 			continue
 		}
+		if len(rule.Match.UserIDs) > 100 {
+			return fmt.Errorf("custom_route_rules[%d].match.user_ids exceeds 100 users", i)
+		}
+		for _, userID := range rule.Match.UserIDs {
+			if userID <= 0 {
+				return fmt.Errorf("custom_route_rules[%d].match.user_ids contains invalid user ID %d", i, userID)
+			}
+		}
 		if err := ensureRouteMatcherSupported(i, kernelType, matcherSupport, rule.Match); err != nil {
 			return err
 		}
@@ -111,6 +119,11 @@ func hasRouteMatch(match RouteMatch) bool {
 func ensureRouteMatcherSupported(index int, kernelType string, matcherSupport map[string]struct{}, match RouteMatch) error {
 	if kernelType == "" {
 		return nil
+	}
+	if len(match.UserIDs) > 0 {
+		if _, ok := matcherSupport["user_ids"]; !ok {
+			return fmt.Errorf("custom_route_rules[%d].match.user_ids is not supported by kernel %q", index, kernelType)
+		}
 	}
 	checks := map[string][]string{
 		"domains":         match.Domains,

@@ -835,6 +835,13 @@ func compileCustomRouteRule(rule model.CustomRouteRule) []M {
 	if len(rule.Match.SourcePorts) > 0 {
 		common["sourcePort"] = strings.Join(rule.Match.SourcePorts, ",")
 	}
+	if len(rule.Match.UserIDs) > 0 {
+		users := make([]string, 0, len(rule.Match.UserIDs))
+		for _, id := range rule.Match.UserIDs {
+			users = append(users, userEmail(id))
+		}
+		common["user"] = users
+	}
 
 	domains := make([]string, 0, len(rule.Match.Domains)+len(rule.Match.DomainSuffixes))
 	for _, value := range rule.Match.Domains {

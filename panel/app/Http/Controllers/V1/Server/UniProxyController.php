@@ -55,6 +55,11 @@ class UniProxyController extends Controller
     public function config(Request $request)
     {
         $node = $this->getNodeInfo($request);
+        if ($request->header('X-DBoard-User-Routes') === '1') {
+            Cache::put('dboard_user_routes_capable:' . $node->id, true, now()->addMinutes(10));
+        } else {
+            Cache::forget('dboard_user_routes_capable:' . $node->id);
+        }
         $response = ServerService::buildNodeConfig($node);
 
         $response['base_config'] = [

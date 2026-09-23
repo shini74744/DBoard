@@ -183,6 +183,8 @@ class NodeWorker
         }
 
         $conn->nodeId = $nodeId;
+        $conn->userRoutesCapable = ($params['user_routes'] ?? '') === '1';
+        $this->setUserRouteCapability($nodeId, $conn->userRoutesCapable);
         NodeRegistry::add($nodeId, $conn);
         Cache::put("node_ws_alive:{$nodeId}", true, 86400);
 
@@ -222,6 +224,7 @@ class NodeWorker
         }
 
         $nodes = ServerService::getMachineNodes($machine);
+        $conn->userRoutesCapable = ($params['user_routes'] ?? '') === '1';
 
         $machine->forceFill(['last_seen_at' => now()->timestamp])->saveQuietly();
         NodeRegistry::addMachine($machineId, $conn);
@@ -232,6 +235,7 @@ class NodeWorker
         foreach ($nodes as $node) {
             NodeRegistry::add($node->id, $conn);
             Cache::put("node_ws_alive:{$node->id}", true, 86400);
+            $this->setUserRouteCapability($node->id, $conn->userRoutesCapable);
             $deviceService->clearAllNodeDevices($node->id);
             $nodeIds[] = $node->id;
         }
@@ -260,6 +264,15 @@ class NodeWorker
         }
     }
 
+    private function setUserRouteCapability(int $nodeId, bool $capable): void
+    {
+        if ($capable) {
+            Cache::put('dboard_user_routes_capable:' . $nodeId, true, now()->addMinutes(10));
+        } else {
+            Cache::forget('dboard_user_routes_capable:' . $nodeId);
+        }
+    }
+
     public function onMessage(TcpConnection $conn, $data): void
     {
         $msg = json_decode($data, true);
@@ -274,6 +287,9 @@ class NodeWorker
             if ($event === 'pong') {
                 foreach ($conn->machineNodeIds as $nid) {
                     Cache::put("node_ws_alive:{$nid}", true, 86400);
+                    if ($conn->userRoutesCapable ?? false) {
+                        $this->setUserRouteCapability($nid, true);
+                    }
                 }
                 return;
             }
@@ -305,8 +321,13 @@ class NodeWorker
         if (!empty($conn->machineNodeIds)) {
             $machineId = $conn->machineId ?? 'unknown';
             foreach ($conn->machineNodeIds as $nodeId) {
+                // A replacement connection may already own this node.
+                if (NodeRegistry::get($nodeId) !== $conn) {
+                    continue;
+                }
                 NodeRegistry::remove($nodeId, $conn);
                 Cache::forget("node_ws_alive:{$nodeId}");
+                Cache::forget('dboard_user_routes_capable:' . $nodeId);
 
                 $affectedUserIds = $service->clearAllNodeDevices($nodeId);
                 foreach ($affectedUserIds as $userId) {
@@ -329,8 +350,13 @@ class NodeWorker
         // 旧模式：单节点
         if (!empty($conn->nodeId)) {
             $nodeId = $conn->nodeId;
+            // Do not clear a newer connection's capability or online state.
+            if (NodeRegistry::get($nodeId) !== $conn) {
+                return;
+            }
             NodeRegistry::remove($nodeId, $conn);
             Cache::forget("node_ws_alive:{$nodeId}");
+            Cache::forget('dboard_user_routes_capable:' . $nodeId);
 
             $affectedUserIds = $service->clearAllNodeDevices($nodeId);
             foreach ($affectedUserIds as $userId) {

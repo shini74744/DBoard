@@ -575,6 +575,16 @@ func (s *SingBox) reloadInboundsLocked(users []model.UserSpec) error {
 		return fmt.Errorf("router not available")
 	}
 
+	// User-scoped routes carry authenticated usernames. Refresh them when
+	// a user becomes eligible, leaves, or has their UUID reset.
+	for _, rule := range s.nodeConfig.CustomRouteRules {
+		if len(rule.Match.UserIDs) > 0 {
+			if err := router.UpdateRules(opts.Route.Rules, opts.Route.RuleSet); err != nil {
+				return fmt.Errorf("refresh user-scoped routes: %w", err)
+			}
+			break
+		}
+	}
 	nopFactory := singLog.NewNOPFactory()
 
 	for _, inb := range opts.Inbounds {

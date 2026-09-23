@@ -272,6 +272,14 @@ class ServerService
         );
     }
 
+    public static function compatibleRouteRules(array $rules, bool $userRoutesCapable): array
+    {
+        if ($userRoutesCapable) {
+            return $rules;
+        }
+        return array_values(array_filter($rules, fn ($rule) => empty(data_get($rule, 'match.user_ids'))));
+    }
+
     public static function buildNodeConfig(Server $node): array
     {
         $nodeType = $node->type;
@@ -415,7 +423,13 @@ class ServerService
         }
 
         if (!empty($node['custom_route_rules'])) {
-            $response['custom_route_rules'] = $node['custom_route_rules'];
+            $rules = self::compatibleRouteRules(
+                $node['custom_route_rules'],
+                (bool) Cache::get('dboard_user_routes_capable:' . $node->id)
+            );
+            if ($rules) {
+                $response['custom_route_rules'] = $rules;
+            }
         }
 
         if (!empty($node['custom_balancers'])) {
