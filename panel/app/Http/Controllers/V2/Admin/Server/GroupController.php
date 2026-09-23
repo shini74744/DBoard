@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\V2\Admin\Server;
 
 use App\Http\Controllers\Controller;
+use App\Exceptions\ApiException;
+use Illuminate\Support\Facades\DB;
 use App\Models\Plan;
 use App\Models\Server;
 use App\Models\ServerGroup;
@@ -15,7 +17,7 @@ class GroupController extends Controller
     public function fetch(Request $request): JsonResponse
     {
         $serverGroups = ServerGroup::query()
-            ->orderByDesc('id')
+            ->orderBy('sort')->orderByDesc('id')
             ->withCount('users')
             ->get();
 
@@ -25,6 +27,28 @@ class GroupController extends Controller
         });
 
         return $this->success($serverGroups);
+    }
+
+    public function sort(Request $request)
+    {
+        $data = $request->validate([
+            'ids' => 'required|array',
+            'ids.*' => 'required|integer|distinct|min:1',
+        ]);
+        $ids = array_map('intval', $data['ids']);
+        DB::transaction(function () use ($ids) {
+            $current = ServerGroup::query()->lockForUpdate()->pluck('id')->map(fn($id) => (int) $id)->all();
+            sort($current);
+            $incoming = $ids;
+            sort($incoming);
+            if ($current !== $incoming) {
+                throw new ApiException('权限组列表已更新，请刷新后重新排序');
+            }
+            foreach ($ids as $position => $id) {
+                ServerGroup::whereKey($id)->update(['sort' => $position + 1]);
+            }
+        });
+        return $this->success(true);
     }
 
     public function save(Request $request)
@@ -37,6 +61,7 @@ class GroupController extends Controller
             $serverGroup = ServerGroup::find($request->input('id'));
         } else {
             $serverGroup = new ServerGroup();
+            $serverGroup->sort = ((int) ServerGroup::max('sort')) + 1;
         }
 
         $serverGroup->name = $request->input('name');

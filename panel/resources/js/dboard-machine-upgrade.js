@@ -71,6 +71,8 @@
     document.body.append(overlay);
     cancel.focus();
     let entries = [];
+    let latestVersion = '';
+    let eligibleIds = new Set();
     let mode = 'pick';
     let running = false;
     let submittedIds = [];
@@ -78,12 +80,13 @@
     const statusNodes = new Map();
     const labels = { queued: '指令已下发', accepted: '正在下载并升级', success: '升级成功',
       failed: '升级失败', skipped: '已跳过' };
-    const chosenIds = () => mode === 'all' ? entries.map(machine => Number(machine.id)) : [...selected];
+    const chosenIds = () => mode === 'all' ? [...eligibleIds] : [...selected].filter(id => eligibleIds.has(id));
     function refreshCount() {
       const ids = chosenIds();
-      const capable = entries.filter(machine => ids.includes(Number(machine.id)) && machine.upgrade_capable).length;
-      count.textContent = `已选择 ${ids.length} 台服务器，其中 ${capable} 台支持后台升级。`;
-      confirm.disabled = running || !capable;
+      count.textContent = latestVersion
+        ? `最新版本 ${latestVersion} · ${eligibleIds.size} 台待升级 · 已选择 ${ids.length} 台。`
+        : '无法检测 GitHub 最新版本，暂不能发起升级。';
+      confirm.disabled = running || !latestVersion || !ids.length;
       confirm.textContent = `${mode === "all" ? "升级全部服务器" : "升级所选服务器"}（${ids.length}）`;
       pickButton.classList.toggle('active', mode === 'pick');
       allButton.classList.toggle('active', mode === 'all');
@@ -96,8 +99,8 @@
         const row = el('li', 'dboard-machine-sort-row');
         const checkbox = el('input');
         checkbox.type = 'checkbox';
-        checkbox.checked = mode === 'all' || selected.has(id);
-        checkbox.disabled = mode === 'all' || running;
+        checkbox.checked = eligibleIds.has(id) && (mode === 'all' || selected.has(id));
+        checkbox.disabled = !eligibleIds.has(id) || mode === 'all' || running;
         checkbox.setAttribute('aria-label', `选择 ${machine.name || '服务器 #' + id}`);
         checkbox.addEventListener('change', () => {
           if (checkbox.checked) selected.add(id); else selected.delete(id);
@@ -107,7 +110,8 @@
         label.append(el('strong', '', machine.name || `服务器 #${id}`),
           el('small', '', `SID: ${id} · 当前 ${machine.node_version || '版本未知'}`));
         const state = el('span', 'dboard-machine-upgrade-state',
-          machine.upgrade_capable ? '可升级' : '需先手动更新');
+          !machine.upgrade_capable ? '离线或需先手动更新'
+            : !latestVersion ? '版本检测失败' : eligibleIds.has(id) ? '可升级' : '已是最新版');
         statusNodes.set(id, state);
         row.append(checkbox, label, state);
         list.append(row);
@@ -164,14 +168,24 @@
       }
     });
     try {
-      const data = await request('fetch');
+      const machines = await request('fetch');
       if (!overlay?.isConnected) return;
-      if (!Array.isArray(data)) throw new Error('服务器列表格式不正确');
-      entries = data;
+      if (!Array.isArray(machines)) throw new Error('服务器列表格式不正确');
+      entries = machines;
       if (!entries.length) { count.textContent = '暂无服务器'; return; }
+      count.textContent = '正在检测 GitHub 最新版本…';
+      const release = await request('latestRelease');
+      if (!overlay?.isConnected) return;
+      if (!Array.isArray(release?.upgradeable_machine_ids) || !release.version) {
+        throw new Error('最新版本信息格式不正确');
+      }
+      latestVersion = release.version;
+      eligibleIds = new Set(release.upgradeable_machine_ids.map(Number));
       renderRows();
     } catch (error) {
-      if (overlay?.isConnected) count.textContent = error.message || '读取服务器失败';
+      if (!overlay?.isConnected) return;
+      if (entries.length) { renderRows(); notice.textContent = error.message || '版本检测失败'; }
+      else count.textContent = error.message || '读取服务器失败';
     }
   }
   window.DBoardMachineUpgrade = { open };

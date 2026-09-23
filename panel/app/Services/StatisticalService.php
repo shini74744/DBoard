@@ -71,10 +71,10 @@ class StatisticalService
             ->where('created_at', '<', $endAt);
         $data['commission_count'] = $commissionLogBuilder->count();
         $data['commission_total'] = $commissionLogBuilder->sum('get_amount');
-        $data['register_count'] = User::where('created_at', '>=', $startAt)
+        $data['register_count'] = User::whereNull('parent_id')->where('created_at', '>=', $startAt)
             ->where('created_at', '<', $endAt)
             ->count();
-        $data['invite_count'] = User::where('created_at', '>=', $startAt)
+        $data['invite_count'] = User::whereNull('parent_id')->where('created_at', '>=', $startAt)
             ->where('created_at', '<', $endAt)
             ->whereNotNull('invite_user_id')
             ->count();
@@ -315,7 +315,7 @@ class StatisticalService
 
     private function buildInviteRank($limit)
     {
-        $stats = User::select([
+        $stats = User::whereNull('parent_id')->select([
             'invite_user_id',
             DB::raw('count(*) as count')
         ])
@@ -338,15 +338,11 @@ class StatisticalService
 
     private function buildUserConsumptionRank($limit)
     {
-        $stats = StatUser::select([
-            'user_id',
-            DB::raw('sum(u) as u'),
-            DB::raw('sum(d) as d'),
-            DB::raw('sum(u) + sum(d) as total')
-        ])
-            ->where('record_at', '>=', $this->startAt)
-            ->where('record_at', '<', $this->endAt)
-            ->groupBy('user_id')
+        $stats = StatUser::join('v2_user as package', 'package.id', '=', 'v2_stat_user.user_id')
+            ->selectRaw('COALESCE(package.parent_id, package.id) as user_id, SUM(v2_stat_user.u) as u, SUM(v2_stat_user.d) as d, SUM(v2_stat_user.u + v2_stat_user.d) as total')
+            ->where('v2_stat_user.record_at', '>=', $this->startAt)
+            ->where('v2_stat_user.record_at', '<', $this->endAt)
+            ->groupByRaw('COALESCE(package.parent_id, package.id)')
             ->orderBy('total', 'DESC')
             ->limit($limit)
             ->get();

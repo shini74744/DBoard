@@ -27,7 +27,7 @@ class TelegramUserAlertService
     public static function checkTraffic(User $user): bool
     {
         if (!self::eligible($user, 'telegram_user_notify_traffic_low')
-            || !$user->remind_traffic || !$user->plan_id || (int) $user->transfer_enable <= 0
+            || !self::recipient($user)->remind_traffic || !$user->plan_id || (int) $user->transfer_enable <= 0
             || ($user->expired_at !== null && (int) $user->expired_at <= time())) {
             return false;
         }
@@ -39,7 +39,8 @@ class TelegramUserAlertService
         if ($percent < $threshold || $used >= $total) return false;
 
         $remaining = number_format(($total - $used) / self::GB, 2, '.', '');
-        $message = "📊 DBoard 流量提醒\n本周期流量已使用 " . number_format($percent, 1)
+        $package = '套餐 #' . $user->id;
+        $message = "📊 DBoard 流量提醒（{$package}）\n本周期流量已使用 " . number_format($percent, 1)
             . "%，达到 {$threshold}% 提醒线。\n剩余流量：{$remaining} GB。请留意用量。";
         $key = "dboard:tg-alert:traffic:{$user->id}:{$user->plan_id}:"
             . (int) $user->last_reset_at;
@@ -55,7 +56,8 @@ class TelegramUserAlertService
             return false;
         }
 
-        $message = "⚠️ DBoard 在线设备提醒\n节点当前检测到 {$count} 个不同 IP 在线，"
+        $package = '套餐 #' . $user->id;
+        $message = "⚠️ DBoard 在线设备提醒（{$package}）\n节点当前检测到 {$count} 个不同 IP 在线，"
             . "超过套餐允许的 {$limit} 个。请检查正在使用的设备。";
         return self::queueOnce(
             $user,
@@ -96,12 +98,19 @@ class TelegramUserAlertService
         }
     }
 
+    private static function recipient(User $user): User
+    {
+        return $user->parent_id ? ($user->parent ?? $user) : $user;
+    }
+
     private static function eligible(User $user, string $setting): bool
     {
+        $recipient = self::recipient($user);
         return (bool) admin_setting('telegram_bot_enable', false)
             && (bool) admin_setting('telegram_bot_token')
             && (bool) admin_setting($setting, false)
-            && !$user->banned && $user->remind_telegram && (int) $user->telegram_id > 0;
+            && !$user->banned && !$recipient->banned
+            && $recipient->remind_telegram && (int) $recipient->telegram_id > 0;
     }
 
     private static function queueOnce(User $user, string $key, string $message): bool
@@ -109,7 +118,7 @@ class TelegramUserAlertService
         try {
             if (!Cache::add($key, true, self::ALERT_COOLDOWN)) return false;
             try {
-                SendTelegramJob::dispatch((int) $user->telegram_id, $message, '');
+                SendTelegramJob::dispatch((int) self::recipient($user)->telegram_id, $message, '');
             } catch (\Throwable $e) {
                 Cache::forget($key);
                 throw $e;

@@ -41,6 +41,7 @@ class UserTelegramNotifier
 
     public static function user(User $user, string $setting, string $message): void
     {
+        $user = $user->parent_id ? ($user->parent ?? $user) : $user;
         if (admin_setting('telegram_bot_enable', false)
             && admin_setting('telegram_bot_token')
             && admin_setting($setting, false)

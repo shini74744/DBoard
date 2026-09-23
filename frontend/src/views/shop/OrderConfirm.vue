@@ -17,6 +17,7 @@
         <div class="card-body">
 
           <p>{{ $t('order.description') }}</p>
+          <p v-if="renewalTargetId" class="renewal-target">{{ $t('dashboard.renewPlan') }} · {{ renewalTargetName }}</p>
 
         </div>
 
@@ -997,6 +998,11 @@ export default {
 
         };
 
+        if (route.query.subscription_action === 'renew' && route.query.subscription_user_id) {
+          orderData.subscription_action = 'renew';
+          orderData.subscription_user_id = Number(route.query.subscription_user_id);
+        }
+
 
 
         if (couponApplied.value && couponCode.value && couponInfo.value) {
@@ -1225,7 +1231,7 @@ export default {
 
     const showExistingPlanWarning = computed(() => {
 
-      if (loading.userInfo || loading.plan || !plan.value || !userInfo.value) {
+      if (route.query.subscription_action === 'renew' || loading.userInfo || loading.plan || !plan.value || !userInfo.value) {
 
         return false;
 
@@ -1248,6 +1254,9 @@ export default {
 
 
     return {
+
+      renewalTargetName: route.query.subscription_name || '当前套餐',
+      renewalTargetId: route.query.subscription_action === 'renew' ? route.query.subscription_user_id : null,
 
       plan,
 

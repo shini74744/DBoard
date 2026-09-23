@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\Auth\LoginService;
 use App\Services\AuthService;
 use App\Services\Plugin\HookManager;
+use App\Services\MultiSubscriptionService;
 use App\Services\UserService;
 use App\Utils\CacheKey;
 use App\Utils\Helper;
@@ -180,10 +181,46 @@ class UserController extends Controller
         }
         $user['traffic_breakdown'] = \App\Services\TrafficQuotaBreakdown::forUser($user);
         $user['subscribe_url'] = Helper::getSubscribeUrl($user['token']);
+        $account = User::findOrFail($request->user()->id);
+        $user['subscriptions'] = MultiSubscriptionService::summary($account);
+        $user['subscription_link_mode'] = $account->subscription_link_mode;
+        $user['duplicate_node_mode'] = $account->duplicate_node_mode;
+        $merged = MultiSubscriptionService::mergedHeaderUser($account);
+        $user['merged_summary'] = [
+            'u' => $merged->u,
+            'd' => $merged->d,
+            'transfer_enable' => $merged->transfer_enable,
+            'expired_at' => $merged->expired_at,
+        ];
+        $active = MultiSubscriptionService::activePackages($account);
+        if ($active->count() > 1 || ($active->count() === 1 && $active->first()->id !== $account->id)) {
+            $user['u'] = $merged->u;
+            $user['d'] = $merged->d;
+            $user['transfer_enable'] = $merged->transfer_enable;
+            $user['expired_at'] = $merged->expired_at;
+            $user['plan_id'] = $active->first()->plan_id;
+            $plan = $active->first()->plan->replicate();
+            $plan->id = $active->first()->plan_id;
+            $plan->name = '多套餐（' . $active->count() . ' 份）';
+            $user['plan'] = $plan;
+            $user['traffic_breakdown'] = MultiSubscriptionService::mergedBreakdown($account);
+            $user['subscription_started_at'] = null;
+        }
         $userService = new UserService();
-        $user['reset_day'] = $userService->getResetDay($user);
+        $user['reset_day'] = ($active->count() > 1 || ($active->count() === 1 && $active->first()->id !== $account->id)) ? null : $userService->getResetDay($user);
         $user = HookManager::filter('user.subscribe.response', $user);
         return $this->success($user);
+    }
+
+    public function updateSubscriptionPreferences(Request $request)
+    {
+        $data = $request->validate([
+            'subscription_link_mode' => 'required|in:merged,separate',
+            'duplicate_node_mode' => 'required|in:all,first',
+        ]);
+        $account = User::findOrFail($request->user()->id);
+        $account->update($data);
+        return $this->success(true);
     }
 
     public function resetSecurity(Request $request)
@@ -191,9 +228,19 @@ class UserController extends Controller
         $user = $request->user();
         $user->uuid = Helper::guid(true);
         $user->token = Helper::guid();
-        if (!$user->save()) {
-            return $this->fail([400, __('Reset failed')]);
-        }
+        $user->primary_package_token = bin2hex(random_bytes(24));
+        DB::transaction(function () use ($user) {
+            $user->saveOrFail();
+            foreach ($user->subscriptions as $subscription) {
+                $subscription->uuid = Helper::guid(true);
+                $subscription->token = Helper::guid();
+                $subscription->saveOrFail();
+            }
+            foreach (\App\Models\SubscriptionCombination::where('user_id', $user->id)->get() as $combination) {
+                $combination->token = bin2hex(random_bytes(24));
+                $combination->saveOrFail();
+            }
+        });
         return $this->success(Helper::getSubscribeUrl($user->token));
     }
 

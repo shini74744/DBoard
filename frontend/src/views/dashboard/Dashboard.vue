@@ -125,7 +125,13 @@
       </transition>
 
       <!-- 套餐信息卡片 -->
-      <div v-if="hasPlan" class="dashboard-card subscription-card" :class="{'card-animate': !loading.userInfo}"
+      <SubscriptionPackageCards v-if="subscriptions.length > 1 && !loading.userInfo"
+                                :subscriptions="subscriptions" :format-traffic="formatTraffic"
+                                :format-date="formatDate" :now="nowMs"
+                                :selected-id="activeDashboardPackage?.id" @select="selectDashboardPackage"
+                                @details="openTrafficBreakdown" @import="openPackageImport"
+                                @renew="renewPackage" @support="goToSupport"/>
+      <div v-if="hasPlan && subscriptions.length <= 1" class="dashboard-card subscription-card" :class="{'card-animate': !loading.userInfo}"
            style="animation-delay: 0.3s">
         <div v-if="loading.userInfo" class="skeleton-card">
           <div class="skeleton-header"></div>
@@ -155,8 +161,8 @@
               </div>
               <div class="info-item traffic-breakdown-trigger" role="button" tabindex="0"
                    :aria-label="$t('dashboard.viewTrafficBreakdown')"
-                   @click="showTrafficBreakdown = true" @keydown.enter.prevent="showTrafficBreakdown = true"
-                   @keydown.space.prevent="showTrafficBreakdown = true">
+                   @click="openTrafficBreakdown()" @keydown.enter.prevent="openTrafficBreakdown()"
+                   @keydown.space.prevent="openTrafficBreakdown()">
                 <span class="info-label">{{ $t('dashboard.planTraffic') }} <small>{{ $t('dashboard.viewDetails') }}</small></span>
                 <span class="info-value">{{ userPlan.totalTraffic || '0 GB' }}</span>
               </div>
@@ -222,11 +228,15 @@
         </template>
       </div>
 
+      <SubscriptionCombinationManager v-if="subscriptions.length > 1"
+                                      :subscriptions="subscriptions" :format-traffic="formatTraffic"
+                                      @import="openPackageImport"/>
+
       <!-- 订阅导入卡片 -->
       <transition name="slide-fade">
-        <div v-if="showImportCard && userPlan.subscribeUrl" class="dashboard-card import-card">
+        <div v-if="showImportCard && subscriptionImportUrl" class="dashboard-card import-card">
           <div class="card-header">
-            <h2 class="card-title">{{ $t('dashboard.importSubscription') }}</h2>
+            <h2 class="card-title">{{ $t('dashboard.importSubscription') }}<template v-if="selectedImportPackage"> · {{ selectedImportPackage.display_name || selectedImportPackage.plan_name }}</template></h2>
             <button class="close-btn" @click="showImportCard = false">
               <span class="close-icon"></span>
             </button>
@@ -471,7 +481,7 @@
           </div>
         </template>
 
-        <template v-else-if="!hasPlan">
+        <template v-else-if="!hasPlan && !subscriptions.length">
           <!-- 没有套餐时显示的提示卡片 -->
           <div class="dashboard-card stats-card no-plan-card" :class="{'card-animate': !loading.userStats}"
                style="animation-delay: 0.5s; grid-column: span 4; margin: 0 auto; max-width: 1200px; width: 100%;">
@@ -501,13 +511,13 @@
                :class="{'card-animate': !loading.userStats}"
                :style="[trafficHueStyle, {animationDelay: '0.5s'}]"
                role="button" tabindex="0" :aria-label="$t('dashboard.viewTrafficBreakdown')"
-               @click="showTrafficBreakdown = true" @keydown.enter.prevent="showTrafficBreakdown = true"
-               @keydown.space.prevent="showTrafficBreakdown = true">
+               @click="openTrafficBreakdown()" @keydown.enter.prevent="openTrafficBreakdown()"
+               @keydown.space.prevent="openTrafficBreakdown()">
             <div class="stats-icon">
               <IconTransferVertical :size="32"/>
             </div>
             <div class="stats-info">
-              <div class="stats-value">{{ userStats.remainingTraffic }}</div>
+              <div class="stats-value">{{ displayedRemainingTraffic }}</div>
               <div class="stats-label">{{ $t('dashboard.remainingTraffic') }} · {{ $t('dashboard.viewDetails') }}</div>
             </div>
 
@@ -523,7 +533,7 @@
           <div class="stats-card daily-usage-trigger usage-gradient-card"
                :class="{
               'card-animate': !loading.userStats,
-              'permanent-card': userStats.isRemainingDaysPermanent
+              'permanent-card': displayedPermanent
             }"
                :style="[expiryHueStyle, {animationDelay: '0.6s'}]"
                role="button" tabindex="0" :aria-label="$t('dashboard.viewDailyUsage')"
@@ -536,7 +546,7 @@
             <div class="stats-info">
               <div class="stats-value">
                 {{
-                  userStats.isRemainingDaysPermanent ? $t('dashboard.permanent') : userStats.remainingDays + $t('dashboard.days')
+                  displayedPermanent ? $t('dashboard.permanent') : displayedRemainingDays + $t('dashboard.days')
                 }}
               </div>
               <div class="stats-label">{{ $t('dashboard.remainingDays') }}</div>
@@ -652,33 +662,33 @@
       <div class="modal-container traffic-breakdown-modal">
         <div class="modal-card">
           <div class="modal-header">
-            <h3>{{ $t('dashboard.trafficBreakdownTitle') }}</h3>
+            <h3>{{ $t('dashboard.trafficBreakdownTitle') }}<template v-if="selectedPackage"> · {{ selectedPackage.display_name || selectedPackage.plan_name }}</template></h3>
             <button class="close-button" :aria-label="$t('common.close')" @click="showTrafficBreakdown = false">×</button>
           </div>
           <div class="modal-body">
-            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.baseTraffic') }}</span><strong>{{ formatTraffic(trafficBreakdown.base_bytes) }}</strong></div>
-            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.timedBonus') }}</span><strong>+{{ formatTraffic(trafficBreakdown.timed_bonus_bytes) }}</strong></div>
-            <div v-for="(entry, index) in trafficBreakdown.entries.filter(item => item.bucket === 'timed')" :key="'timed-' + index" class="traffic-breakdown-entry">
+            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.baseTraffic') }}</span><strong>{{ formatTraffic(visibleTrafficBreakdown.base_bytes) }}</strong></div>
+            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.timedBonus') }}</span><strong>+{{ formatTraffic(visibleTrafficBreakdown.timed_bonus_bytes) }}</strong></div>
+            <div v-for="(entry, index) in visibleTrafficBreakdown.entries.filter(item => item.bucket === 'timed')" :key="'timed-' + index" class="traffic-breakdown-entry">
               <span>{{ entry.reason }}<template v-if="entry.expires_at"> · {{ $t('dashboard.expiresOn') }} {{ formatDate(entry.expires_at) }}</template></span><strong>+{{ formatTraffic(entry.amount_bytes) }}</strong>
             </div>
-            <div v-if="trafficBreakdown.cycle_bonus_bytes > 0" class="traffic-breakdown-row"><span>{{ $t('dashboard.cycleBonus') }}</span><strong>+{{ formatTraffic(trafficBreakdown.cycle_bonus_bytes) }}</strong></div>
-            <div v-for="(entry, index) in trafficBreakdown.entries.filter(item => item.bucket === 'cycle')" :key="'cycle-' + index" class="traffic-breakdown-entry">
+            <div v-if="visibleTrafficBreakdown.cycle_bonus_bytes > 0" class="traffic-breakdown-row"><span>{{ $t('dashboard.cycleBonus') }}</span><strong>+{{ formatTraffic(visibleTrafficBreakdown.cycle_bonus_bytes) }}</strong></div>
+            <div v-for="(entry, index) in visibleTrafficBreakdown.entries.filter(item => item.bucket === 'cycle')" :key="'cycle-' + index" class="traffic-breakdown-entry">
               <span>{{ entry.reason }}</span><strong>+{{ formatTraffic(entry.amount_bytes) }}</strong>
             </div>
-            <div v-if="trafficBreakdown.permanent_bonus_bytes > 0" class="traffic-breakdown-row"><span>{{ $t('dashboard.continuingBonus') }}</span><strong>+{{ formatTraffic(trafficBreakdown.permanent_bonus_bytes) }}</strong></div>
-            <div v-for="(entry, index) in trafficBreakdown.entries.filter(item => item.bucket === 'permanent')" :key="'permanent-' + index" class="traffic-breakdown-entry">
+            <div v-if="visibleTrafficBreakdown.permanent_bonus_bytes > 0" class="traffic-breakdown-row"><span>{{ $t('dashboard.continuingBonus') }}</span><strong>+{{ formatTraffic(visibleTrafficBreakdown.permanent_bonus_bytes) }}</strong></div>
+            <div v-for="(entry, index) in visibleTrafficBreakdown.entries.filter(item => item.bucket === 'permanent')" :key="'permanent-' + index" class="traffic-breakdown-entry">
               <span>{{ entry.reason }}</span><strong>+{{ formatTraffic(entry.amount_bytes) }}</strong>
             </div>
-            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.giftCardBonus') }}</span><strong>+{{ formatTraffic(trafficBreakdown.gift_card_bonus_bytes) }}</strong></div>
-            <div v-for="(entry, index) in trafficBreakdown.entries.filter(item => item.bucket === 'gift_card')" :key="'gift-' + index" class="traffic-breakdown-entry">
+            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.giftCardBonus') }}</span><strong>+{{ formatTraffic(visibleTrafficBreakdown.gift_card_bonus_bytes) }}</strong></div>
+            <div v-for="(entry, index) in visibleTrafficBreakdown.entries.filter(item => item.bucket === 'gift_card')" :key="'gift-' + index" class="traffic-breakdown-entry">
               <span>{{ entry.reason }}</span><strong>+{{ formatTraffic(entry.amount_bytes) }}</strong>
             </div>
-            <div class="traffic-breakdown-row traffic-breakdown-total"><span>{{ $t('dashboard.totalQuota') }}</span><strong>{{ formatTraffic(trafficBreakdown.total_bytes) }}</strong></div>
-            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.usedTraffic') }}</span><strong>{{ formatTraffic(trafficBreakdown.used_bytes) }}</strong></div>
-            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.remainingTraffic') }}</span><strong>{{ formatTraffic(trafficBreakdown.remaining_bytes) }}</strong></div>
-            <p v-if="trafficBreakdown.status === 'no_plan'">{{ $t('dashboard.pendingTrafficHint') }}</p>
-            <p v-else-if="trafficBreakdown.status === 'expired'">{{ $t('dashboard.expiredTrafficHint') }}</p>
-            <p v-else-if="trafficBreakdown.permanent_bonus_bytes">{{ $t('dashboard.continuingBonusHint') }}</p>
+            <div class="traffic-breakdown-row traffic-breakdown-total"><span>{{ $t('dashboard.totalQuota') }}</span><strong>{{ formatTraffic(visibleTrafficBreakdown.total_bytes) }}</strong></div>
+            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.usedTraffic') }}</span><strong>{{ formatTraffic(visibleTrafficBreakdown.used_bytes) }}</strong></div>
+            <div class="traffic-breakdown-row"><span>{{ $t('dashboard.remainingTraffic') }}</span><strong>{{ formatTraffic(visibleTrafficBreakdown.remaining_bytes) }}</strong></div>
+            <p v-if="visibleTrafficBreakdown.status === 'no_plan'">{{ $t('dashboard.pendingTrafficHint') }}</p>
+            <p v-else-if="visibleTrafficBreakdown.status === 'expired'">{{ $t('dashboard.expiredTrafficHint') }}</p>
+            <p v-else-if="visibleTrafficBreakdown.permanent_bonus_bytes">{{ $t('dashboard.continuingBonusHint') }}</p>
           </div>
         </div>
       </div>
@@ -792,6 +802,8 @@ import {
 } from '@tabler/icons-vue';
 import CommonDialog from '@/components/popup/CommonDialog.vue';
 import DailyTrafficDialog from '@/components/dashboard/DailyTrafficDialog.vue';
+import SubscriptionPackageCards from '@/components/dashboard/SubscriptionPackageCards.vue';
+import SubscriptionCombinationManager from '@/components/dashboard/SubscriptionCombinationManager.vue';
 import {getNotices, getSubscribe, getUserConfig, getUserInfo, getUserStats, setNextPeriod} from '@/api/dashboard';
 import {useToast} from '@/composables/useToast';
 import {submitOrder} from '@/api/shop';
@@ -905,7 +917,9 @@ export default {
     IconX,
     IconCalendarPlus,
     CommonDialog,
-    DailyTrafficDialog
+    DailyTrafficDialog,
+    SubscriptionPackageCards,
+    SubscriptionCombinationManager
   },
   setup() {
     const {t, locale} = useI18n();
@@ -924,6 +938,28 @@ export default {
     const trafficBreakdown = reactive({
       base_bytes: 0, cycle_bonus_bytes: 0, permanent_bonus_bytes: 0, timed_bonus_bytes: 0, gift_card_bonus_bytes: 0,
       total_bytes: 0, used_bytes: 0, remaining_bytes: 0, status: 'no_plan', entries: []
+    });
+    const subscriptions = ref([]);
+    const selectedDashboardPackageId = ref(null);
+    const activeDashboardPackage = computed(() => subscriptions.value.length > 1
+      ? subscriptions.value.find(item => item.id === selectedDashboardPackageId.value) || subscriptions.value[0]
+      : null);
+    const selectDashboardPackage = (item) => { selectedDashboardPackageId.value = item.id; };
+    const selectedPackage = ref(null);
+    const visibleTrafficBreakdown = computed(() => selectedPackage.value?.traffic_breakdown || trafficBreakdown);
+    const openTrafficBreakdown = (item = null) => {
+      selectedPackage.value = item || activeDashboardPackage.value;
+      showTrafficBreakdown.value = true;
+    };
+    const displayedRemainingTraffic = computed(() => activeDashboardPackage.value
+      ? formatTraffic(Math.max(0, Number(activeDashboardPackage.value.remaining) || 0))
+      : userStats.remainingTraffic);
+    const displayedPermanent = computed(() => activeDashboardPackage.value
+      ? !(Number(activeDashboardPackage.value.expired_at) > 0)
+      : userStats.isRemainingDaysPermanent);
+    const displayedRemainingDays = computed(() => {
+      if (!activeDashboardPackage.value) return userStats.remainingDays;
+      return Math.max(0, Math.ceil((Number(activeDashboardPackage.value.expired_at) * 1000 - nowMs.value) / 86400000));
     });
     const trafficBytes = ref({total: 0, remaining: 0});
     const subscriptionPeriod = ref({start: 0, expires: 0});
@@ -989,6 +1025,8 @@ export default {
     const currentNoticeIndex = ref(0);
     const showNoticeDetails = ref(false);
     const showImportCard = ref(false);
+    const selectedImportPackage = ref(null);
+    const subscriptionImportUrl = computed(() => selectedImportPackage.value?.subscribe_url || userPlan.value.subscribeUrl);
     const showQrCode = ref(false);
     const {showToast} = useToast();
     const qrCodeUrl = ref('');
@@ -1221,8 +1259,12 @@ export default {
     };
 
     const clampRatio = (value) => Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
-    const trafficRatio = computed(() => trafficBytes.value.total > 0
-      ? clampRatio(trafficBytes.value.remaining / trafficBytes.value.total) : 0);
+    const trafficRatio = computed(() => {
+      const selected = activeDashboardPackage.value;
+      const total = selected ? Math.max(0, Number(selected.transfer_enable) || 0) : trafficBytes.value.total;
+      const remaining = selected ? Math.max(0, Number(selected.remaining) || 0) : trafficBytes.value.remaining;
+      return total > 0 ? clampRatio(remaining / total) : 0;
+    });
     const expiryRatio = computed(() => {
       if (userStats.isRemainingDaysPermanent) return 1;
       const {start, expires} = subscriptionPeriod.value;
@@ -1335,6 +1377,8 @@ export default {
         if (response.data) {
           allowNewPeriod.value = response.data.allow_new_period;
           const subscribe = response.data;
+          subscriptions.value = Array.isArray(subscribe.subscriptions)
+            ? subscribe.subscriptions.filter(item => item.plan_id != null) : [];
           nowMs.value = Date.now();
           subscriptionPeriod.value = {
             start: Number(subscribe.subscription_started_at) || 0,
@@ -1514,10 +1558,10 @@ export default {
     };
 
     const updateQRCodeUrl = () => {
-      if (userPlan.value.subscribeUrl) {
+      if (subscriptionImportUrl.value) {
         qrCodeLoading.value = true;
         try {
-          QRCode.toDataURL(userPlan.value.subscribeUrl, {
+          QRCode.toDataURL(subscriptionImportUrl.value, {
             width: 200,
             margin: 2,
             color: {
@@ -1547,9 +1591,9 @@ export default {
     };
 
     const copySubscription = () => {
-      if (userPlan.value.subscribeUrl) {
+      if (subscriptionImportUrl.value) {
         const copyWithAPI = () => {
-          navigator.clipboard.writeText(userPlan.value.subscribeUrl)
+          navigator.clipboard.writeText(subscriptionImportUrl.value)
               .then(() => {
                 showToast(t('dashboard.subscriptionCopied'), 'success', 3000);
               })
@@ -1561,7 +1605,7 @@ export default {
         const copyWithFallback = () => {
           try {
             const textarea = document.createElement('textarea');
-            textarea.value = userPlan.value.subscribeUrl;
+            textarea.value = subscriptionImportUrl.value;
             textarea.style.position = 'fixed';
             textarea.style.left = '0';
             textarea.style.top = '0';
@@ -1593,12 +1637,12 @@ export default {
     };
 
     const importToClient = (clientType) => {
-      if (!userPlan.value.subscribeUrl) {
+      if (!subscriptionImportUrl.value) {
         showToast(t('dashboard.noSubscription'), 'error', 3000);
         return;
       }
 
-      const subscribeUrl = userPlan.value.subscribeUrl;
+      const subscribeUrl = subscriptionImportUrl.value;
       const siteName = SITE_CONFIG.siteName || '订阅';
 
       let url = '';
@@ -1676,12 +1720,20 @@ export default {
       }
     };
 
-    const goToSupport = () => {
-      if (window.innerWidth < 905) {
-        router.push('/mobile/tickets');
-      } else {
-        router.push('/tickets');
+    const goToSupport = (item = null) => {
+      const path = window.innerWidth < 905 ? '/mobile/tickets' : '/tickets';
+      router.push(item?.id ? {path, query: {subscription_user_id: item.id, subscription_name: item.display_name || item.plan_name}} : path);
+    };
+
+    const openPackageImport = (item) => {
+      if (!item?.subscribe_url) {
+        showToast(t('dashboard.noSubscription'), 'error', 3000);
+        return;
       }
+      selectedImportPackage.value = item;
+      showQrCode.value = false;
+      showImportCard.value = false;
+      toggleImportCard();
     };
 
     const toggleImportCard = () => {
@@ -1746,7 +1798,7 @@ export default {
       updateQRCodeUrl();
     });
 
-    watch(() => userPlan.value.subscribeUrl, () => {
+    watch(subscriptionImportUrl, () => {
       updateQRCodeUrl();
     });
 
@@ -1824,6 +1876,11 @@ export default {
       window.removeEventListener('resize', handleResize);
     });
 
+    const renewPackage = (item) => {
+      if (!item?.plan_id || !item?.id) return;
+      router.push({path: '/order-confirm', query: {id: item.plan_id, subscription_action: 'renew', subscription_user_id: item.id, subscription_name: item.display_name || item.plan_name}});
+    };
+
     const renewPlan = () => {
       if (!userPlanId.value) {
         showToast(t('dashboard.noPlanToRenew'), 'error', 3000);
@@ -1882,11 +1939,7 @@ export default {
 
     const needRefreshData = ref(false);
 
-    const trafficPercentage = computed(() => {
-      if (trafficBytes.value.total <= 0) return 0;
-      return Math.min(100, Math.max(0,
-        Math.round(trafficBytes.value.remaining / trafficBytes.value.total * 100)));
-    });
+    const trafficPercentage = computed(() => Math.round(trafficRatio.value * 100));
 
     return {
       revealedThemeMessage,
@@ -1895,6 +1948,16 @@ export default {
       userBalance,
       currencySymbol,
       userPlan,
+      subscriptions,
+      nowMs,
+      activeDashboardPackage,
+      selectDashboardPackage,
+      displayedRemainingTraffic,
+      displayedRemainingDays,
+      displayedPermanent,
+      selectedPackage,
+      visibleTrafficBreakdown,
+      openTrafficBreakdown,
       showDailyTraffic,
       showTrafficBreakdown,
       trafficBreakdown,
@@ -1913,6 +1976,10 @@ export default {
       prevNotice,
       nextNotice,
       showImportCard,
+      selectedImportPackage,
+      subscriptionImportUrl,
+      openPackageImport,
+      renewPackage,
       showQrCode,
       importToClient,
       goToSupport,

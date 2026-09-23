@@ -24,6 +24,25 @@ class RouteController extends Controller
         ];
     }
 
+    public function nodes(Request $request)
+    {
+        $sourceId = (int)$request->input('source_id');
+        return $this->success(Server::orderBy('sort')->orderBy('id')->get()->map(function (Server $node) use ($sourceId) {
+            $reason = $node->id === $sourceId ? '不能选择当前节点' : \App\Services\NodeOutboundService::unavailableReason($node);
+            return ['id'=>$node->id, 'name'=>$node->name, 'type'=>$node->type, 'host'=>$node->host,
+                'port'=>$node->port, 'unavailable_reason'=>$reason];
+        }));
+    }
+
+    public function fromNode(Request $request)
+    {
+        $data=$request->validate(['node_id'=>'required|integer|exists:v2_server,id','source_id'=>'nullable|integer']);
+        if ((int)$data['node_id'] === (int)($data['source_id']??0)) throw new ApiException('不能选择当前节点作为出口');
+        $outbound=\App\Services\NodeOutboundService::reference(Server::findOrFail($data['node_id']));
+        if (!$outbound->enabled) throw new ApiException('该节点对应出站已停用，请先在出站规则管理中启用');
+        return $this->success($outbound);
+    }
+
     public function users(Request $request)
     {
         $data = $request->validate([
@@ -37,7 +56,7 @@ class RouteController extends Controller
         )));
         $selected = array_slice($selected, 0, 100);
 
-        $users = User::query()->select(['id', 'email'])
+        $users = User::query()->whereNull('parent_id')->select(['id', 'email'])
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
                     $query->where('email', 'like', '%' . $search . '%');
@@ -92,22 +111,26 @@ class RouteController extends Controller
         $params = $request->validate([
             'id' => 'nullable|integer',
             'name' => 'nullable|string|max:255',
-            'tag' => ['nullable', 'string', 'max:128', 'regex:/^[A-Za-z0-9._-]+$/'],
+            'tag' => ['nullable', 'string', 'max:128'],
             'link' => 'nullable|string',
             'protocol' => 'nullable|string|in:vmess,vless,trojan,shadowsocks,socks,http',
             'settings' => 'nullable|array',
-            'proxy_tag' => ['nullable', 'string', 'max:128', 'regex:/^[A-Za-z0-9._-]+$/'],
+            'proxy_tag' => ['nullable', 'string', 'max:128'],
             'enabled' => 'nullable|boolean',
             'remarks' => 'nullable|string|max:1000',
-        ], [
-            'tag.regex' => '出站标签只能包含字母、数字、点、下划线和连字符',
-            'proxy_tag.regex' => '前置代理标签格式不正确',
         ]);
 
         $id = isset($params['id']) ? (int) $params['id'] : null;
         $existing = $id ? ServerOutbound::find($id) : null;
         if ($id && !$existing) {
             throw new ApiException('出站规则不存在');
+        }
+
+        if ($existing?->target_server_id) {
+            // Endpoint and credentials are always resolved from the referenced node.
+            $params = array_intersect_key($params, array_flip(['id','name','tag','enabled','remarks']));
+            $params['protocol'] = $existing->protocol;
+            $params['settings'] = $existing->settings;
         }
 
         try {

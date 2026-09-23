@@ -485,7 +485,7 @@ import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue';
 
 import { useI18n } from 'vue-i18n';
 
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import MarkdownIt from 'markdown-it';
 
@@ -535,6 +535,7 @@ const { t } = useI18n();
 const { showToast } = useToast();
 
 const router = useRouter();
+const route = useRoute();
 
 const loading = ref(false);
 
@@ -589,7 +590,12 @@ onMounted(() => {
 
     fetchTickets();
 
-    checkTicketPopup();
+    if (/^[1-9]\d*$/.test(String(route.query.subscription_user_id || ''))) {
+        newTicket.value.subject = t('dashboard.subscriptionInfo') + (route.query.subscription_name ? ' · ' + route.query.subscription_name : '');
+        showCreateTicketModal();
+    } else {
+        checkTicketPopup();
+    }
 });
 
 onUnmounted(() => {

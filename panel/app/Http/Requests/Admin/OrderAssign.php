@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Models\Plan;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class OrderAssign extends FormRequest
 {
@@ -17,7 +19,11 @@ class OrderAssign extends FormRequest
             'plan_id' => 'required',
             'email' => 'required',
             'total_amount' => 'required',
-            'period' => 'required|in:month_price,quarter_price,half_year_price,year_price,two_year_price,three_year_price,onetime_price,reset_price'
+            'period' => ['required', Rule::in(array_merge(array_keys(Plan::LEGACY_PERIOD_MAPPING), array_values(Plan::LEGACY_PERIOD_MAPPING)))],
+            'subscription_action' => 'nullable|in:auto,add,renew,extend',
+            'subscription_user_id' => 'nullable|integer',
+            'custom_duration_days' => 'nullable|integer|min:1|max:3650',
+            'custom_expired_at' => ['nullable', 'integer', 'min:' . (time() + 60), 'max:' . (time() + 315360000)]
         ];
     }
 

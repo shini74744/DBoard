@@ -35,6 +35,11 @@ class NodeUserSyncJob implements ShouldQueue
             }
             if ($user) {
                 NodeSyncService::notifyUserChanged($user);
+                if (!$user->parent_id) {
+                    foreach ($user->subscriptions as $subscription) {
+                        NodeSyncService::notifyUserChanged($subscription);
+                    }
+                }
             }
         } elseif ($this->action === 'deleted') {
             if ($this->oldGroupId) {

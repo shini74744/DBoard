@@ -11,6 +11,7 @@ class ServerOutbound extends Model
 
     protected $casts = [
         'settings' => 'array',
+        'target_server_id' => 'integer',
         'enabled' => 'boolean',
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
@@ -18,6 +19,7 @@ class ServerOutbound extends Model
 
     public function toNodeConfig(): array
     {
+        if ($this->target_server_id) return \App\Services\NodeOutboundService::config($this);
         $config = [
             'tag' => $this->tag,
             'protocol' => $this->protocol,

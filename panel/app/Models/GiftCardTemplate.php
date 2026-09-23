@@ -122,17 +122,17 @@ class GiftCardTemplate extends Model
             case self::TYPE_GENERAL:
                 $rewards = $this->rewards ?? [];
                 if (isset($rewards['transfer_enable']) || isset($rewards['expire_days']) || isset($rewards['reset_package'])) {
-                    if (!$user->plan_id && empty($rewards['plan_id'])) {
+                    if (!$user->plan_id && \App\Services\MultiSubscriptionService::validPackages($user)->isEmpty() && empty($rewards['plan_id'])) {
                         return false;
                     }
-                    if (!empty($rewards['transfer_enable']) && !$user->isActive()
+                    if (!empty($rewards['transfer_enable']) && \App\Services\MultiSubscriptionService::validPackages($user)->isEmpty()
                         && empty($rewards['plan_id']) && empty($rewards['expire_days'])) {
                         return false;
                     }
                 }
                 break;
             case self::TYPE_PLAN:
-                if ($user->isActive()) {
+                if (\App\Services\MultiSubscriptionService::validPackages($user)->isNotEmpty()) {
                     return false;
                 }
                 break;
@@ -157,10 +157,10 @@ class GiftCardTemplate extends Model
         }
 
         // 检查允许的套餐
-        if (isset($conditions['allowed_plans']) && $user->plan_id) {
-            if (!in_array($user->plan_id, $conditions['allowed_plans'])) {
-                return false;
-            }
+        if (isset($conditions['allowed_plans'])) {
+            $planIds = \App\Services\MultiSubscriptionService::validPackages($user)->pluck('plan_id')->all();
+            if (!$planIds && $user->plan_id) $planIds[] = $user->plan_id;
+            if ($planIds && !array_intersect($planIds, $conditions['allowed_plans'])) return false;
         }
 
         // 检查是否需要邀请人

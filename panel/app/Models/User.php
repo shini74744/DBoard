@@ -150,6 +150,11 @@ class User extends Authenticatable
         return $this->belongsTo(self::class, 'parent_id', 'id');
     }
 
+    public function subscriptions(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_id', 'id');
+    }
+
     /**
      * 关联流量重置记录
      */

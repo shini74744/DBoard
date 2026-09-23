@@ -22,6 +22,11 @@ class ServerOutboundObserver
 
     private function notifyAffectedNodes(int $outboundId): void
     {
+        foreach (Server::all() as $node) {
+            if (\App\Models\ServerOutbound::where('target_server_id', $node->id)->exists()) {
+                NodeSyncService::notifyFullSync($node->id);
+            }
+        }
         Server::query()
             ->get(['id', 'outbound_ids'])
             ->filter(fn(Server $server) => in_array(

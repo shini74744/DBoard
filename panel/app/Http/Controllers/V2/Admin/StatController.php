@@ -31,7 +31,8 @@ class StatController extends Controller
         $onlineDevices = User::where('t', '>=', time() - 600)
             ->sum('online_count');
         $onlineUsers = User::where('t', '>=', time() - 600)
-            ->count();
+            ->selectRaw('COUNT(DISTINCT COALESCE(parent_id, id)) as account_count')
+            ->value('account_count');
 
         // 获取今日流量统计
         $todayStart = strtotime('today');
@@ -57,7 +58,7 @@ class StatController extends Controller
                     ->where('created_at', '<', time())
                     ->whereNotIn('status', [0, 2])
                     ->sum('total_amount'),
-                'month_register_total' => User::where('created_at', '>=', strtotime(date('Y-m-1')))
+                'month_register_total' => User::whereNull('parent_id')->where('created_at', '>=', strtotime(date('Y-m-1')))
                     ->where('created_at', '<', time())
                     ->count(),
                 'ticket_pending_total' => Ticket::where('status', 0)
@@ -274,7 +275,8 @@ class StatController extends Controller
         $onlineDevices = User::where('t', '>=', time() - 600)
             ->sum('online_count');
         $onlineUsers = User::where('t', '>=', time() - 600)
-            ->count();
+            ->selectRaw('COUNT(DISTINCT COALESCE(parent_id, id)) as account_count')
+            ->value('account_count');
 
         // 获取今日流量统计
         $todayTraffic = StatServer::where('record_at', '>=', $todayStart)
@@ -327,17 +329,24 @@ class StatController extends Controller
             ->sum('get_amount');
 
         // Current month new users
-        $currentMonthNewUsers = User::where('created_at', '>=', $currentMonthStart)
+        $currentMonthNewUsers = User::whereNull('parent_id')->where('created_at', '>=', $currentMonthStart)
             ->where('created_at', '<', time())
             ->count();
 
         // Total users
-        $totalUsers = User::count();
+        $totalUsers = User::whereNull('parent_id')->count();
 
         // Active users (users with valid subscription)
-        $activeUsers = User::where(function ($query) {
-            $query->where('expired_at', '>=', time())
-                ->orWhere('expired_at', NULL);
+        $activeUsers = User::whereNull('parent_id')->where(function ($query) {
+            $query->where(function ($root) {
+                $root->whereNotNull('plan_id')->where(function ($expiry) {
+                    $expiry->where('expired_at', '>=', time())->orWhereNull('expired_at');
+                });
+            })->orWhereHas('subscriptions', function ($package) {
+                $package->whereNotNull('plan_id')->where(function ($expiry) {
+                    $expiry->where('expired_at', '>=', time())->orWhereNull('expired_at');
+                });
+            });
         })->count();
 
         // Previous month income for growth calculation
@@ -352,7 +361,7 @@ class StatController extends Controller
             ->sum('get_amount');
 
         // Previous month users for growth calculation
-        $lastMonthNewUsers = User::where('created_at', '>=', $lastMonthStart)
+        $lastMonthNewUsers = User::whereNull('parent_id')->where('created_at', '>=', $lastMonthStart)
             ->where('created_at', '<', $currentMonthStart)
             ->count();
 
@@ -462,20 +471,22 @@ class StatController extends Controller
 
         } else {
             // Get user traffic data
-            $currentData = StatUser::selectRaw('user_id as id, SUM(u + d) as value')
-                ->where('record_at', '>=', $startDate)
-                ->where('record_at', '<=', $endDate)
-                ->groupBy('user_id')
+            $currentData = StatUser::join('v2_user as package', 'package.id', '=', 'v2_stat_user.user_id')
+                ->selectRaw('COALESCE(package.parent_id, package.id) as id, SUM(v2_stat_user.u + v2_stat_user.d) as value')
+                ->where('v2_stat_user.record_at', '>=', $startDate)
+                ->where('v2_stat_user.record_at', '<=', $endDate)
+                ->groupByRaw('COALESCE(package.parent_id, package.id)')
                 ->orderBy('value', 'DESC')
                 ->limit(10)
                 ->get();
 
             // Get previous period data for comparison
-            $previousData = StatUser::selectRaw('user_id as id, SUM(u + d) as value')
-                ->where('record_at', '>=', $previousStartDate)
-                ->where('record_at', '<', $previousEndDate)
-                ->whereIn('user_id', $currentData->pluck('id'))
-                ->groupBy('user_id')
+            $previousData = StatUser::join('v2_user as package', 'package.id', '=', 'v2_stat_user.user_id')
+                ->selectRaw('COALESCE(package.parent_id, package.id) as id, SUM(v2_stat_user.u + v2_stat_user.d) as value')
+                ->where('v2_stat_user.record_at', '>=', $previousStartDate)
+                ->where('v2_stat_user.record_at', '<', $previousEndDate)
+                ->whereIn(\Illuminate\Support\Facades\DB::raw('COALESCE(package.parent_id, package.id)'), $currentData->pluck('id'))
+                ->groupByRaw('COALESCE(package.parent_id, package.id)')
                 ->get()
                 ->keyBy('id');
         }

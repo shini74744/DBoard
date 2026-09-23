@@ -90,6 +90,7 @@ class AdminRoute
             ], function ($router) {
                 $router->get('/fetch', [GroupController::class, 'fetch']);
                 $router->post('/save', [GroupController::class, 'save']);
+                $router->post('/sort', [GroupController::class, 'sort']);
                 $router->post('/drop', [GroupController::class, 'drop']);
             });
             $router->group([
@@ -97,6 +98,8 @@ class AdminRoute
             ], function ($router) {
                 $router->get('/fetch', [RouteController::class, 'fetch']);
                 $router->get('/users', [RouteController::class, 'users']);
+                $router->get('/nodes', [RouteController::class, 'nodes']);
+                $router->post('/from-node', [RouteController::class, 'fromNode']);
                 $router->post('/sort', [RouteController::class, 'sort']);
                 $router->post('/parse', [RouteController::class, 'parse']);
                 $router->post('/save', [RouteController::class, 'save']);
@@ -145,6 +148,7 @@ class AdminRoute
                 $router->post('/sort', [MachineController::class, 'sort']);
                 $router->post('/upgrade', [MachineController::class, 'upgrade']);
                 $router->get('/upgradeStatus', [MachineController::class, 'upgradeStatus']);
+                $router->get('/latestRelease', [MachineController::class, 'latestRelease']);
                 $router->post('/save', [MachineController::class, 'save']);
                 $router->post('/setGroup', [MachineController::class, 'setGroup']);
                 $router->post('/drop', [MachineController::class, 'drop']);
@@ -173,6 +177,8 @@ class AdminRoute
             ], function ($router) {
                 $router->any('/fetch', [UserController::class, 'fetch']);
                 $router->post('/update', [UserController::class, 'update']);
+                $router->post('/subscription/remove', [UserController::class, 'removeSubscription']);
+                $router->post('/subscription/update', [UserController::class, 'updateSubscription']);
                 $router->get('/getUserInfoById', [UserController::class, 'getUserInfoById']);
                 $router->get('/traffic-breakdown', [UserController::class, 'trafficBreakdown']);
                 $router->post('/generate', [UserController::class, 'generate']);

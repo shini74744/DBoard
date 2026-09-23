@@ -35,6 +35,7 @@ class UserController extends Controller
             return $this->fail([400202, '用户不存在']);
         $user->token = Helper::guid();
         $user->uuid = Helper::guid(true);
+        if (!$user->parent_id) $user->primary_package_token = bin2hex(random_bytes(24));
         $result = $user->save();
 
         if ($result) {
@@ -185,7 +186,8 @@ class UserController extends Controller
         $pageSize = $request->input('pageSize', 10);
 
         $userModel = User::query()
-            ->with(['plan:id,name', 'invite_user:id,email', 'group:id,name'])
+            ->whereNull('parent_id')
+            ->with(['plan:id,name', 'invite_user:id,email', 'group:id,name', 'subscriptions:id,parent_id,plan_id,transfer_enable,u,d,expired_at,banned,speed_limit,device_limit', 'subscriptions.plan:id,name'])
             ->select((new User())->getTable() . '.*')
             ->selectRaw('(u + d) as total_used');
 
@@ -211,14 +213,39 @@ class UserController extends Controller
         $user['balance'] = $user['balance'] / 100;
         $user['commission_balance'] = $user['commission_balance'] / 100;
         $user['subscribe_url'] = Helper::getSubscribeUrl($user['token']);
+        $children = $model->subscriptions;
+        $user['subscriptions_count'] = ($model->plan_id ? 1 : 0) + $children->whereNotNull('plan_id')->count();
+        $packages = collect([$model])->concat($children)->whereNotNull('plan_id');
+        $user['subscription_summaries'] = $packages->map(fn (User $item) => [
+            'id' => $item->id, 'plan_id' => $item->plan_id,
+            'plan_name' => $item->plan?->name ?? '套餐',
+            'u' => (int) $item->u, 'd' => (int) $item->d,
+            'transfer_enable' => (int) $item->transfer_enable,
+            'expired_at' => $item->expired_at,
+            'speed_limit' => $item->speed_limit, 'device_limit' => $item->device_limit,
+        ])->values()->all();
+        if ($user['subscriptions_count'] > 1) {
+            $user['plan'] = ['id' => $model->plan_id, 'name' => '多套餐（' . $user['subscriptions_count'] . ' 份）'];
+        }
         return HookManager::filter('admin.user.transform', $user, $model);
     }
 
     public function trafficBreakdown(Request $request)
     {
-        $data = $request->validate(['id' => 'required|integer|exists:v2_user,id']);
+        $data = $request->validate([
+            'id' => 'required|integer|exists:v2_user,id',
+            'subscription_user_id' => 'nullable|integer|min:1',
+        ]);
         $user = User::findOrFail($data['id']);
-        return $this->success(TrafficQuotaBreakdown::forUser($user));
+        if (!empty($data['subscription_user_id'])) {
+            if (!\App\Services\MultiSubscriptionService::owns($user, $data['subscription_user_id'])) {
+                throw new \App\Exceptions\ApiException('所选套餐不属于该用户', 422);
+            }
+            return $this->success(TrafficQuotaBreakdown::forUser(User::findOrFail($data['subscription_user_id'])));
+        }
+        return $this->success($user->subscriptions()->whereNotNull('plan_id')->exists()
+            ? \App\Services\MultiSubscriptionService::mergedBreakdown($user)
+            : TrafficQuotaBreakdown::forUser($user));
     }
 
     public function getUserInfoById(Request $request)
@@ -229,8 +256,84 @@ class UserController extends Controller
             'id.required' => '用户ID不能为空'
         ]);
         $user = User::find($request->input('id'))->load('invite_user');
+        if ($user) {
+            $user['subscriptions'] = \App\Services\MultiSubscriptionService::summary($user);
+        }
         $user = HookManager::filter('admin.user.detail', $user, $request);
         return $this->success($user);
+    }
+
+    public function removeSubscription(Request $request)
+    {
+        $data = $request->validate([
+            'user_id' => 'required|integer|min:1',
+            'subscription_user_id' => 'required|integer|min:1',
+        ]);
+        [$targetId, $oldGroup, $oldToken, $accountToken] = DB::transaction(function () use ($data) {
+            $account = User::query()->whereKey($data['user_id'])->whereNull('parent_id')->lockForUpdate()->firstOrFail();
+            $target = User::query()->whereKey($data['subscription_user_id'])->lockForUpdate()->firstOrFail();
+            if (($target->id !== $account->id && (int) $target->parent_id !== (int) $account->id) || !$target->plan_id) {
+                throw new \App\Exceptions\ApiException('所选套餐不属于该用户或已移除', 422);
+            }
+            $oldGroup = (int) $target->group_id;
+            $oldToken = (string) $target->token;
+            $target->forceFill([
+                'plan_id' => null, 'group_id' => null, 'transfer_enable' => 0, 'expired_at' => 0,
+                'next_reset_at' => null, 'telegram_bonus_cycle' => 0,
+                'telegram_bonus_permanent' => 0, 'telegram_bonus_timed' => 0,
+                'token' => Helper::guid(), 'uuid' => Helper::guid(true),
+                'primary_package_token' => $target->id === $account->id
+                    ? bin2hex(random_bytes(24)) : $target->primary_package_token,
+                'banned' => $target->id === $account->id ? $target->banned : true,
+            ])->saveOrFail();
+            DB::table('v2_telegram_traffic_grant')->where('user_id', $target->id)
+                ->whereNull('revoked_at')->update(['revoked_at' => time()]);
+            \App\Models\SubscriptionCombination::where('user_id', $account->id)->get()->each(function ($combination) use ($target) {
+                $remaining = array_values(array_filter($combination->package_ids, fn ($id) => (int) $id !== (int) $target->id));
+                if (count($remaining) < 2) $combination->delete();
+                else $combination->update(['package_ids' => $remaining]);
+            });
+            return [$target->id, $oldGroup, $oldToken, (string) $account->token];
+        });
+        if ($oldGroup) {
+            try {
+                NodeSyncService::notifyUserRemovedFromGroup($targetId, $oldGroup);
+            } catch (\Throwable $error) {
+                Log::warning('Subscription removal node sync failed', ['user_id' => $targetId, 'error' => $error->getMessage()]);
+            }
+        }
+        \Illuminate\Support\Facades\Cache::forget('user_traffic_' . $targetId);
+        \Illuminate\Support\Facades\Cache::forget('user_subscription_' . $oldToken);
+        \Illuminate\Support\Facades\Cache::forget('user_subscription_' . $accountToken);
+        return $this->success(true);
+    }
+
+    public function updateSubscription(Request $request)
+    {
+        $data = $request->validate([
+            'user_id' => 'required|integer|min:1',
+            'subscription_user_id' => 'required|integer|min:1',
+            'u' => 'sometimes|integer|min:0',
+            'd' => 'sometimes|integer|min:0',
+            'transfer_enable' => 'sometimes|integer|min:0',
+            'expired_at' => 'sometimes|nullable|integer|min:0',
+            'speed_limit' => 'sometimes|nullable|integer|min:0',
+            'device_limit' => 'sometimes|nullable|integer|min:0',
+        ]);
+        $target = DB::transaction(function () use ($data) {
+            $account = User::whereKey($data['user_id'])->whereNull('parent_id')->lockForUpdate()->firstOrFail();
+            $target = User::whereKey($data['subscription_user_id'])->lockForUpdate()->firstOrFail();
+            if (!$target->plan_id || ($target->id !== $account->id && (int) $target->parent_id !== $account->id)) {
+                throw new \App\Exceptions\ApiException('所选套餐不属于该用户或已移除', 422);
+            }
+            $fields = array_intersect_key($data, array_flip(['u', 'd', 'transfer_enable', 'expired_at', 'speed_limit', 'device_limit']));
+            if (!$fields) throw new \App\Exceptions\ApiException('没有需要保存的套餐设置', 422);
+            $target->fill($fields)->saveOrFail();
+            return $target->fresh();
+        });
+        NodeSyncService::notifyUserChanged($target);
+        \Illuminate\Support\Facades\Cache::forget('user_traffic_' . $target->id);
+        return $this->success(true);
     }
 
     public function update(UserUpdate $request)
@@ -240,6 +343,10 @@ class UserController extends Controller
         $user = User::find($request->input('id'));
         if (!$user) {
             return $this->fail([400202, '用户不存在']);
+        }
+        if ($user->subscriptions()->whereNotNull('plan_id')->exists()
+            && array_intersect(array_keys($params), ['u', 'd', 'transfer_enable', 'expired_at', 'speed_limit', 'device_limit', 'plan_id'])) {
+            throw new \App\Exceptions\ApiException('多套餐用户请在对应套餐卡片中修改用量、有效期和限制', 422);
         }
         if (isset($params['email'])) {
             if (User::byEmail($params['email'])->first() && $user->email !== $params['email']) {
@@ -321,6 +428,7 @@ class UserController extends Controller
 
         // 优化查询：使用with预加载plan关系，避免N+1问题
         $query = User::query()
+            ->whereNull('parent_id')
             ->with('plan:id,name')
             ->orderBy('id', 'asc')
             ->select([
@@ -600,6 +708,7 @@ class UserController extends Controller
         $sort = $request->input('sort') ? $request->input('sort') : 'created_at';
 
         $builder = User::query()
+            ->whereNull('parent_id')
             ->with('plan:id,name')
             ->orderBy('id', 'desc');
 
@@ -669,7 +778,7 @@ class UserController extends Controller
         $sortType = in_array($request->input('sort_type'), ['ASC', 'DESC']) ? $request->input('sort_type') : 'DESC';
         $sort = $request->input('sort') ? $request->input('sort') : 'created_at';
 
-        $builder = User::query()->orderBy('id', 'desc');
+        $builder = User::query()->whereNull('parent_id')->orderBy('id', 'desc');
 
         if ($scope === 'filtered') {
             // filtered: keep current semantics
@@ -708,6 +817,11 @@ class UserController extends Controller
 
         try {
             DB::beginTransaction();
+            foreach ($user->subscriptions as $subscription) {
+                $subscription->stat()->delete();
+                $subscription->trafficResetLogs()->delete();
+                $subscription->delete();
+            }
             $user->orders()->delete();
             $user->codes()->delete();
             $user->stat()->delete();

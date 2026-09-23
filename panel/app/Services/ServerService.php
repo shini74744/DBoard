@@ -92,7 +92,7 @@ class ServerService
     {
         $groupIds = $node->group_ids ?? [];
         if (empty($groupIds)) {
-            return collect();
+            return NodeOutboundService::users($node);
         }
         $users = User::toBase()
             ->whereIn('group_id', $groupIds)
@@ -102,6 +102,7 @@ class ServerService
                     ->orWhere('expired_at', NULL);
             })
             ->where('banned', 0)
+            ->whereRaw('(parent_id IS NULL OR NOT EXISTS (SELECT 1 FROM v2_user account WHERE account.id = v2_user.parent_id AND account.banned = 1))')
             ->select([
                 'id',
                 'uuid',
@@ -109,14 +110,13 @@ class ServerService
                 'device_limit'
             ])
             ->get();
-        return HookManager::filter('server.users.get', $users, $node);
+        return collect(HookManager::filter('server.users.get', $users, $node))->concat(NodeOutboundService::users($node))->values();
     }
 
     // 获取路由规则
     public static function getRoutes(array $routeIds)
     {
-        $routes = ServerRoute::select(['id', 'match', 'action', 'action_value'])->whereIn('id', $routeIds)->get();
-        return $routes;
+        return ServerRoute::select(['id', 'match', 'action', 'action_value'])->whereIn('id', $routeIds)->get();
     }
 
     public static function getOutbounds(array $outboundIds): array
@@ -159,7 +159,7 @@ class ServerService
         $nodeType = strtoupper($node->type);
         $nodeId = $node->id;
 
-        Cache::put(CacheKey::get("SERVER_{$nodeType}_ONLINE_USER", $nodeId), count($data), 3600);
+        Cache::put(CacheKey::get("SERVER_{$nodeType}_ONLINE_USER", $nodeId), count(array_filter(array_keys($data), fn($id) => (int)$id > 0)), 3600);
         Cache::put(CacheKey::get("SERVER_{$nodeType}_LAST_PUSH_AT", $nodeId), time(), 3600);
 
         (new UserService())->trafficFetch($node, $node->type, $data);
@@ -172,6 +172,7 @@ class ServerService
     {
         $service = app(DeviceStateService::class);
         foreach ($alive as $uid => $ips) {
+            if ((int)$uid <= 0) continue;
             $service->setDevices((int) $uid, $nodeId, (array) $ips);
         }
     }
@@ -186,6 +187,7 @@ class ServerService
         $nodeId = $node->id;
 
         foreach ($online as $uid => $conn) {
+            if ((int)$uid <= 0) continue;
             $cacheKey = CacheKey::get("USER_ONLINE_CONN_{$nodeType}_{$nodeId}", $uid);
             Cache::put($cacheKey, (int) $conn, $cacheTime);
         }
@@ -270,6 +272,31 @@ class ServerService
             $metricsData,
             $cacheTime
         );
+    }
+
+    /** Expand account-specific rules to each package's node identity. */
+    public static function expandAccountRouteRules(array $rules): array
+    {
+        $accountIds = collect($rules)->flatMap(fn ($rule) => data_get($rule, 'match.user_ids', []))
+            ->map(fn ($id) => (int) $id)->filter()->unique()->all();
+        if (!$accountIds) return $rules;
+        $children = User::whereIn('parent_id', $accountIds)->get(['id', 'parent_id'])->groupBy('parent_id');
+        $expanded = [];
+        foreach ($rules as $rule) {
+            $ids = array_values(array_unique(array_map('intval', data_get($rule, 'match.user_ids', []))));
+            if (!$ids) { $expanded[] = $rule; continue; }
+            $originalIds = $ids;
+            foreach ($originalIds as $accountId) {
+                foreach ($children->get($accountId, collect()) as $child) $ids[] = (int) $child->id;
+            }
+            $ids = array_values(array_unique($ids));
+            foreach (array_chunk($ids, 100) as $chunk) {
+                $copy = $rule;
+                data_set($copy, 'match.user_ids', $chunk);
+                $expanded[] = $copy;
+            }
+        }
+        return $expanded;
     }
 
     public static function compatibleRouteRules(array $rules, bool $userRoutesCapable): array
@@ -428,7 +455,7 @@ class ServerService
                 (bool) Cache::get('dboard_user_routes_capable:' . $node->id)
             );
             if ($rules) {
-                $response['custom_route_rules'] = $rules;
+                $response['custom_route_rules'] = self::expandAccountRouteRules($rules);
             }
         }
 

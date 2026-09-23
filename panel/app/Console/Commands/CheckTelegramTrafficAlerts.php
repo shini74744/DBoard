@@ -21,12 +21,9 @@ class CheckTelegramTrafficAlerts extends Command
 
         User::query()
             ->select([
-                'id', 'telegram_id', 'remind_telegram', 'remind_traffic', 'banned',
+                'id', 'parent_id', 'telegram_id', 'remind_telegram', 'remind_traffic', 'banned',
                 'plan_id', 'expired_at', 'transfer_enable', 'u', 'd', 'last_reset_at',
             ])
-            ->where('remind_telegram', true)
-            ->where('remind_traffic', true)
-            ->whereNotNull('telegram_id')
             ->whereNotNull('plan_id')
             ->where('banned', false)
             ->where('transfer_enable', '>', 0)

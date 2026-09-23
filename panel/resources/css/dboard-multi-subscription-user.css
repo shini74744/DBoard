@@ -1,0 +1,14 @@
+.dboard-multi-open,.dboard-multi-buy{position:fixed;right:24px;bottom:24px;z-index:1000;padding:11px 17px;border:1px solid #9ab6e7;border-radius:14px;background:#315fc4;color:#fff;font:600 14px system-ui;box-shadow:0 10px 28px #203d7240;cursor:pointer}
+.dboard-multi-overlay{position:fixed;inset:0;z-index:3000;background:#0b183099;display:flex;align-items:center;justify-content:center;padding:16px}
+.dboard-multi-dialog{width:min(620px,100%);max-height:90vh;overflow:auto;border-radius:18px;background:#fff;color:#18263a;box-shadow:0 24px 70px #06132b55;padding:20px;font:14px system-ui}
+.dboard-multi-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:15px}.dboard-multi-head h2{font-size:21px;margin:0}
+.dboard-multi-dialog button{padding:8px 12px;border:1px solid #cad6e7;border-radius:9px;background:#fff;color:#1a3458;cursor:pointer}.dboard-multi-dialog button:hover{background:#edf4ff}
+.dboard-multi-dialog .dboard-multi-primary{background:#315fc4;color:#fff;border-color:#315fc4}
+.dboard-multi-row{display:flex;justify-content:space-between;gap:16px;padding:7px 0;border-bottom:1px solid #e5ecf6}.dboard-multi-row span{color:#52657e}
+.dboard-multi-settings,.dboard-multi-package{border:1px solid #d6e2f3;border-radius:13px;padding:15px;margin-top:15px;background:#f8fbff}.dboard-multi-package h3{font-size:16px;margin:0 0 9px}
+.dboard-multi-field{display:grid;gap:6px;margin-bottom:12px}.dboard-multi-field select{width:100%;padding:9px;border:1px solid #bacce6;border-radius:9px;background:#fff;color:#18263a}
+.dboard-multi-package button{margin-top:12px}
+@media(max-width:600px){.dboard-multi-open,.dboard-multi-buy{right:12px;bottom:12px}.dboard-multi-dialog{padding:15px}}html.dark .dboard-multi-dialog{background:#172238;color:#eff5ff;border:1px solid #385276}
+html.dark .dboard-multi-settings,html.dark .dboard-multi-package{background:#20304b;border-color:#385276}
+html.dark .dboard-multi-row{border-color:#385276}html.dark .dboard-multi-row span{color:#b7c9e2}
+html.dark .dboard-multi-dialog button,html.dark .dboard-multi-field select{background:#263956;color:#eff5ff;border-color:#4b6485}

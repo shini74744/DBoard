@@ -78,13 +78,16 @@ class TrafficQuotaBreakdown
     {
         $usages = GiftCardUsage::query()->with('template:id,name')
             ->where(function ($query) use ($userId) {
-                $query->where('user_id', $userId)->orWhere('invite_user_id', $userId);
+                $query->where('subscription_user_id', $userId)
+                    ->orWhere(function ($query) use ($userId) {
+                        $query->where('user_id', $userId)->whereNull('subscription_user_id');
+                    })->orWhere('invite_user_id', $userId);
             })->orderByDesc('id')->limit(100)->get();
         $records = [];
         foreach ($usages as $usage) {
             $name = $usage->template?->name ?: '礼品卡';
             $at = (int) $usage->getRawOriginal('created_at');
-            if ((int) $usage->user_id === $userId) {
+            if ((int) ($usage->subscription_user_id ?: $usage->user_id) === $userId) {
                 $amount = (int) ($usage->rewards_given['transfer_enable'] ?? 0);
                 if ($amount > 0) $records[] = [
                     'bucket' => 'gift_card', 'amount_bytes' => $amount,

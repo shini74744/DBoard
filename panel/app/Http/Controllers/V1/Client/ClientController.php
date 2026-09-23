@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Server;
 use App\Protocols\General;
 use App\Services\Plugin\HookManager;
+use App\Services\MultiSubscriptionService;
 use App\Services\ServerService;
 use App\Services\TelegramUserAlertService;
 use App\Services\UserService;
@@ -44,19 +45,39 @@ class ClientController extends Controller
         $user = $request->user();
         $userService = new UserService();
 
-        if (!$userService->isAvailable($user)) {
+        $account = MultiSubscriptionService::account($user);
+        if ($account->banned || ($user->parent_id && !$userService->isAvailable($user))) {
             HookManager::call('client.subscribe.unavailable');
             return response('', 403, ['Content-Type' => 'text/plain']);
         }
-
-        $response = $this->doSubscribe($request, $user);
+        $combination = $request->attributes->get('subscription_combination');
+        if ($combination) {
+            $ids = $combination->package_ids;
+            if (MultiSubscriptionService::activePackages($account, $ids)->isEmpty()) {
+                return response('', 403, ['Content-Type' => 'text/plain']);
+            }
+            $servers = MultiSubscriptionService::mergedServers($account, $ids, $combination->duplicate_node_mode);
+            $infoPackages = MultiSubscriptionService::packages($account)->filter(fn ($item) => $item->plan_id && in_array($item->id, $ids, true));
+            $response = $this->doSubscribe($request, MultiSubscriptionService::mergedHeaderUser($account, $ids), $servers, $infoPackages);
+        } elseif (!$user->parent_id && !$request->attributes->get('primary_package_subscription') && $account->subscription_link_mode === 'merged') {
+            if (MultiSubscriptionService::activePackages($account)->isEmpty()) {
+                return response('', 403, ['Content-Type' => 'text/plain']);
+            }
+            $servers = MultiSubscriptionService::mergedServers($account);
+            $response = $this->doSubscribe($request, MultiSubscriptionService::mergedHeaderUser($account), $servers, MultiSubscriptionService::packages($account)->whereNotNull('plan_id'));
+        } else {
+            if (!$userService->isAvailable($user)) {
+                return response('', 403, ['Content-Type' => 'text/plain']);
+            }
+            $response = $this->doSubscribe($request, $user);
+        }
         if ($response->getStatusCode() < 400) {
             TelegramUserAlertService::recordSubscriptionAccess($user, (string) $request->ip());
         }
         return $response;
     }
 
-    public function doSubscribe(Request $request, $user, $servers = null)
+    public function doSubscribe(Request $request, $user, $servers = null, $infoPackages = null)
     {
         if ($servers === null) {
             $servers = ServerService::getAvailableServers($user);
@@ -77,7 +98,7 @@ class ClientController extends Controller
             filterKeywords: $filterKeywords
         );
 
-        $this->setSubscribeInfoToServers($serversFiltered, $user, count($servers) - count($serversFiltered));
+        $this->setSubscribeInfoToServers($serversFiltered, $infoPackages ?? collect([$user]), count($servers) - count($serversFiltered));
         $serversFiltered = $this->addPrefixToServerName($serversFiltered);
 
         // Instantiate the protocol class with filtered servers and client info
@@ -195,34 +216,47 @@ class ClientController extends Controller
         ];
     }
 
-    private function setSubscribeInfoToServers(&$servers, $user, $rejectServerCount = 0)
+    /** Information entries use an inert address and credentials, never a real node. */
+    private function informationServer(array $template, string $name): array
     {
-        if (!isset($servers[0]))
-            return;
+        return [
+            'id' => 0, 'type' => $template['type'], 'name' => $name,
+            'host' => 'subscription-info.invalid', 'port' => 1,
+            'password' => '00000000-0000-0000-0000-000000000000',
+            'rate' => 1, 'tags' => [], 'is_subscription_info' => true,
+            'protocol_settings' => [
+                'network' => 'tcp', 'tls' => 0, 'flow' => '',
+                'cipher' => 'aes-128-gcm',
+                'version' => $template['protocol_settings']['version'] ?? 2,
+                'up_mbps' => 1, 'down_mbps' => 1,
+            ],
+        ];
+    }
+
+    private function setSubscribeInfoToServers(&$servers, $packages, $rejectServerCount = 0)
+    {
+        if (!isset($servers[0])) return;
+        $template = $servers[0];
+        $information = [];
         if ($rejectServerCount > 0) {
-            array_unshift($servers, array_merge($servers[0], [
-                'name' => "过滤掉{$rejectServerCount}条线路",
-            ]));
+            $information[] = $this->informationServer($template, "过滤掉{$rejectServerCount}条线路（仅提示）");
         }
-        if (!(int) admin_setting('show_info_to_server_enable', 0))
-            return;
-        $useTraffic = $user['u'] + $user['d'];
-        $totalTraffic = $user['transfer_enable'];
-        $remainingTraffic = Helper::trafficConvert($totalTraffic - $useTraffic);
-        $expiredDate = $user['expired_at'] ? date('Y-m-d', $user['expired_at']) : __('长期有效');
-        $userService = new UserService();
-        $resetDay = $userService->getResetDay($user);
-        array_unshift($servers, array_merge($servers[0], [
-            'name' => "套餐到期：{$expiredDate}",
-        ]));
-        if ($resetDay) {
-            array_unshift($servers, array_merge($servers[0], [
-                'name' => "距离下次重置剩余：{$resetDay} 天",
-            ]));
+        if ((int) admin_setting('show_info_to_server_enable', 0)) {
+            $userService = new UserService();
+            $first = $packages->first();
+            $displayNames = $first ? MultiSubscriptionService::displayNames(MultiSubscriptionService::account($first)) : [];
+            foreach ($packages as $package) {
+                $prefix = ($displayNames[$package->id] ?? $package->plan?->name ?? '套餐') . ' · ';
+                $remaining = Helper::trafficConvert(max(0, $package->transfer_enable - $package->u - $package->d));
+                $expiry = $package->expired_at ? date('Y-m-d', $package->expired_at) : __('长期有效');
+                $reset = $userService->getResetDay($package);
+                $resetText = $reset === null ? '不重置' : ($reset === 0 ? '今日重置' : "{$reset} 天");
+                foreach (["剩余流量：{$remaining}", "距离下次重置：{$resetText}", "套餐到期：{$expiry}"] as $message) {
+                    $information[] = $this->informationServer($template, $prefix . $message);
+                }
+            }
         }
-        array_unshift($servers, array_merge($servers[0], [
-            'name' => "剩余流量：{$remainingTraffic}",
-        ]));
+        $servers = array_merge($information, $servers);
     }
 
     private function addPrefixToServerName(array $servers): array
@@ -232,7 +266,7 @@ class ClientController extends Controller
         }
         return collect($servers)
             ->map(function (array $server): array {
-                $server['name'] = $this->getPrefixedServerName($server);
+                if (empty($server['is_subscription_info'])) $server['name'] = $this->getPrefixedServerName($server);
                 return $server;
             })
             ->all();

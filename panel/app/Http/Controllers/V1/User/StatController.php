@@ -5,6 +5,7 @@ namespace App\Http\Controllers\V1\User;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\TrafficLogResource;
 use App\Models\StatUser;
+use App\Services\MultiSubscriptionService;
 use App\Services\StatisticalService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,11 +17,14 @@ class StatController extends Controller
         $days = (int) ($request->validate([
             'days' => 'sometimes|integer|min:1|max:90',
         ])['days'] ?? 30);
+        $targetId = $request->validate(['subscription_user_id' => 'sometimes|integer|min:1'])['subscription_user_id'] ?? null;
+        if ($targetId && !MultiSubscriptionService::owns($request->user(), (int) $targetId)) abort(403);
+        $userIds = $targetId ? [(int) $targetId] : MultiSubscriptionService::packages($request->user())->pluck('id')->all();
         $today = now()->startOfDay();
         $start = $today->copy()->subDays($days - 1);
 
         $records = StatUser::query()
-            ->where('user_id', $request->user()->id)
+            ->whereIn('user_id', $userIds)
             ->where('record_type', 'd')
             ->whereBetween('record_at', [$start->timestamp, $today->copy()->endOfDay()->timestamp])
             ->selectRaw('record_at, SUM(u) as upload, SUM(d) as download')
@@ -46,9 +50,12 @@ class StatController extends Controller
 
     public function getTrafficLog(Request $request)
     {
+        $targetId = $request->validate(['subscription_user_id' => 'sometimes|integer|min:1'])['subscription_user_id'] ?? null;
+        if ($targetId && !MultiSubscriptionService::owns($request->user(), (int) $targetId)) abort(403);
+        $userIds = $targetId ? [(int) $targetId] : MultiSubscriptionService::packages($request->user())->pluck('id')->all();
         $startDate = now()->startOfMonth()->timestamp;
         $records = StatUser::query()
-            ->where('user_id', $request->user()->id)
+            ->whereIn('user_id', $userIds)
             ->where('record_at', '>=', $startDate)
             ->orderBy('record_at', 'DESC')
             ->get();

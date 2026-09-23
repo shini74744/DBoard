@@ -49,6 +49,7 @@ html.dboard-marketing-open :is(#root, #content) { overflow: hidden !important; }
   background: hsl(var(--background)); color: hsl(var(--foreground));
 }
 .dboard-marketing-header { display: flex; justify-content: space-between; align-items: start; gap: 1rem; margin: 0 0 1rem; }
+.dboard-marketing-close { flex-shrink: 0; white-space: nowrap; }
 .dboard-marketing-header h1 { margin: 0 0 .3rem; font-size: 1.5rem; font-weight: 700; }
 .dboard-marketing-header p { margin: 0; color: hsl(var(--muted-foreground)); font-size: .9rem; }
 .dboard-marketing-panel button { border: 1px solid hsl(var(--border)); border-radius: .5rem; padding: .55rem .9rem; background: hsl(var(--card)); color: hsl(var(--foreground)); cursor: pointer; }

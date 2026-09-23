@@ -24,13 +24,14 @@ class TelegramBindingController extends Controller
             || !($planId === 'all' || $planId === 'none' || (ctype_digit($planId) && (int) $planId > 0))) {
             throw ValidationException::withMessages(['filter' => '筛选条件无效']);
         }
-        $query = User::query()->with('plan:id,name');
+        $query = User::query()->whereNull('parent_id')->with(['plan:id,name', 'subscriptions.plan:id,name']);
         if ($binding === 'telegram') $query->whereNotNull('telegram_id')->where('telegram_id', '>', 0);
         if ($binding === 'email_only') $query->where(function ($builder) {
             $builder->whereNull('telegram_id')->orWhere('telegram_id', '<=', 0);
         });
-        if ($planId === 'none') $query->whereNull('plan_id');
-        elseif ($planId !== 'all') $query->where('plan_id', (int) $planId);
+        if ($planId === 'none') $query->whereNull('plan_id')->whereDoesntHave('subscriptions', fn ($q) => $q->whereNotNull('plan_id'));
+        elseif ($planId !== 'all') $query->where(fn ($q) => $q->where('plan_id', (int) $planId)
+            ->orWhereHas('subscriptions', fn ($child) => $child->where('plan_id', (int) $planId)));
         if ($search !== '') {
             $query->where(function ($builder) use ($search) {
                 $builder->where('email', 'like', '%' . addcslashes($search, '%_\\') . '%')
@@ -43,20 +44,23 @@ class TelegramBindingController extends Controller
         }
         $users = $query->orderByDesc('id')->paginate(20, ['*'], 'page', $page);
         $items = $users->getCollection()->map(function (User $user) {
-            $expiredAt = $user->expired_at === null ? null : (int) $user->expired_at;
+            $active = \App\Services\MultiSubscriptionService::activePackages($user);
+            $expiry = $active->contains(fn (User $item) => $item->expired_at === null)
+                ? null : ($active->max('expired_at') ?? $user->expired_at);
+            $expiredAt = $expiry === null ? null : (int) $expiry;
             return [
                 'id' => (int) $user->id,
                 'telegram_id' => (int) $user->telegram_id,
                 'telegram_username' => $user->telegram_username,
                 'telegram_username_synced_at' => $user->telegram_username_synced_at,
                 'email' => $user->email,
-                'plan' => $user->plan?->name,
+                'plan' => $active->count() > 1 ? '多套餐（' . $active->count() . ' 份）' : ($active->first()?->plan?->name ?? $user->plan?->name),
                 'expired_at' => $expiredAt,
                 'remaining_days' => $expiredAt === null ? null : max(0, (int) ceil(($expiredAt - time()) / 86400)),
-                'remaining_bytes' => max(0, (int) $user->transfer_enable - (int) $user->u - (int) $user->d),
-                'cycle_bonus_bytes' => (int) $user->telegram_bonus_cycle,
-                'permanent_bonus_bytes' => (int) $user->telegram_bonus_permanent,
-                'timed_bonus_bytes' => (int) $user->telegram_bonus_timed,
+                'remaining_bytes' => $active->sum(fn (User $item) => $item->getRemainingTraffic()),
+                'cycle_bonus_bytes' => $active->sum(fn (User $item) => (int) $item->telegram_bonus_cycle),
+                'permanent_bonus_bytes' => $active->sum(fn (User $item) => (int) $item->telegram_bonus_permanent),
+                'timed_bonus_bytes' => $active->sum(fn (User $item) => (int) $item->telegram_bonus_timed),
             ];
         });
         return $this->success([
@@ -134,8 +138,9 @@ class TelegramBindingController extends Controller
     {
         $grants = DB::table('v2_telegram_traffic_grant as grant')
             ->leftJoin('v2_user as user', 'user.id', '=', 'grant.user_id')
+            ->leftJoin('v2_user as account', 'account.id', '=', 'grant.account_user_id')
             ->orderByDesc('grant.id')->limit(30)
-            ->get(['grant.id', 'grant.user_id', 'user.email', 'grant.amount_bytes',
+            ->get(['grant.id', 'grant.user_id', DB::raw('COALESCE(account.email, user.email) as email'), 'grant.amount_bytes',
                 'grant.mode', 'grant.source', 'grant.reason', 'grant.duration_days',
                 'grant.expires_at', 'grant.revoked_at', 'grant.created_at']);
         return $this->success($grants);

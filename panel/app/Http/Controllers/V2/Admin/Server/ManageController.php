@@ -171,7 +171,11 @@ class ManageController extends Controller
         }
 
         try {
-            $deleted = Server::whereIn('id', $ids)->delete();
+            $deleted = DB::transaction(function () use ($ids) {
+                $nodes = Server::whereIn('id', $ids)->get();
+                foreach ($nodes as $node) $node->delete();
+                return $nodes->count();
+            });
             if ($deleted === false) {
                 return $this->fail([500, '批量删除失败']);
             }

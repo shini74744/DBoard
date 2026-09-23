@@ -80,15 +80,17 @@
   <style>{!! file_get_contents(resource_path('css/dboard-admin-overrides.css')) !!}</style>
   <style>{!! file_get_contents(resource_path('css/dboard-admin-groups.css')) !!}</style>
   <style>{!! file_get_contents(resource_path('css/dboard-admin-theme.css')) !!}</style>
+  <style>{!! file_get_contents(resource_path('css/dboard-multi-subscription-admin.css')) !!}</style>
 </head>
 
 <body>
   <div id="root"></div>
   <script>{!! file_get_contents(resource_path('js/dboard-telegram-settings.js')) !!}</script>
-  <script>{!! file_get_contents(resource_path('js/dboard-outbound-sort.js')) !!}</script>
+  <script>{!! file_get_contents(resource_path('js/dboard-resource-sort.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-marketing-notifications.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-telegram-binding.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-user-traffic.js')) !!}</script>
+  <script>{!! file_get_contents(resource_path('js/dboard-multi-subscription-admin.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-machine-sort.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-machine-upgrade.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-admin-groups.js')) !!}</script>

@@ -63,20 +63,39 @@ class OrderService
         Plan $plan,
         string $period,
         ?string $couponCode = null,
+        string $subscriptionAction = 'auto',
+        ?int $subscriptionUserId = null,
     ): Order {
         $userService = app(UserService::class);
         $planService = new PlanService($plan);
-
-        $planService->validatePurchase($user, $period);
+        if (!in_array($subscriptionAction, ['auto', 'add', 'renew'], true)) {
+            throw new ApiException('无效的套餐操作');
+        }
+        if ($subscriptionAction === 'add' && PlanService::getPeriodKey($period) === Plan::PERIOD_RESET_TRAFFIC) {
+            throw new ApiException('新增套餐不能使用流量重置包');
+        }
+        if ($subscriptionAction === 'renew') {
+            if (!$subscriptionUserId || !MultiSubscriptionService::owns($user, $subscriptionUserId)) {
+                throw new ApiException('请选择自己的套餐续费');
+            }
+            $target = User::findOrFail($subscriptionUserId);
+            if ((int) $target->plan_id !== (int) $plan->id) {
+                throw new ApiException('续费套餐与所选套餐不一致');
+            }
+            $planService->validatePurchase($target, $period);
+        } else {
+            $purchaseUser = $subscriptionAction === 'add' ? new User(['plan_id' => null]) : $user;
+            $planService->validatePurchase($purchaseUser, $period);
+        }
         HookManager::call('order.create.before', [$user, $plan, $period, $couponCode]);
 
-        return DB::transaction(function () use ($user, $plan, $period, $couponCode, $userService) {
+        return DB::transaction(function () use ($user, $plan, $period, $couponCode, $userService, $subscriptionAction, $subscriptionUserId) {
             $user = User::lockForUpdate()->find($user->id);
             if (!$user) {
                 throw new ApiException(__('The user does not exist'));
             }
 
-            if ($userService->isNotCompleteOrderByUserId($user->id)) {
+            if ($subscriptionAction !== 'add' && $userService->isNotCompleteOrderByUserId($user->id)) {
                 throw new ApiException(__('You have an unpaid or pending order, please try again later or cancel it'));
             }
 
@@ -88,6 +107,8 @@ class OrderService
                 'period' => $newPeriod,
                 'trade_no' => Helper::generateOrderNo(),
                 'total_amount' => (int) (optional($plan->prices)[$newPeriod] * 100),
+                'subscription_action' => $subscriptionAction,
+                'subscription_user_id' => $subscriptionAction === 'renew' ? $subscriptionUserId : null,
             ]);
 
             $orderService = new self($order);
@@ -132,10 +153,27 @@ class OrderService
 
             HookManager::call('order.open.before', $order);
 
-            $this->user = User::lockForUpdate()->find($order->user_id);
+            $account = User::lockForUpdate()->findOrFail($order->user_id);
+            if ($order->subscription_action === 'add') {
+                $this->user = MultiSubscriptionService::validPackages($account)->isNotEmpty()
+                    ? MultiSubscriptionService::createPackage($account) : $account;
+                $order->subscription_user_id = $this->user->id;
+            } elseif (in_array($order->subscription_action, ['renew', 'extend'], true)) {
+                if (!$order->subscription_user_id || !MultiSubscriptionService::owns($account, (int) $order->subscription_user_id)) {
+                    throw new \RuntimeException('Invalid subscription owner');
+                }
+                $this->user = User::lockForUpdate()->findOrFail($order->subscription_user_id);
+                if ((int) $this->user->plan_id !== (int) $plan->id) {
+                    throw new \RuntimeException('Subscription plan changed before payment');
+                }
+            } else {
+                $this->user = $account;
+                $order->subscription_user_id = $account->id;
+            }
 
             if ($order->surplus_credit) {
-                $this->user->balance += $order->surplus_credit;
+                $account->balance += $order->surplus_credit;
+                $account->save();
             }
 
             if ($order->surplus_order_ids) {
@@ -143,14 +181,37 @@ class OrderService
                     ->update(['status' => Order::STATUS_DISCOUNTED]);
             }
 
-            match ((string) $order->period) {
-                Plan::PERIOD_ONETIME => $this->buyByOneTime($plan),
-                Plan::PERIOD_RESET_TRAFFIC => app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER),
-                default => $this->buyByPeriod($order, $plan),
-            };
+            if ($order->subscription_action === 'extend') {
+                if ($this->user->expired_at === null) throw new \RuntimeException('长期有效套餐无需叠加时长');
+                $base = max(time(), (int) $this->user->expired_at);
+                $expiry = $order->custom_expired_at !== null
+                    ? (int) $order->custom_expired_at
+                    : ($order->custom_duration_days !== null
+                        ? $base + (int) $order->custom_duration_days * 86400
+                        : $this->getTime($order->period, $base));
+                if ($expiry <= $base) throw new \RuntimeException('新的到期时间必须晚于现有到期时间');
+                $this->user->expired_at = $expiry;
+            } else {
+                match ((string) $order->period) {
+                    Plan::PERIOD_ONETIME => $this->buyByOneTime($plan),
+                    Plan::PERIOD_RESET_TRAFFIC => app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER),
+                    default => $this->buyByPeriod($order, $plan),
+                };
 
-            $this->setSpeedLimit($plan->speed_limit);
-            $this->setDeviceLimit($plan->device_limit);
+                if ($order->subscription_action === 'add') {
+                    if ($order->custom_duration_days !== null) {
+                        $this->user->expired_at = time() + (int) $order->custom_duration_days * 86400;
+                    } elseif ($order->custom_expired_at !== null) {
+                        if ((int) $order->custom_expired_at <= time()) {
+                            throw new \RuntimeException('指定的套餐到期时间已过，请重新设置');
+                        }
+                        $this->user->expired_at = (int) $order->custom_expired_at;
+                    }
+                }
+
+                $this->setSpeedLimit($plan->speed_limit);
+                $this->setDeviceLimit($plan->device_limit);
+            }
 
             if (!$this->user->save()) {
                 throw new \RuntimeException('用户信息保存失败');
@@ -178,17 +239,35 @@ class OrderService
             default => 0,
         };
 
-        if ($eventId) {
+        if ($eventId && $order->subscription_action !== 'extend') {
             $this->openEvent($eventId);
         }
 
         HookManager::call('order.open.after', $order);
+        NodeSyncService::notifyUserChanged($this->user);
+        if ($order->subscription_action === 'add' && $this->user->parent_id && $this->user->group_id) {
+            \App\Models\Server::whereJsonContains('group_ids', (string) $this->user->group_id)
+                ->get(['id', 'custom_route_rules'])
+                ->each(function ($server) {
+                    if ($server->custom_route_rules) NodeSyncService::notifyConfigUpdated($server->id);
+                });
+        }
     }
 
 
     public function setOrderType(User $user)
     {
         $order = $this->order;
+        if ($order->subscription_action === 'add') {
+            $order->type = Order::TYPE_ADDITIONAL;
+            return;
+        }
+        if ($order->subscription_action === 'renew') {
+            $user = User::findOrFail($order->subscription_user_id);
+            $order->type = $user->expired_at !== null && $user->expired_at < time()
+                ? Order::TYPE_NEW_PURCHASE : Order::TYPE_RENEWAL;
+            return;
+        }
         if ($order->period === Plan::PERIOD_RESET_TRAFFIC) {
             $order->type = Order::TYPE_RESET_TRAFFIC;
         } else if ($user->plan_id !== NULL && $order->plan_id !== $user->plan_id && ($user->expired_at > time() || $user->expired_at === NULL)) {
@@ -417,7 +496,7 @@ class OrderService
         $this->user->telegram_bonus_timed = $timed;
         $this->user->transfer_enable = $plan->transfer_enable * 1073741824 + $permanent + $carryCycle + $timed;
         // 从一次性转换到循环或者新购的时候，重置流量
-        if ($this->user->expired_at === NULL || $order->type === Order::TYPE_NEW_PURCHASE)
+        if ($this->user->expired_at === NULL || in_array((int) $order->type, [Order::TYPE_NEW_PURCHASE, Order::TYPE_ADDITIONAL], true))
             app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER);
         $this->user->telegram_bonus_cycle = $carryCycle;
         $this->user->plan_id = $plan->id;

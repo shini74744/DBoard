@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\V1\Client;
 
 use App\Http\Controllers\Controller;
+use App\Services\MultiSubscriptionService;
 use App\Services\ServerService;
 use App\Services\UserService;
 use Illuminate\Http\Request;
@@ -16,7 +17,15 @@ class AppController extends Controller
         $servers = [];
         $user = $request->user();
         $userService = new UserService();
-        if ($userService->isAvailable($user)) {
+        if (($user->parent_id && $user->parent?->banned) || $user->banned) {
+            return response('', 403);
+        }
+        $combination = $request->attributes->get('subscription_combination');
+        if ($combination) {
+            $servers = MultiSubscriptionService::mergedServers($user, $combination->package_ids, $combination->duplicate_node_mode);
+        } elseif (!$user->parent_id && !$request->attributes->get('primary_package_subscription') && $user->subscription_link_mode === 'merged') {
+            $servers = MultiSubscriptionService::mergedServers($user);
+        } elseif ($userService->isAvailable($user)) {
             $servers = ServerService::getAvailableServers($user);
         }
         $defaultConfig = base_path() . '/resources/rules/app.clash.yaml';
@@ -39,15 +48,15 @@ class AppController extends Controller
                     'chacha20-ietf-poly1305'
                 ])
             ) {
-                array_push($proxy, \App\Protocols\Clash::buildShadowsocks($user['uuid'], $item));
+                array_push($proxy, \App\Protocols\Clash::buildShadowsocks($item['password'], $item));
                 array_push($proxies, $item['name']);
             }
             if ($item['type'] === 'vmess') {
-                array_push($proxy, \App\Protocols\Clash::buildVmess($user['uuid'], $item));
+                array_push($proxy, \App\Protocols\Clash::buildVmess($item['password'], $item));
                 array_push($proxies, $item['name']);
             }
             if ($item['type'] === 'trojan') {
-                array_push($proxy, \App\Protocols\Clash::buildTrojan($user['uuid'], $item));
+                array_push($proxy, \App\Protocols\Clash::buildTrojan($item['password'], $item));
                 array_push($proxies, $item['name']);
             }
         }

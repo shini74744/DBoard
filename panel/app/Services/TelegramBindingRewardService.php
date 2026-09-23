@@ -102,17 +102,20 @@ class TelegramBindingRewardService
         $result = DB::transaction(function () use ($userId, $bytes, $mode, $source, $rewardKey, $createdBy, $reason, $durationDays) {
             $now = time();
             $expiresAt = $mode === 'timed' ? $now + $durationDays * 86400 : null;
-            $user = User::query()->whereKey($userId)->lockForUpdate()->firstOrFail();
-            if (!$user->telegram_id) {
+            $account = User::query()->whereKey($userId)->lockForUpdate()->firstOrFail();
+            if (!$account->telegram_id) {
                 throw ValidationException::withMessages(['user_id' => '用户尚未绑定 Telegram 机器人']);
             }
+            $target = MultiSubscriptionService::validPackages($account)->first() ?: $account;
+            $user = $target->id === $account->id
+                ? $account : User::query()->whereKey($target->id)->lockForUpdate()->firstOrFail();
 
             $previous = DB::table('v2_telegram_traffic_grant')->where('reward_key', $rewardKey)->first();
             if ($previous) {
-                if ($source === 'bind' && $previous->source === 'bind' && (int) $previous->user_id === $userId) {
+                if ($source === 'bind' && $previous->source === 'bind' && (int) ($previous->account_user_id ?: $previous->user_id) === $userId) {
                     return ['awarded' => false, 'amount_bytes' => (int) $previous->amount_bytes, 'mode' => $previous->mode];
                 }
-                if ((int) $previous->user_id !== $userId || (int) $previous->amount_bytes !== $bytes
+                if ((int) ($previous->account_user_id ?: $previous->user_id) !== $userId || (int) $previous->amount_bytes !== $bytes
                     || $previous->mode !== $mode || $previous->source !== $source
                     || ($mode === 'timed' && (int) $previous->duration_days !== $durationDays)) {
                     throw ValidationException::withMessages(['request_id' => '赠送请求编号已被使用']);
@@ -136,8 +139,9 @@ class TelegramBindingRewardService
             $user->save();
 
             DB::table('v2_telegram_traffic_grant')->insert([
-                'user_id' => $userId,
-                'telegram_id' => (int) $user->telegram_id,
+                'user_id' => $user->id,
+                'account_user_id' => $account->id,
+                'telegram_id' => (int) $account->telegram_id,
                 'amount_bytes' => $bytes,
                 'mode' => $mode,
                 'source' => $source,
@@ -157,7 +161,8 @@ class TelegramBindingRewardService
                 'reason' => $reason,
                 'duration_days' => $mode === 'timed' ? $durationDays : null,
                 'expires_at' => $expiresAt,
-                'telegram_id' => (int) $user->telegram_id,
+                'telegram_id' => (int) $account->telegram_id,
+                'package_name' => ($user->plan?->name ?? '待开通套餐') . ' #' . $user->id,
                 'remaining_bytes' => max(0, (int) $user->transfer_enable - (int) $user->u - (int) $user->d),
             ];
         });
@@ -171,7 +176,8 @@ class TelegramBindingRewardService
                 'permanent' => '有效套餐期间每次重置后保留；到期断档后新购会清除',
                 default => '仅当前流量周期有效',
             };
-            $message = "🎁 DBoard 流量赠送\n您的账号已获得 {$amount} GB 流量（{$period}）。\n原因：{$reason}\n";
+            $package = $result['package_name'];
+            $message = "🎁 DBoard 流量赠送\n{$package} 已获得 {$amount} GB 流量（{$period}）。\n原因：{$reason}\n";
             $message .= $result['pending_plan']
                 ? '仅在有效套餐期间可用；赠送已记录，有效期从现在开始计算，开通套餐后才能使用。'
                 : "仅在当前有效套餐期间可用；套餐到期断档后赠送失效。提前续费保持套餐连续时，可用至赠送期限。\n当前剩余流量：{$remaining} GB";
@@ -184,7 +190,7 @@ class TelegramBindingRewardService
                 ]);
             }
         }
-        unset($result['telegram_id'], $result['remaining_bytes']);
+        unset($result['telegram_id'], $result['remaining_bytes'], $result['package_name']);
         return $result;
     }
 

@@ -30,3 +30,6 @@ storage/framework/views/*
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Isolated Laravel test database
+/panel/:memory:

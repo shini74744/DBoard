@@ -663,7 +663,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 
 import { useI18n } from 'vue-i18n';
 
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import MarkdownIt from 'markdown-it';
 
@@ -1350,6 +1350,7 @@ const formatTimeShort = (timestamp) => {
 const isSmallScreen = ref(false);
 
 const router = useRouter();
+const route = useRoute();
 
 const checkScreenSize = () => {
     isSmallScreen.value = window.innerWidth < 905;
@@ -1388,7 +1389,12 @@ onMounted(() => {
 
     fetchTickets();
 
-    checkTicketPopup();
+    if (/^[1-9]\d*$/.test(String(route.query.subscription_user_id || ''))) {
+        newTicket.value.subject = t('dashboard.subscriptionInfo') + (route.query.subscription_name ? ' · ' + route.query.subscription_name : '');
+        showNewTicketModal();
+    } else {
+        checkTicketPopup();
+    }
 });
 
 onUnmounted(() => {

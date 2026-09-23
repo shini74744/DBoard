@@ -12,6 +12,7 @@ class ServerObserver
 
     public function created(Server $server): void
     {
+        \App\Services\NodeOutboundService::notifyChanged($server);
         $this->notifyMachineNodesChanged($server->machine_id);
         if ($server->show && $server->enabled) {
             UserTelegramNotifier::broadcast('telegram_user_notify_node_new', "🆕 新节点上线：{$server->name}");
@@ -20,6 +21,9 @@ class ServerObserver
 
     public function updated(Server $server): void
     {
+        if ($server->wasChanged(['host','port','protocol_settings','type','enabled','outbound_ids'])) {
+            \App\Services\NodeOutboundService::notifyChanged($server);
+        }
         if ($server->wasChanged('name') && $server->show) {
             $oldName = $server->getPrevious()['name'] ?? '';
             UserTelegramNotifier::broadcast(
@@ -61,6 +65,7 @@ class ServerObserver
 
     public function deleted(Server $server): void
     {
+        \App\Services\NodeOutboundService::notifyChanged($server);
         $this->notifyMachineChange(null, $server->getOriginal('machine_id') ?: $server->machine_id);
     }
 

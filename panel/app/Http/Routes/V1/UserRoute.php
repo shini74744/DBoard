@@ -10,6 +10,7 @@ use App\Http\Controllers\V1\User\NoticeController;
 use App\Http\Controllers\V1\User\OrderController;
 use App\Http\Controllers\V1\User\PlanController;
 use App\Http\Controllers\V1\User\ServerController;
+use App\Http\Controllers\V1\User\SubscriptionCombinationController;
 use App\Http\Controllers\V1\User\StatController;
 use App\Http\Controllers\V1\User\TelegramController;
 use App\Http\Controllers\V1\User\TicketController;
@@ -30,6 +31,10 @@ class UserRoute
             $router->post('/changePassword', [UserController::class, 'changePassword']);
             $router->post('/update', [UserController::class, 'update']);
             $router->get('/getSubscribe', [UserController::class, 'getSubscribe']);
+            $router->post('/subscriptions/preferences', [UserController::class, 'updateSubscriptionPreferences']);
+            $router->get('/subscriptions/combinations', [SubscriptionCombinationController::class, 'index']);
+            $router->post('/subscriptions/combinations/save', [SubscriptionCombinationController::class, 'save']);
+            $router->post('/subscriptions/combinations/delete', [SubscriptionCombinationController::class, 'delete']);
             $router->get('/getStat', [UserController::class, 'getStat']);
             $router->get('/checkLogin', [UserController::class, 'checkLogin']);
             $router->post('/transfer', [UserController::class, 'transfer']);

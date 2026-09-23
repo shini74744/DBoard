@@ -210,7 +210,8 @@ class OrderController extends Controller
         }
 
         $userService = new UserService();
-        if ($userService->isNotCompleteOrderByUserId($user->id)) {
+        if (!in_array($request->input('subscription_action', 'auto'), ['add', 'extend'], true)
+            && $userService->isNotCompleteOrderByUserId($user->id)) {
             return $this->fail([400, '该用户还有待支付的订单，无法分配']);
         }
 
@@ -224,8 +225,41 @@ class OrderController extends Controller
             $order->period = PlanService::getPeriodKey((string) $period);
             $order->trade_no = Helper::guid();
             $order->total_amount = $request->input('total_amount');
+            $order->subscription_action = $request->input('subscription_action', 'auto');
+            $order->subscription_user_id = $request->integer('subscription_user_id') ?: null;
+            $order->custom_duration_days = $request->filled('custom_duration_days') ? $request->integer('custom_duration_days') : null;
+            $order->custom_expired_at = $request->filled('custom_expired_at') ? $request->integer('custom_expired_at') : null;
+            if (($order->custom_duration_days || $order->custom_expired_at) && !in_array($order->subscription_action, ['add', 'extend'], true)) {
+                throw new \App\Exceptions\ApiException('单独设置有效期仅适用于新增套餐或叠加时长');
+            }
+            if ($order->custom_duration_days && $order->custom_expired_at) {
+                throw new \App\Exceptions\ApiException('请选择一种套餐有效期设置方式');
+            }
+            if (!in_array($order->subscription_action, ['auto', 'add', 'renew', 'extend'], true)) {
+                throw new \App\Exceptions\ApiException('无效的套餐操作');
+            }
+            if (in_array($order->subscription_action, ['renew', 'extend'], true) && (!$order->subscription_user_id || !\App\Services\MultiSubscriptionService::owns($user, $order->subscription_user_id))) {
+                throw new \App\Exceptions\ApiException('所选套餐不属于该用户');
+            }
 
-            if (PlanService::getPeriodKey((string) $order->period) === Plan::PERIOD_RESET_TRAFFIC) {
+            if ($order->subscription_action === 'add') {
+                if (PlanService::getPeriodKey((string) $order->period) === Plan::PERIOD_RESET_TRAFFIC) {
+                    throw new \App\Exceptions\ApiException('新增套餐不能使用流量重置包');
+                }
+                $order->type = Order::TYPE_ADDITIONAL;
+            } else if (in_array($order->subscription_action, ['renew', 'extend'], true)) {
+                $target = User::findOrFail($order->subscription_user_id);
+                if ((int) $target->plan_id !== (int) $plan->id) {
+                    throw new \App\Exceptions\ApiException('续费套餐与所选套餐不一致');
+                }
+                if ($order->subscription_action === 'extend') {
+                    if ($target->expired_at === null) throw new \App\Exceptions\ApiException('长期有效套餐无需叠加时长', 422);
+                    if ($order->custom_expired_at && $order->custom_expired_at <= max(time(), $target->expired_at)) throw new \App\Exceptions\ApiException('新的到期时间必须晚于现有到期时间', 422);
+                    if (!$order->custom_duration_days && !$order->custom_expired_at && !in_array($order->period, ['monthly', 'quarterly', 'half_yearly', 'yearly', 'two_yearly', 'three_yearly'], true)) throw new \App\Exceptions\ApiException('请为叠加时长选择有效天数或时间周期', 422);
+                }
+                $order->type = $target->expired_at !== null && $target->expired_at < time()
+                    ? Order::TYPE_NEW_PURCHASE : Order::TYPE_RENEWAL;
+            } else if (PlanService::getPeriodKey((string) $order->period) === Plan::PERIOD_RESET_TRAFFIC) {
                 $order->type = Order::TYPE_RESET_TRAFFIC;
             } else if ($user->plan_id !== NULL && $order->plan_id !== $user->plan_id) {
                 $order->type = Order::TYPE_UPGRADE;

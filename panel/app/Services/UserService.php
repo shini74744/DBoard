@@ -125,8 +125,13 @@ class UserService
 
         $timestamp = strtotime(date('Y-m-d'));
         collect($data)->chunk(1000)->each(function ($chunk) use ($timestamp, $server, $protocol) {
-            TrafficFetchJob::dispatch($server, $chunk->toArray(), $protocol, $timestamp);
-            StatUserJob::dispatch($server, $chunk->toArray(), $protocol, 'd');
+            // Internal node relay identities use negative IDs. Count physical node
+            // traffic, while charging real accounts only at their entry node.
+            $accounts = $chunk->filter(fn($bytes, $id) => (int)$id > 0)->toArray();
+            if ($accounts) {
+                TrafficFetchJob::dispatch($server, $accounts, $protocol, $timestamp);
+                StatUserJob::dispatch($server, $accounts, $protocol, 'd');
+            }
             StatServerJob::dispatch($server, $chunk->toArray(), $protocol, 'd');
         });
     }

@@ -24,7 +24,7 @@ Schema::create('v2_settings', function (Blueprint $table) {
     $table->id(); $table->string('name')->unique(); $table->text('value')->nullable(); $table->timestamps();
 });
 Schema::create('v2_user', function (Blueprint $table) {
-    $table->id(); $table->string('email'); $table->bigInteger('telegram_id')->nullable();
+    $table->id(); $table->string('email'); $table->unsignedBigInteger('parent_id')->nullable(); $table->bigInteger('telegram_id')->nullable();
     $table->bigInteger('transfer_enable')->default(0); $table->bigInteger('u')->default(0);
     $table->bigInteger('d')->default(0); $table->unsignedBigInteger('plan_id')->nullable();
     $table->unsignedBigInteger('group_id')->nullable(); $table->unsignedBigInteger('invite_user_id')->nullable();
@@ -52,13 +52,14 @@ Schema::create('v2_gift_card_template', function (Blueprint $table) {
 });
 Schema::create('v2_gift_card_usage', function (Blueprint $table) {
     $table->id(); $table->unsignedBigInteger('template_id');
-    $table->unsignedBigInteger('user_id'); $table->unsignedBigInteger('invite_user_id')->nullable();
+    $table->unsignedBigInteger('user_id'); $table->unsignedBigInteger('subscription_user_id')->nullable(); $table->unsignedBigInteger('invite_user_id')->nullable();
     $table->json('rewards_given'); $table->json('invite_rewards')->nullable();
     $table->text('notes')->nullable(); $table->unsignedInteger('created_at');
 });
 (require dirname(__DIR__, 2) . '/database/migrations/2026_09_22_000008_add_telegram_binding_rewards.php')->up();
 (require dirname(__DIR__, 2) . '/database/migrations/2026_09_22_000009_add_telegram_traffic_grant_reason.php')->up();
 (require dirname(__DIR__, 2) . '/database/migrations/2026_09_22_000010_add_timed_telegram_traffic_grants.php')->up();
+Schema::table('v2_telegram_traffic_grant', function (Blueprint $table) { $table->unsignedBigInteger('account_user_id')->nullable(); });
 DB::table('v2_plan')->insert([
     'id' => 10, 'name' => 'test plan', 'transfer_enable' => 100,
     'reset_traffic_method' => 2, 'group_id' => 1,

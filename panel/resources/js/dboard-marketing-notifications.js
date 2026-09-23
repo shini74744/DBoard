@@ -372,6 +372,10 @@
       else { control.type = 'button'; }
       const activate = event => {
         event.preventDefault(); event.stopPropagation();
+        // These custom links bypass the router, so close the native mobile
+        // navigation explicitly before showing the page underneath it.
+        const navigationToggle = document.querySelector('button[aria-controls="sidebar-menu"][aria-expanded="true"]');
+        if (navigationToggle?.getClientRects().length) navigationToggle.click();
         setPageUrl(key);
         openPage(key);
       };

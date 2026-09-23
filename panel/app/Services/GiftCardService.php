@@ -18,6 +18,7 @@ class GiftCardService
     protected GiftCardCode $code;
     protected GiftCardTemplate $template;
     protected ?User $user = null;
+    protected ?User $trafficTarget = null;
 
     public function __construct(string $code)
     {
@@ -80,7 +81,8 @@ class GiftCardService
         }
 
         $rewards = $this->template->rewards ?? [];
-        if (!empty($rewards['transfer_enable']) && !$this->user->isActive()
+        if (!empty($rewards['transfer_enable'])
+            && MultiSubscriptionService::validPackages($this->user)->isEmpty()
             && empty($rewards['plan_id'])
             && (empty($rewards['expire_days']) || !$this->user->plan_id)) {
             return [
@@ -132,6 +134,10 @@ class GiftCardService
                 ?? throw new ApiException('用户信息未提供');
 
             $this->validate();
+            $this->trafficTarget = MultiSubscriptionService::validPackages($this->user)->first() ?: $this->user;
+            if ($this->trafficTarget->id !== $this->user->id) {
+                $this->trafficTarget = User::whereKey($this->trafficTarget->id)->lockForUpdate()->firstOrFail();
+            }
 
             $actualRewards = $this->template->calculateActualRewards($this->user);
 
@@ -155,6 +161,7 @@ class GiftCardService
                 array_merge($options, [
                     'invite_rewards' => $inviteRewards,
                     'multiplier' => $this->calculateMultiplier(),
+                    'subscription_user_id' => $this->trafficTarget?->id,
                 ])
             );
 
@@ -187,8 +194,13 @@ class GiftCardService
             $userService->extendSubscription($this->user, $rewards['expire_days']);
         }
 
-        if (!empty($rewards['transfer_enable']) && !$this->user->isActive()) {
-            throw new ApiException('请先开通有效套餐后使用流量礼品卡');
+        if (!empty($rewards['transfer_enable'])) {
+            if (!empty($rewards['plan_id']) || !empty($rewards['expire_days'])) {
+                $this->trafficTarget = $this->user;
+            }
+            if (!$this->trafficTarget?->isActive()) {
+                throw new ApiException('请先开通有效套餐后使用流量礼品卡');
+            }
         }
 
         if (isset($rewards['balance']) && $rewards['balance'] > 0) {
@@ -198,7 +210,9 @@ class GiftCardService
         }
 
         if (!empty($rewards['transfer_enable'])) {
-            $this->user->transfer_enable = ($this->user->transfer_enable ?? 0) + $rewards['transfer_enable'];
+            $target = $this->trafficTarget ?? $this->user;
+            $target->transfer_enable = ($target->transfer_enable ?? 0) + $rewards['transfer_enable'];
+            if ($target->id !== $this->user->id) $target->saveOrFail();
         }
 
         if (isset($rewards['device_limit']) && $rewards['device_limit'] > 0) {

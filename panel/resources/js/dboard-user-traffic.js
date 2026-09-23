@@ -45,20 +45,25 @@
     const trafficIndex = headers.findIndex(header => header.textContent.trim() === '总流量');
     if (trafficIndex < 0 || cell.cellIndex !== trafficIndex) return null;
     const id = Number(cell.parentElement.cells[1]?.textContent.trim());
-    return Number.isSafeInteger(id) && id > 0 ? id : null;
+    if(!Number.isSafeInteger(id)||id<=0)return null;
+    const selected=target.closest?.('[data-dboard-package-id]');
+    return {id,packageId:Number(selected?.dataset.dboardPackageId)||null,name:selected?.dataset.dboardPackageName||'',
+      multiple:cell.querySelectorAll('[data-dboard-package-id]').length>1};
   }
-  async function open(id) {
+  async function open(selection) {
+    const {id,packageId,name,multiple}=selection;
+    if(multiple&&!packageId){window.DBoardMultiSubscriptionAdmin?.showPackages?.(id);return}
     overlay.hidden = false;
     dialog.replaceChildren();
     const header = node('header', '');
-    header.append(node('h2', `流量明细 · 用户 #${id}`));
+    header.append(node('h2', packageId ? '流量明细 · '+name+' #'+packageId : '流量明细 · 用户 #'+id));
     const closeButton = node('button', '关闭');
     closeButton.type = 'button'; closeButton.addEventListener('click', close);
     header.append(closeButton); dialog.append(header);
     const content = node('div', '正在加载…');
     dialog.append(content);
     try {
-      const response = await fetch(api() + 'user/traffic-breakdown?id=' + id, {
+      const response = await fetch(api() + 'user/traffic-breakdown?id=' + id + (packageId ? '&subscription_user_id='+packageId : ''), {
         headers: { Authorization: token() || '' },
       });
       const payload = await response.json();
@@ -104,8 +109,7 @@
         const cell = row.cells[index];
         if (!cell || cell.classList.contains('dboard-traffic-cell')) continue;
         cell.classList.add('dboard-traffic-cell');
-        cell.tabIndex = 0;
-        cell.setAttribute('role', 'button');
+        if(!cell.querySelector('[data-dboard-package-id]')){cell.tabIndex = 0;cell.setAttribute('role', 'button');}
         cell.setAttribute('title', '点击查看流量明细');
       }
     }

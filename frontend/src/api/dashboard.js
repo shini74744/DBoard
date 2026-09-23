@@ -76,3 +76,15 @@ export function setNextPeriod() {
     });
 
 }
+
+export function getSubscriptionCombinations() {
+    return request({url: '/user/subscriptions/combinations', method: 'get'});
+}
+
+export function saveSubscriptionCombination(data) {
+    return request({url: '/user/subscriptions/combinations/save', method: 'post', data});
+}
+
+export function deleteSubscriptionCombination(id) {
+    return request({url: '/user/subscriptions/combinations/delete', method: 'post', data: {id}});
+}

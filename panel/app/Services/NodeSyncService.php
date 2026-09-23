@@ -64,7 +64,7 @@ class NodeSyncService
             if (!self::isNodeOnline($server->id))
                 continue;
 
-            if ($user->isAvailable()) {
+            if ($user->isAvailable() && (!$user->parent_id || !$user->parent?->banned)) {
                 self::push($server->id, 'sync.user.delta', [
                     'action' => 'add',
                     'users' => [

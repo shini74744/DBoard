@@ -82,6 +82,40 @@ class MachineController extends Controller
         return $this->success($result);
     }
 
+    private function latestNodeRelease(): string
+    {
+        return Cache::remember('dboard_latest_node_release', 300, function () {
+            $response = Http::withHeaders(['Accept' => 'application/vnd.github+json', 'User-Agent' => 'DBoard'])
+                ->timeout(8)->get('https://api.github.com/repos/shini74744/DBoard/releases/latest');
+            if (!$response->successful()) {
+                throw new \RuntimeException('GitHub Release 查询失败');
+            }
+            $tag = (string) $response->json('tag_name');
+            if (!preg_match('/^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$/', $tag)) {
+                throw new \RuntimeException('GitHub Release 版本无效');
+            }
+            return $tag;
+        });
+    }
+
+    public function latestRelease()
+    {
+        try {
+            $version = $this->latestNodeRelease();
+            $upgradeable = [];
+            foreach (ServerMachine::query()->get(['id', 'is_active']) as $machine) {
+                $current = (string) Cache::get('dboard_machine_version:' . $machine->id, '');
+                if ($machine->is_active && Cache::get('dboard_machine_upgrade_capable:' . $machine->id)
+                    && $current !== '' && version_compare(ltrim($current, 'v'), ltrim($version, 'v'), '<')) {
+                    $upgradeable[] = $machine->id;
+                }
+            }
+            return $this->success(['version' => $version, 'upgradeable_machine_ids' => $upgradeable]);
+        } catch (\Throwable $e) {
+            return $this->fail([502, '暂时无法读取 GitHub 最新版本：' . $e->getMessage()]);
+        }
+    }
+
     public function upgrade(Request $request)
     {
         $params = $request->validate([
@@ -90,18 +124,7 @@ class MachineController extends Controller
         ]);
         $machines = ServerMachine::whereIn('id', $params['ids'])->get()->keyBy('id');
         try {
-            $version = Cache::remember('dboard_latest_node_release', 300, function () {
-                $response = Http::withHeaders(['Accept' => 'application/vnd.github+json', 'User-Agent' => 'DBoard'])
-                    ->timeout(8)->get('https://api.github.com/repos/shini74744/DBoard/releases/latest');
-                if (!$response->successful()) {
-                    throw new \RuntimeException('GitHub Release 查询失败');
-                }
-                $tag = (string) $response->json('tag_name');
-                if (!preg_match('/^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$/', $tag)) {
-                    throw new \RuntimeException('GitHub Release 版本无效');
-                }
-                return $tag;
-            });
+            $version = $this->latestNodeRelease();
         } catch (\Throwable $e) {
             return $this->fail([502, '暂时无法读取 GitHub 最新版本：' . $e->getMessage()]);
         }

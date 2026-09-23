@@ -5,7 +5,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no" />
   <title>{{$title}}</title>
-  <script type="module" crossorigin src="/theme/{{$theme}}/assets/umi.js"></script>
+  <script type="module" crossorigin src="/theme/{{$theme}}/assets/umi.js?v={{ @filemtime(base_path('theme/' . $theme . '/assets/umi.js')) }}"></script>
+  <style>{!! file_get_contents(resource_path('css/dboard-multi-subscription-user.css')) !!}</style>
 </head>
 
 <body>
@@ -35,6 +36,7 @@
   </script>
   <div id="app"></div>
   {!! $theme_config['custom_html'] !!}
+  <script>{!! file_get_contents(resource_path('js/dboard-multi-subscription-user.js')) !!}</script>
 </body>
 
 </html>

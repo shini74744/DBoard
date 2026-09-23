@@ -304,6 +304,14 @@ class ServerSave extends FormRequest
                 (array) $this->input('outbound_ids', [])
             )));
 
+            if (!$validator->errors()->any()) {
+                try {
+                    \App\Services\NodeOutboundService::validateSelection((int)$this->input('id'), $outboundIds, $this->all());
+                } catch (\App\Exceptions\ApiException $error) {
+                    $validator->errors()->add('outbound_ids', $error->getMessage());
+                }
+            }
+
             $availableTags = ServerOutbound::query()
                 ->whereIn('id', $outboundIds)
                 ->where('enabled', true)
