@@ -82,19 +82,21 @@ load_health_port_from_config() {
     if [ ! -f "$cfg_path" ]; then
         return
     fi
-    local parsed
+    local parsed=""
     if [ -x "$CLI_PATH" ]; then
-        parsed=$("$CLI_PATH" config health-port --config "$cfg_path" 2>/dev/null)
-    else
-        parsed=$(grep -m1 'health_port:' "$cfg_path" 2>/dev/null | sed 's/.*health_port:[[:space:]]*//' | tr -cd '0-9')
+        # Old xbctl versions may not have this subcommand.
+        parsed=$("$CLI_PATH" config health-port --config "$cfg_path" 2>/dev/null || true)
     fi
-    if [ -n "$parsed" ] && [ "$parsed" -ge 0 ] 2>/dev/null; then
+    if ! [[ "$parsed" =~ ^[0-9]+$ ]]; then
+        parsed=$(sed -n -E 's/^[[:space:]]*health_port:[[:space:]]*([0-9]+).*$/\1/p' "$cfg_path" | head -1)
+    fi
+    # Legacy configs without health_port do not start a health endpoint.
+    if [[ "$parsed" =~ ^[0-9]+$ ]] && [ "$parsed" -gt 0 ]; then
         HEALTH_PORT="$parsed"
-        if [ "$HEALTH_PORT" -eq 0 ]; then
-            HEALTH_ENABLED=0
-        else
-            HEALTH_ENABLED=1
-        fi
+        HEALTH_ENABLED=1
+    else
+        HEALTH_PORT=0
+        HEALTH_ENABLED=0
     fi
 }
 
