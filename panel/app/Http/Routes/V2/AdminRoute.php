@@ -143,6 +143,8 @@ class AdminRoute
             ], function ($router) {
                 $router->get('/fetch', [MachineController::class, 'fetch']);
                 $router->post('/sort', [MachineController::class, 'sort']);
+                $router->post('/upgrade', [MachineController::class, 'upgrade']);
+                $router->get('/upgradeStatus', [MachineController::class, 'upgradeStatus']);
                 $router->post('/save', [MachineController::class, 'save']);
                 $router->post('/setGroup', [MachineController::class, 'setGroup']);
                 $router->post('/drop', [MachineController::class, 'drop']);

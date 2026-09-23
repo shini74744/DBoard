@@ -12,14 +12,19 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/shini74744/DBoard/node/internal/nlog"
+	"github.com/shini74744/DBoard/node/internal/upgrade"
 )
+
+// NodeVersion is included in the authenticated WebSocket handshake.
+var NodeVersion = "dev"
 
 // WSEvent types
 const (
 	WSEventSyncConfig    = "sync.config"
 	WSEventSyncUsers     = "sync.users"
 	WSEventSyncUserDelta = "sync.user.delta"
-	WSEventSyncDevices   = "sync.devices"   // panel → node: global device state
+	WSEventSyncDevices   = "sync.devices" // panel → node: global device state
+	WSEventNodeUpgrade   = "node.upgrade"
 	WSEventSyncNodes     = "sync.nodes"     // panel → machine: node list changed
 	WSEventReportDevices = "report.devices" // node → panel: report device snapshot
 )
@@ -204,6 +209,10 @@ func (w *WSClient) connect(ctx context.Context) error {
 	q := u.Query()
 	q.Set("token", w.token)
 	q.Set("user_routes", "1")
+	q.Set("node_version", NodeVersion)
+	if w.cfg.MachineID > 0 {
+		q.Set("remote_upgrade", "1")
+	}
 	if w.cfg.MachineID > 0 {
 		q.Set("machine_id", strconv.Itoa(w.cfg.MachineID))
 	} else {
@@ -350,9 +359,32 @@ func (w *WSClient) handleMessage(msg wsMessage) {
 	case WSEventSyncNodes:
 		w.handleDataEvent(msg)
 
+	case WSEventNodeUpgrade:
+		if w.cfg.MachineID > 0 {
+			w.handleUpgrade(msg)
+		}
+
 	default:
 		nlog.Core().Debug("ws unknown event", "event", msg.Event)
 	}
+}
+
+func (w *WSClient) handleUpgrade(msg wsMessage) {
+	var payload struct {
+		RequestID string `json:"request_id"`
+		Version   string `json:"version"`
+	}
+	if err := json.Unmarshal(msg.Data, &payload); err != nil {
+		return
+	}
+	go func() {
+		accepted, _ := json.Marshal(map[string]string{"request_id": payload.RequestID, "state": "accepted"})
+		w.SendRaw("upgrade.result", accepted)
+		if err := upgrade.Run(payload.RequestID, payload.Version); err != nil {
+			failed, _ := json.Marshal(map[string]string{"request_id": payload.RequestID, "state": "failed", "message": err.Error()})
+			w.SendRaw("upgrade.result", failed)
+		}
+	}()
 }
 
 func (w *WSClient) handleDataEvent(msg wsMessage) {

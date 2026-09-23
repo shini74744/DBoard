@@ -228,6 +228,7 @@ class NodeWorker
 
         $machine->forceFill(['last_seen_at' => now()->timestamp])->saveQuietly();
         NodeRegistry::addMachine($machineId, $conn);
+        $this->recordMachineVersion($machineId, $conn, $params);
 
         // 把同一个连接注册到该机器下所有节点
         $nodeIds = [];
@@ -264,6 +265,46 @@ class NodeWorker
         }
     }
 
+    private function recordMachineVersion(int $machineId, TcpConnection $conn, array $params): void
+    {
+        $version = (string) ($params['node_version'] ?? '');
+        if (!preg_match('/^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$/', $version)) {
+            $version = '';
+        }
+        $capable = $version !== '' && ($params['remote_upgrade'] ?? '') === '1';
+        $conn->remoteUpgradeCapable = $capable;
+        Cache::put("dboard_machine_version:{$machineId}", $version, 86400);
+        Cache::put("dboard_machine_upgrade_capable:{$machineId}", $capable, 86400);
+        $statusKey = "dboard_machine_upgrade:{$machineId}";
+        $status = Cache::get($statusKey);
+        if (is_array($status) && in_array($status['state'] ?? '', ['queued', 'accepted'], true)
+            && ($status['target_version'] ?? '') === $version) {
+            $status['state'] = 'success';
+            $status['updated_at'] = time();
+            Cache::put($statusKey, $status, 3600);
+        }
+    }
+
+    private function recordUpgradeResult(int $machineId, array $data): void
+    {
+        $statusKey = "dboard_machine_upgrade:{$machineId}";
+        $status = Cache::get($statusKey);
+        if (!is_array($status) || !hash_equals((string) ($status['request_id'] ?? ''), (string) ($data['request_id'] ?? ''))) {
+            return;
+        }
+        $state = $data['state'] ?? '';
+        if (!in_array($state, ['accepted', 'failed'], true)) {
+            return;
+        }
+        if (($status['state'] ?? '') === 'success') {
+            return;
+        }
+        $status['state'] = $state;
+        $status['message'] = substr((string) ($data['message'] ?? ''), 0, 240);
+        $status['updated_at'] = time();
+        Cache::put($statusKey, $status, 3600);
+    }
+
     private function setUserRouteCapability(int $nodeId, bool $capable): void
     {
         if ($capable) {
@@ -283,7 +324,11 @@ class NodeWorker
         $event = $msg['event'] ?? '';
 
         // 机器连接：从消息中读取 node_id 来分派到具体节点
-        if (!empty($conn->machineNodeIds)) {
+        if (!empty($conn->machineId)) {
+            if ($event === 'upgrade.result' && !empty($conn->machineId)) {
+                $this->recordUpgradeResult((int) $conn->machineId, $msg['data'] ?? []);
+                return;
+            }
             if ($event === 'pong') {
                 foreach ($conn->machineNodeIds as $nid) {
                     Cache::put("node_ws_alive:{$nid}", true, 86400);
@@ -318,7 +363,7 @@ class NodeWorker
         $service = app(DeviceStateService::class);
 
         // 机器模式：清理所有关联节点
-        if (!empty($conn->machineNodeIds)) {
+        if (!empty($conn->machineId)) {
             $machineId = $conn->machineId ?? 'unknown';
             foreach ($conn->machineNodeIds as $nodeId) {
                 // A replacement connection may already own this node.
@@ -336,6 +381,9 @@ class NodeWorker
             }
 
             if (!empty($conn->machineId)) {
+                if (NodeRegistry::getMachine((int) $conn->machineId) === $conn) {
+                    Cache::forget('dboard_machine_upgrade_capable:' . $conn->machineId);
+                }
                 NodeRegistry::removeMachine((int) $conn->machineId, $conn);
             }
 

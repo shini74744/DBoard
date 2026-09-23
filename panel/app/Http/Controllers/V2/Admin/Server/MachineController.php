@@ -10,6 +10,8 @@ use App\Models\ServerMachineLoadHistory;
 use App\Services\NodeSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 
 class MachineController extends Controller
 {
@@ -32,6 +34,9 @@ class MachineController extends Controller
                     'is_active' => $machine->is_active,
                     'last_seen_at' => $machine->last_seen_at,
                     'load_status' => $machine->load_status,
+                    'node_version' => Cache::get('dboard_machine_version:' . $machine->id),
+                    'upgrade_capable' => (bool) Cache::get('dboard_machine_upgrade_capable:' . $machine->id),
+                    'upgrade_status' => $this->upgradeState($machine->id),
                     'servers_count' => $machine->servers_count,
                     'created_at' => $machine->created_at,
                     'updated_at' => $machine->updated_at,
@@ -39,6 +44,105 @@ class MachineController extends Controller
             });
 
         return $this->success($machines);
+    }
+
+    private function upgradeState(int $machineId): ?array
+    {
+        $key = "dboard_machine_upgrade:{$machineId}";
+        $status = Cache::get($key);
+        if (!is_array($status)) {
+            return null;
+        }
+        if (in_array($status['state'] ?? '', ['queued', 'accepted'], true)
+            && time() - (int) ($status['created_at'] ?? 0) > 600) {
+            $status['state'] = 'failed';
+            $status['message'] = '节点未在 10 分钟内以目标版本重新连接，请检查节点升级日志';
+            $status['updated_at'] = time();
+            Cache::put($key, $status, 3600);
+        }
+        unset($status['request_id']);
+        return $status;
+    }
+
+    public function upgradeStatus(Request $request)
+    {
+        $ids = array_filter(array_map('intval', explode(',', (string) $request->query('ids', ''))));
+        $ids = array_values(array_unique($ids));
+        if (!$ids || count($ids) > 25) {
+            return $this->fail([422, '请选择 1 至 25 台服务器']);
+        }
+        $result = [];
+        foreach ($ids as $id) {
+            $result[$id] = [
+                'version' => Cache::get('dboard_machine_version:' . $id),
+                'capable' => (bool) Cache::get('dboard_machine_upgrade_capable:' . $id),
+                'status' => $this->upgradeState($id),
+            ];
+        }
+        return $this->success($result);
+    }
+
+    public function upgrade(Request $request)
+    {
+        $params = $request->validate([
+            'ids' => 'required|array|min:1|max:25',
+            'ids.*' => 'required|integer|distinct|min:1',
+        ]);
+        $machines = ServerMachine::whereIn('id', $params['ids'])->get()->keyBy('id');
+        try {
+            $version = Cache::remember('dboard_latest_node_release', 300, function () {
+                $response = Http::withHeaders(['Accept' => 'application/vnd.github+json', 'User-Agent' => 'DBoard'])
+                    ->timeout(8)->get('https://api.github.com/repos/shini74744/DBoard/releases/latest');
+                if (!$response->successful()) {
+                    throw new \RuntimeException('GitHub Release 查询失败');
+                }
+                $tag = (string) $response->json('tag_name');
+                if (!preg_match('/^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$/', $tag)) {
+                    throw new \RuntimeException('GitHub Release 版本无效');
+                }
+                return $tag;
+            });
+        } catch (\Throwable $e) {
+            return $this->fail([502, '暂时无法读取 GitHub 最新版本：' . $e->getMessage()]);
+        }
+        $results = [];
+        foreach ($params['ids'] as $id) {
+            $machine = $machines->get($id);
+            $current = (string) Cache::get('dboard_machine_version:' . $id, '');
+            if (!$machine) {
+                $results[$id] = ['state' => 'failed', 'message' => '服务器不存在'];
+                continue;
+            }
+            if (!$machine->is_active || !Cache::get('dboard_machine_upgrade_capable:' . $id)) {
+                $results[$id] = ['state' => 'failed', 'message' => '服务器离线或节点程序不支持后台升级，请先手动升级一次'];
+                continue;
+            }
+            if ($current === '' || version_compare(ltrim($current, 'v'), ltrim($version, 'v'), '>=')) {
+                $results[$id] = ['state' => 'skipped', 'message' => $current === '' ? '节点版本未知' : '已是最新版本'];
+                continue;
+            }
+            $previous = $this->upgradeState((int) $id);
+            if (in_array($previous['state'] ?? '', ['queued', 'accepted'], true)) {
+                $results[$id] = ['state' => 'skipped', 'message' => '已有升级任务正在执行'];
+                continue;
+            }
+            $requestId = bin2hex(random_bytes(8));
+            $status = [
+                'request_id' => $requestId, 'state' => 'queued', 'target_version' => $version,
+                'from_version' => $current, 'message' => '', 'created_at' => time(), 'updated_at' => time(),
+            ];
+            Cache::put("dboard_machine_upgrade:{$id}", $status, 3600);
+            if (!NodeSyncService::pushMachine((int) $id, 'node.upgrade', [
+                'request_id' => $requestId, 'version' => $version,
+            ])) {
+                $status['state'] = 'failed';
+                $status['message'] = '升级指令发送失败，请检查面板消息服务';
+                Cache::put("dboard_machine_upgrade:{$id}", $status, 3600);
+            }
+            unset($status['request_id']);
+            $results[$id] = $status;
+        }
+        return $this->success(['target_version' => $version, 'machines' => $results]);
     }
 
     public function sort(Request $request)

@@ -17,6 +17,7 @@ import (
 	"github.com/shini74744/DBoard/node/internal/config"
 	"github.com/shini74744/DBoard/node/internal/machine"
 	"github.com/shini74744/DBoard/node/internal/nlog"
+	"github.com/shini74744/DBoard/node/internal/panel"
 	"github.com/shini74744/DBoard/node/internal/service"
 )
 
@@ -26,6 +27,7 @@ var (
 )
 
 func main() {
+	panel.NodeVersion = version
 	configPath := flag.String("c", "config.yml", "config file path")
 	showVersion := flag.Bool("v", false, "show version")
 	flag.Parse()

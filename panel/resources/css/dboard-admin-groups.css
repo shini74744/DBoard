@@ -209,3 +209,16 @@
   .dboard-machine-sort-dialog { max-height: 94svh; padding: .9rem; }
   .dboard-machine-sort-row { gap: .35rem; padding: .4rem; }
 }
+
+
+.dboard-machine-upgrade-dialog { width: min(100%, 720px); }
+.dboard-machine-upgrade-dialog .dboard-machine-sort-row { justify-content: space-between; }
+.dboard-machine-upgrade-state { max-width: 48%; text-align: right; font-size: .8rem; color: hsl(var(--muted-foreground)); }
+.dboard-machine-upgrade-state[data-state="success"] { color: #13845c; }
+.dboard-machine-upgrade-state[data-state="failed"] { color: hsl(var(--destructive)); }
+@media (max-width: 600px) { .dboard-machine-upgrade-state { max-width: 54%; } }
+.dboard-machine-upgrade-modes { display: flex; gap: .5rem; margin: .25rem 0 .7rem; }
+.dboard-machine-upgrade-modes button.active { border-color: hsl(var(--primary)); background: hsl(var(--primary) / .1); color: hsl(var(--primary)); font-weight: 600; }
+.dboard-machine-upgrade-count { margin: 0 0 .65rem !important; }
+.dboard-machine-upgrade-dialog .dboard-machine-sort-row input[type="checkbox"] { width: 1rem; height: 1rem; flex: none; accent-color: hsl(var(--primary)); }
+.dboard-machine-upgrade-dialog .dboard-machine-sort-label strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

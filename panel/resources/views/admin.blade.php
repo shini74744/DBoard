@@ -90,6 +90,7 @@
   <script>{!! file_get_contents(resource_path('js/dboard-telegram-binding.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-user-traffic.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-machine-sort.js')) !!}</script>
+  <script>{!! file_get_contents(resource_path('js/dboard-machine-upgrade.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-admin-groups.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-admin-theme.js')) !!}</script>
 </body>

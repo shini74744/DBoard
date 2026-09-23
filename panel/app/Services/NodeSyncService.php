@@ -166,19 +166,21 @@ class NodeSyncService
     /**
      * Publish a machine-level push command to Redis — picked up by the Workerman WS server
      */
-    public static function pushMachine(int $machineId, string $event, array $data): void
+    public static function pushMachine(int $machineId, string $event, array $data): bool
     {
         try {
-            Redis::publish('node:push', json_encode([
+            $listeners = Redis::publish('node:push', json_encode([
                 'machine_id' => $machineId,
                 'event' => $event,
                 'data' => $data,
             ]));
+            return $listeners > 0;
         } catch (\Throwable $e) {
             Log::warning("[NodePush] Redis machine publish failed: {$e->getMessage()}", [
                 'machine_id' => $machineId,
                 'event' => $event,
             ]);
+            return false;
         }
     }
 }
