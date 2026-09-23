@@ -418,8 +418,19 @@ detect_legacy_layout() {
     if [ -f "$CONFIG_FILE" ] && systemctl is-active "$SERVICE_NAME" >/dev/null 2>&1; then
         return
     fi
+    # Prefer the running legacy service when more than one old config remains.
     for name in DUI-node xboard-node; do
-        if [ -f "/etc/${name}/config.yml" ] && { [ ! -f "$CONFIG_FILE" ] || systemctl is-active "${name}.service" >/dev/null 2>&1; }; then
+        if [ -f "/etc/${name}/config.yml" ] && systemctl is-active "${name}.service" >/dev/null 2>&1; then
+            LEGACY_INSTALL_ROOT="/etc/${name}"
+            LEGACY_SERVICE_NAME="${name}.service"
+            LEGACY_SERVICE_PATH="/etc/systemd/system/${LEGACY_SERVICE_NAME}"
+            LEGACY_DETECTED=1
+            return
+        fi
+    done
+    [ -f "$CONFIG_FILE" ] && return
+    for name in DUI-node xboard-node; do
+        if [ -f "/etc/${name}/config.yml" ]; then
             LEGACY_INSTALL_ROOT="/etc/${name}"
             LEGACY_SERVICE_NAME="${name}.service"
             LEGACY_SERVICE_PATH="/etc/systemd/system/${LEGACY_SERVICE_NAME}"
