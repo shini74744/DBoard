@@ -16,9 +16,20 @@
 .dboard-admin-group-chips {
   display: flex;
   flex: 1;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
   gap: .45rem;
   min-width: 0;
+}
+.dboard-admin-group-chips::-webkit-scrollbar { display: none; }
+.dboard-admin-group-chip { flex: none; white-space: nowrap; }
+.dboard-admin-group-bar > .dboard-admin-group-status {
+  height: 1.2rem;
+  line-height: 1.2rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .dboard-admin-group-chip, .dboard-admin-group-manage,
 .dboard-admin-group-card button, .dboard-admin-group-dialog button {
@@ -158,7 +169,7 @@
 @media (max-width: 600px) {
   .dboard-admin-group-head { align-items: flex-start; }
   .dboard-admin-group-head > strong { width: 100%; }
-  .dboard-admin-group-chips { width: 100%; }
+  .dboard-admin-group-chips { width: 100%; flex-basis: 100%; }
   .dboard-admin-group-dialog { padding: .9rem; }
   .dboard-admin-group-create input,
   .dboard-admin-group-edit input { flex-basis: 100%; }
@@ -203,6 +214,7 @@
 .dboard-machine-sort-controls { display: flex; gap: .25rem; flex: none; }
 .dboard-machine-sort-status { min-height: 1.1rem; }
 .dboard-machine-sort-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .5rem; }
+.dboard-machine-sort-actions button.primary:hover { background: hsl(var(--primary) / .9); color: hsl(var(--primary-foreground)); }
 .dboard-machine-sort-actions .primary { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
 @media (max-width: 600px) {
   .dboard-machine-sort-overlay { padding: .5rem; }

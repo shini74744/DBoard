@@ -102,10 +102,11 @@
         request('server/admin-group/fetch?kind=' + kind),
       ]);
       if (state.kind !== kind || state.loadId !== loadId) return;
+      const previousAssignments = assignmentKey(state.items);
       state.items = Array.isArray(items) ? items : [];
       state.groups = Array.isArray(groups) ? groups : [];
       state.error = '';
-      notifyGroup();
+      if (previousAssignments !== assignmentKey(state.items)) notifyGroup();
     } catch (error) {
       if (state.kind === kind && state.loadId === loadId) state.error = error.message;
     } finally {
@@ -114,6 +115,9 @@
         render();
       }
     }
+  }
+  function assignmentKey(items) {
+    return JSON.stringify(items.map(item => [String(item.id), groupName(item)]).sort((a, b) => a[0].localeCompare(b[0])));
   }
   function groupName(item) {
     return String(item.admin_group || '').trim();
@@ -168,10 +172,24 @@
       sort.addEventListener('click', () => window.DBoardMachineSort?.open());
       head.append(sort);
     }
-    state.bar.replaceChildren(head);
-    if (state.loading || state.error) {
-      state.bar.append(el('p', 'dboard-admin-group-status', state.error || '正在读取分组…'));
+    // Keep the same controls during polling so focus and horizontal scroll survive.
+    const renderKey = JSON.stringify([state.kind, state.selected, options]);
+    if (state.bar.dataset.renderKey !== renderKey) {
+      const scrollLeft = state.bar.querySelector('.dboard-admin-group-chips')?.scrollLeft || 0;
+      const status = el('p', 'dboard-admin-group-status');
+      status.setAttribute('role', 'status');
+      status.setAttribute('aria-live', 'polite');
+      state.bar.replaceChildren(head, status);
+      chips.scrollLeft = scrollLeft;
+      state.bar.dataset.renderKey = renderKey;
     }
+    state.bar.setAttribute('aria-busy', String(state.loading));
+    state.bar.querySelector('.dboard-admin-group-manage').disabled = state.loading;
+    const status = state.bar.querySelector('.dboard-admin-group-status');
+    const message = state.error || (state.loading && !state.items.length ? '正在读取分组…' : '');
+    if (status.textContent !== message) status.textContent = message;
+    status.title = message;
+    status.style.visibility = message ? 'visible' : 'hidden';
   }
   function renderResults() {
     if (state.native) state.native.hidden = false;

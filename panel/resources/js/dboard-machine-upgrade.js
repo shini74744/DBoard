@@ -83,6 +83,7 @@
     let eligibleIds = new Set();
     let mode = 'pick';
     let running = false;
+    let dispatching = false;
     let submittedIds = [];
     const selected = new Set();
     const statusNodes = new Map();
@@ -92,11 +93,18 @@
     const chosenIds = () => mode === 'all' ? [...eligibleIds] : [...selected].filter(id => eligibleIds.has(id));
     function refreshCount() {
       const ids = chosenIds();
-      count.textContent = latestVersion
+      const tasks = entries.filter(entry => submittedIds.includes(Number(entry.id)));
+      const pendingCount = tasks.filter(entry => isPending(entry.upgrade_status)).length;
+      const successCount = tasks.filter(entry => entry.upgrade_status?.state === 'success').length;
+      const failedCount = tasks.filter(entry => ['failed', 'rolled_back'].includes(entry.upgrade_status?.state)).length;
+      count.textContent = running
+        ? `后台任务 ${submittedIds.length} 台 · 进行中 ${pendingCount} 台 · 成功 ${successCount} 台 · 失败或回退 ${failedCount} 台。`
+        : latestVersion
         ? `最新版本 ${latestVersion} · ${eligibleIds.size} 台待升级 · 已选择 ${ids.length} 台。`
         : '无法检测 GitHub 最新版本，暂不能发起升级。';
-      confirm.disabled = running || !latestVersion || !ids.length;
-      confirm.textContent = `${mode === "all" ? "升级全部服务器" : "升级所选服务器"}（${ids.length}）`;
+      confirm.disabled = dispatching || (!running && (!latestVersion || !ids.length));
+      confirm.textContent = dispatching ? '正在下发…' : running ? '后台执行并关闭'
+        : `${mode === "all" ? "升级全部服务器" : "升级所选服务器"}（${ids.length}）`;
       pickButton.classList.toggle('active', mode === 'pick');
       allButton.classList.toggle('active', mode === 'all');
     }
@@ -152,10 +160,15 @@
             if (state) update(id, state, item.status.message, item.status.target_version || item.version);
             const currentLabel = statusNodes.get(Number(id))?.parentElement?.querySelector('small');
             if (currentLabel) currentLabel.textContent = `SID: ${id} · 当前 ${item.version || '版本未知'}`;
-            if (state === 'success') { eligibleIds.delete(Number(id)); selected.delete(Number(id)); }
+            if (state === 'success') {
+              eligibleIds.delete(Number(id)); selected.delete(Number(id));
+              const checkbox = statusNodes.get(Number(id))?.parentElement?.querySelector('input');
+              if (checkbox) { checkbox.checked = false; checkbox.disabled = true; }
+            }
             if (isPending(item.status)) pending = true;
           }
         }
+        refreshCount();
         if (!pending) {
           if (timer) clearInterval(timer);
           timer = null;
@@ -173,12 +186,14 @@
       finally { polling = false; }
     }
     confirm.addEventListener('click', async () => {
+      if (dispatching) return;
+      if (running) { close(); return; }
       submittedIds = chosenIds();
       if (!submittedIds.length || running) return;
       running = true;
+      dispatching = true;
       renderRows();
-      confirm.textContent = '正在下发…';
-      notice.textContent = '';
+      notice.textContent = '正在提交升级任务，下发完成后可关闭窗口或离开页面。';
       try {
         let target = '';
         for (const group of chunks(submittedIds, 25)) {
@@ -190,13 +205,17 @@
             update(id, item.state, item.message, item.target_version);
           }
         }
-        notice.textContent = `目标版本 ${target}；等待服务器重新连接后确认结果。`;
+        dispatching = false;
         if (!isOpen()) return;
+        refreshCount();
+        notice.textContent = `目标版本 ${target}：任务已下发，正在后台执行。可以关闭窗口或离开页面，稍后重新打开查看结果。`;
         if (timer) clearInterval(timer);
         timer = setInterval(poll, 3000);
         await poll();
       } catch (error) {
+        dispatching = false;
         if (!isOpen()) return;
+        refreshCount();
         notice.textContent = (error.message || '下发结果暂未确认') + '；正在查询服务器实际任务状态。';
         if (timer) clearInterval(timer);
         timer = setInterval(poll, 3000);
@@ -209,7 +228,15 @@
       if (!Array.isArray(machines)) throw new Error('服务器列表格式不正确');
       entries = machines;
       if (!entries.length) { count.textContent = '暂无服务器'; return; }
-      count.textContent = '正在检测 GitHub 最新版本…';
+      submittedIds = entries.filter(entry => isPending(entry.upgrade_status)).map(entry => Number(entry.id));
+      running = submittedIds.length > 0;
+      renderRows();
+      if (running) {
+        notice.textContent = '升级任务正在后台执行，可以关闭窗口或离开页面，稍后重新打开查看结果。';
+        if (timer) clearInterval(timer);
+        timer = setInterval(poll, 3000);
+        void poll();
+      } else count.textContent = '正在检测 GitHub 最新版本…';
       const release = await request('latestRelease');
       if (!isOpen()) return;
       if (!Array.isArray(release?.upgradeable_machine_ids) || !release.version) {
@@ -217,13 +244,10 @@
       }
       latestVersion = release.version;
       eligibleIds = new Set(release.upgradeable_machine_ids.map(Number));
-      submittedIds = entries.filter(entry => isPending(entry.upgrade_status)).map(entry => Number(entry.id));
-      running = submittedIds.length > 0;
       renderRows();
-      if (submittedIds.length) { if(timer) clearInterval(timer); timer = setInterval(poll,3000); await poll(); }
     } catch (error) {
       if (!isOpen()) return;
-      if (entries.length) { renderRows(); notice.textContent = error.message || '版本检测失败'; }
+      if (entries.length) { renderRows(); if (!running) notice.textContent = error.message || '版本检测失败'; }
       else count.textContent = error.message || '读取服务器失败';
     }
   }
