@@ -15,7 +15,7 @@
 
         <transition name="content-transition" mode="out-in" appear>
 
-          <div class="view-wrapper" :key="$route.path">
+          <div class="view-wrapper" :key="['OrderConfirm', 'Payment'].includes($route.name) ? $route.fullPath : $route.path">
 
             <component :is="Component" />
 

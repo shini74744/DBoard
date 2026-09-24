@@ -51,6 +51,8 @@ class Order extends Model
         'updated_at' => 'timestamp',
         'surplus_order_ids' => 'array',
         'handling_amount' => 'integer',
+        'quoted_price' => 'integer',
+        'subscription_expired_at_before' => 'integer',
         'custom_duration_days' => 'integer',
         'renewal_price' => 'integer',
         'is_admin_created' => 'boolean',

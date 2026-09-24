@@ -504,6 +504,8 @@ export default {
       purchase: 'Купить',
       sold_out_btn: 'Распродано',
       stock: {
+        remaining: "Осталось мест: {count}",
+        unlimited: "Без лимита мест",
         plenty: 'В наличии',
         warning: 'Мало в наличии',
         sold_out: 'Распродано'

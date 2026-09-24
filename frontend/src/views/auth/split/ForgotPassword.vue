@@ -420,7 +420,7 @@ import { CAPTCHA_CONFIG, AUTH_LAYOUT_CONFIG, SITE_CONFIG, AUTH_CONFIG } from '@/
 
 import AuthPopup from '@/components/auth/AuthPopup.vue';
 
-import { shouldShowAuthPopup } from '@/utils/authPopupState';
+import { useAuthPopup } from '@/composables/useAuthPopup';
 import { useNavigator } from "@/composables/useNavigator";
 
 
@@ -543,19 +543,7 @@ export default {
 
 
 
-    const showAuthPopup = ref(false);
-
-    const authPopupConfig = reactive({
-
-      title: AUTH_CONFIG.popup?.title || '',
-
-      content: AUTH_CONFIG.popup?.content || '',
-
-      cooldownHours: AUTH_CONFIG.popup?.cooldownHours || 24,
-
-      closeWaitSeconds: AUTH_CONFIG.popup?.closeWaitSeconds || 0
-
-    });
+    const { showAuthPopup, authPopupConfig, openAuthPopup } = useAuthPopup();
 
 
 
@@ -790,7 +778,7 @@ export default {
 
 
 
-          showAuthPopup.value = shouldShowAuthPopup(AUTH_CONFIG.popup);
+          openAuthPopup();
 
         }
 

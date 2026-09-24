@@ -85,6 +85,7 @@ class Plan extends Model
         'prices',
         'reset_traffic_method',
         'capacity_limit',
+        'capacity_display_mode',
         'sell',
         'device_limit',
         'connection_limit',

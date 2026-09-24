@@ -34,6 +34,7 @@ class OutboundTrafficService
                 $dd = $down - (int)($cursor->download ?? 0);
                 if ($du > PHP_INT_MAX - (int)$outbound->traffic_upload || $dd > PHP_INT_MAX - (int)$outbound->traffic_download) continue;
                 DB::table('v2_outbound_traffic_cursor')->updateOrInsert($key, ['upload'=>$up,'download'=>$down]);
+                NodeOutboundTrafficService::add($node, (int)$id, $du, $dd);
                 DB::table('v2_server_outbound')->where('id',(int)$id)->update([
                     'traffic_upload'=>(int)$outbound->traffic_upload + $du,
                     'traffic_download'=>(int)$outbound->traffic_download + $dd,

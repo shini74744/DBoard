@@ -16,12 +16,11 @@ class RouteController extends Controller
 {
     public function fetch(Request $request)
     {
-        return [
-            'data' => ServerOutbound::query()
-                ->orderBy('sort')
-                ->orderByDesc('id')
-                ->get(),
-        ];
+        $data=$request->validate(['source_id'=>'nullable|integer|min:1|exists:v2_server,id']);
+        $totals=isset($data['source_id']) ? \App\Services\NodeOutboundTrafficService::forNode((int)$data['source_id']) : [];
+        $items=ServerOutbound::query()->orderBy('sort')->orderByDesc('id')->get();
+        if(isset($data['source_id'])) foreach($items as $item) $item->setAttribute('node_traffic',$totals[$item->id]??null);
+        return $this->success($items);
     }
 
     public function nodes(Request $request)
@@ -30,7 +29,7 @@ class RouteController extends Controller
         return $this->success(Server::orderBy('sort')->orderBy('id')->get()->map(function (Server $node) use ($sourceId) {
             $reason = $node->id === $sourceId ? '不能选择当前节点' : \App\Services\NodeOutboundService::unavailableReason($node);
             return ['id'=>$node->id, 'name'=>$node->name, 'type'=>$node->type, 'host'=>$node->host,
-                'port'=>$node->port, 'unavailable_reason'=>$reason];
+                'port'=>$node->port, 'admin_scope'=>$node->admin_scope ?? 'node', 'admin_group'=>$node->admin_group, 'unavailable_reason'=>$reason];
         }));
     }
 
@@ -46,31 +45,32 @@ class RouteController extends Controller
     public function users(Request $request)
     {
         $data = $request->validate([
+            'source_id' => 'nullable|integer|min:1|exists:v2_server,id',
             'search' => 'nullable|string|max:255',
-            'selected' => 'nullable|string|max:600',
+            'selected' => 'nullable|string|max:2400',
         ]);
+        // A new node must be saved before its effective package access is known.
+        if (empty($data['source_id'])) return $this->success([]);
+        $node = Server::findOrFail($data['source_id']);
+        $owners = \App\Services\NodeConnectionService::owners($node);
         $search = trim((string) ($data['search'] ?? ''));
-        $selected = array_values(array_unique(array_filter(
+        $selected = array_slice(array_values(array_unique(array_filter(
             array_map('intval', explode(',', (string) ($data['selected'] ?? ''))),
             fn (int $id) => $id > 0
-        )));
-        $selected = array_slice($selected, 0, 100);
-
-        $users = User::query()->whereNull('parent_id')->select(['id', 'email'])
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($query) use ($search) {
-                    $query->where('email', 'like', '%' . $search . '%');
-                    if (ctype_digit($search)) {
-                        $query->orWhere('id', (int) $search);
-                    }
-                });
-            })
-            ->orderByDesc('id')
-            ->limit(30)
-            ->get();
+        ))), 0, 200);
+        $users = collect($owners)->filter(fn ($owner) => $search === ''
+            || mb_stripos($owner['email'], $search) !== false
+            || (ctype_digit($search) && $owner['id'] === (int) $search))
+            ->sortByDesc('id')->take(30)->map(fn ($owner) => [
+                'id' => $owner['id'], 'email' => $owner['email'], 'available' => true,
+            ])->values();
+        // Keep existing selections readable/removable without offering accounts
+        // outside this node's package access as new choices.
         if ($selected) {
-            $users = User::query()->select(['id', 'email'])->whereIn('id', $selected)
-                ->get()->concat($users)->unique('id')->values();
+            $existing = User::query()->whereIn('id', $selected)->get(['id', 'email'])
+                ->map(fn ($user) => ['id' => (int) $user->id, 'email' => $user->email,
+                    'available' => isset($owners[(int) $user->id])]);
+            $users = $existing->concat($users)->unique('id')->values();
         }
         return $this->success($users);
     }

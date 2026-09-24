@@ -505,6 +505,8 @@ export default {
       purchase: '구매',
       sold_out_btn: '품절',
       stock: {
+        remaining: "잔여 {count}개",
+        unlimited: "수량 제한 없음",
         plenty: '재고 충분',
         warning: '재고 부족',
         sold_out: '품절'

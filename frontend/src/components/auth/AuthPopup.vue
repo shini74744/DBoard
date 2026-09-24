@@ -4,13 +4,13 @@
       <transition name="popup-slide">
         <div v-if="show" class="auth-popup-container">
           <div class="auth-popup-header">
-            <h2 class="popup-title" v-html="title"></h2>
+            <h2 class="popup-title" v-text="title"></h2>
             <button class="popup-close-btn" @click="attemptClose">
               <IconX :size="20" />
             </button>
           </div>
           <div class="auth-popup-content">
-            <div v-html="content"></div>
+            <div v-html="safeContent"></div>
           </div>
           <div class="auth-popup-footer">
             <button
@@ -33,7 +33,8 @@
 </template>
 
 <script>
-import { ref, watch, onUnmounted } from 'vue';
+import { ref, watch, onUnmounted, computed } from 'vue';
+import DOMPurify from 'dompurify';
 import { IconX } from '@tabler/icons-vue';
 
 export default {
@@ -68,6 +69,11 @@ export default {
     const show = ref(false);
     const waitTimeRemaining = ref(0);
     let countdownTimer = null;
+    let showTimer = null;
+    const safeContent = computed(() => DOMPurify.sanitize(props.content, {
+      ALLOWED_TAGS: ['p','br','strong','b','em','i','u','ul','ol','li','h2','h3','h4','blockquote','a'],
+      ALLOWED_ATTR: ['href','target','rel'],
+    }));
 
     const startCountdown = () => {
       if (countdownTimer) {
@@ -98,15 +104,16 @@ export default {
 
       if (props.cooldownHours > 0) {
         const closeTime = new Date().getTime();
-        localStorage.setItem('auth_popup_close_time', closeTime.toString());
+        try { localStorage.setItem('auth_popup_close_time', closeTime.toString()); } catch { /* Storage may be disabled. */ }
       }
 
       emit('close');
     };
 
     watch(() => props.showPopup, (newVal) => {
+      clearTimeout(showTimer);
       if (newVal) {
-        setTimeout(() => {
+        showTimer = setTimeout(() => {
           show.value = true;
           startCountdown();
         }, 1000);
@@ -119,6 +126,7 @@ export default {
     }, { immediate: true });
 
     onUnmounted(() => {
+      clearTimeout(showTimer);
       if (countdownTimer) {
         clearInterval(countdownTimer);
       }
@@ -127,7 +135,8 @@ export default {
     return {
       show,
       attemptClose,
-      waitTimeRemaining
+      waitTimeRemaining,
+      safeContent
     };
   }
 };

@@ -17,33 +17,13 @@
         <div class="card-body">
 
           <p>{{ $t('order.description') }}</p>
-          <p v-if="renewalTargetId" class="renewal-target">{{ $t('dashboard.renewPlan') }} · {{ renewalTargetName }}</p>
+
 
         </div>
 
       </div>
 
 
-
-      <!-- 用户现有套餐提示 -->
-
-      <div class="alert-card" v-if="showExistingPlanWarning">
-
-        <div class="alert-icon">
-
-          <IconAlertTriangle :size="22" />
-
-        </div>
-
-        <div class="alert-content">
-
-          <h4>{{ $t('order.existing_plan_warning_title') }}</h4>
-
-          <p>{{ $t('order.existing_plan_warning_desc') }}</p>
-
-        </div>
-
-      </div>
 
 
 
@@ -350,12 +330,16 @@
               <!-- 实际内容 -->
 
               <div v-else>
+                <div class="summary-row"><div class="summary-label">价格依据</div><div class="summary-value">{{ priceSourceLabel }}</div></div>
+                <div class="summary-row"><div class="summary-label">购买方式</div><div class="summary-value">{{ purchaseActionLabel }}</div></div>
+                <div v-if="purchaseAction === 'renew'" class="summary-row"><div class="summary-label">续费套餐</div><div class="summary-value purchase-target-name">{{ renewalTargetName }}</div></div>
+                <div v-if="quoteError" class="purchase-quote-error" role="alert">{{ quoteError }} <button type="button" @click="retryPurchaseData" :disabled="loading.plan">重新读取价格</button></div>
 
                 <div class="summary-row">
 
                   <div class="summary-label">{{ $t('order.subtotal') }}</div>
 
-                  <div class="summary-value">{{ currencySymbol }}{{ (originalPrice / 100).toFixed(2) }}</div>
+                  <div class="summary-value">{{ quoteError ? '—' : currencySymbol + (originalPrice / 100).toFixed(2) }}</div>
 
                 </div>
 
@@ -383,7 +367,7 @@
 
                   <div class="summary-label">{{ $t('order.total') }}</div>
 
-                  <div class="summary-value">{{ currencySymbol }}{{ (finalPrice / 100).toFixed(2) }}</div>
+                  <div class="summary-value">{{ quoteError ? '—' : currencySymbol + (finalPrice / 100).toFixed(2) }}</div>
 
                 </div>
 
@@ -394,6 +378,13 @@
           </div>
 
 
+
+          <SubscriptionPurchaseChoice
+            :action="purchaseAction" :target-id="selectedSubscriptionId" :matches="matchingSubscriptions"
+            :owned-count="subscriptions.length" :owned-packages="subscriptions" :loading="loading.packages" :busy="loading.submitting || verifying"
+            :error="packageError || quoteError" :hint="renewalHint" :price-hint="priceSourceHint"
+            @action="changePurchaseAction" @target="changeRenewalTarget" @retry="retryPurchaseData"
+          />
 
           <!-- 操作按钮 -->
 
@@ -423,7 +414,7 @@
 
               @click="submitOrder"
 
-              :disabled="!selectedPriceType || loading.submitting || loading.plan"
+              :disabled="!canSubmit"
 
             >
 
@@ -431,7 +422,7 @@
 
               <span v-else class="loader"></span>
 
-              <span>{{ $t('order.place_order') }}</span>
+              <span>{{ purchaseAction === 'renew' ? '提交续费订单' : '提交新开订单' }}</span>
 
             </button>
 
@@ -447,7 +438,8 @@
     <CommonDialog
       :show-dialog="showConfirmDialog"
       :title="$t('order.title')"
-      :content="ORDER_CONFIG.confirmOrderContent"
+      :content="purchaseConfirmContent"
+      :confirm-button-text="purchaseAction === 'renew' ? '确认续费' : '确认新开'"
       :show-close-icon="true"
       :show-cancel-button="true"
       :show-confirm-button="true"
@@ -474,11 +466,14 @@ import { useRoute, useRouter } from 'vue-router';
 
 import { getCommConfig, fetchPlanById, verifyCoupon as checkCoupon, submitOrder as createOrder } from '@/api/shop';
 
-import { getUserInfo } from '@/api/dashboard';
+import { getUserInfo, getSubscribe } from '@/api/dashboard';
+import SubscriptionPurchaseChoice from '@/components/shop/SubscriptionPurchaseChoice.vue';
 
-import { isXboard, ORDER_CONFIG } from '@/utils/baseConfig';
+import { isXboard, ORDER_CONFIG, SHOP_CONFIG } from '@/utils/baseConfig';
 
 import CommonDialog from '@/components/popup/CommonDialog.vue';
+import { isAvailablePlanPrice } from '@/utils/planPrices';
+import { getPlanStock } from '@/utils/planStock';
 
 import {
 
@@ -505,6 +500,7 @@ export default {
   name: 'OrderConfirm',
 
   components: {
+    SubscriptionPurchaseChoice,
 
     IconCheck,
 
@@ -541,6 +537,7 @@ export default {
       plan: true,
 
       userInfo: true,
+      packages: true,
 
       submitting: false
 
@@ -551,6 +548,41 @@ export default {
     const plan = ref(null);
 
     const userInfo = ref(null);
+    const subscriptions = ref([]);
+    const packagesLoaded = ref(false);
+    const packageError = ref('');
+    const quoteError = ref('');
+    const quoteReady = ref(false);
+    const enteredFromPackage = route.query.subscription_action === 'renew' && Number(route.query.subscription_user_id) > 0;
+    const purchaseSource = computed(() => enteredFromPackage && purchaseAction.value === 'renew' ? 'package' : 'shop');
+    const priceSourceLabel = computed(() => purchaseSource.value === 'package' ? '原套餐续费价' : '商店标价');
+    const priceSourceHint = computed(() => purchaseSource.value === 'package'
+      ? '按所选套餐的续费价格计价；管理员为该周期设置过价格时，沿用该价格。'
+      : '本次从商店购买，新开或续费均按商店标价计价。');
+    const purchaseAction = ref(route.query.subscription_action === 'renew' ? 'renew' : 'add');
+    const selectedSubscriptionId = ref(Number(route.query.subscription_user_id) || 0);
+    const matchingSubscriptions = computed(() => subscriptions.value.filter(item => Number(item.plan_id) === Number(route.query.id)));
+    const renewalTarget = computed(() => matchingSubscriptions.value.find(item => Number(item.id) === selectedSubscriptionId.value));
+    const renewalTargetName = computed(() => {
+      if (!renewalTarget.value) return '请选择续费套餐';
+      const index = matchingSubscriptions.value.findIndex(item => Number(item.id) === selectedSubscriptionId.value);
+      return (renewalTarget.value.plan_name || '当前套餐') + (matchingSubscriptions.value.length > 1 ? ` · 第 ${index + 1} 份` : '');
+    });
+    const purchaseActionLabel = computed(() => purchaseAction.value === 'renew' ? '续费同款' : '新开一份');
+    const renewalHint = computed(() => selectedPriceType.value === 'onetime_price'
+      ? '按一次性流量套餐续购：该份套餐流量会重置为本次购买的配额。'
+      : '未到期的套餐从原到期时间顺延，已到期的套餐从付款后重新计时。');
+    const canSubmit = computed(() => packagesLoaded.value && quoteReady.value && !loading.plan && !loading.submitting && !verifying.value
+      && !!plan.value && !!selectedPriceType.value && (purchaseAction.value === 'add' || !!renewalTarget.value));
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const purchaseConfirmContent = computed(() => `<p>本次操作：<strong>${escapeHtml(purchaseActionLabel.value)}</strong></p>`
+      + `<p>套餐：${escapeHtml(purchaseAction.value === 'renew' ? renewalTargetName.value : plan.value?.name)}</p>`
+      + `<p>周期：${escapeHtml(t('shop.plan.price_options.' + getPriceTypeKey(selectedPriceType.value)))}</p>`
+      + `<p>价格依据：${escapeHtml(priceSourceLabel.value)}</p>`
+      + `<p>订单金额：${escapeHtml(currencySymbol.value)}${(finalPrice.value / 100).toFixed(2)}</p>`
+      + `<p>${purchaseAction.value === 'add' ? '将独立开通一份套餐，可与已有套餐同时使用。' : escapeHtml(renewalHint.value)}</p>`);
+    let quoteSequence = 0;
+
 
     const currency = ref('CNY');
 
@@ -622,16 +654,6 @@ export default {
 
 
 
-    const userHasActivePlan = computed(() => {
-
-      if (!userInfo.value) return false;
-
-      return userInfo.value.plan_id && userInfo.value.expired_at && userInfo.value.expired_at * 1000 > Date.now();
-
-    });
-
-
-
     const availablePrices = computed(() => {
 
       if (!plan.value) return {};
@@ -646,7 +668,7 @@ export default {
 
       priceTypes.forEach(type => {
 
-        if (plan.value[type] !== null) {
+        if (isAvailablePlanPrice(plan.value[type])) {
 
           prices[type] = plan.value[type];
 
@@ -721,45 +743,11 @@ export default {
 
 
 
-    const getPlanStockText = (plan) => {
-
-      if (plan.capacity_limit === 0) {
-
-        return t('shop.plan.stock.sold_out');
-
-      } else if (plan.capacity_limit > 0 && plan.capacity_limit < 5) {
-
-        return t('shop.plan.stock.warning');
-
-      } else {
-
-        return t('shop.plan.stock.plenty');
-
-      }
-
+    const getPlanStockText = plan => {
+      const stock = getPlanStock(plan, SHOP_CONFIG.lowStockThreshold);
+      return t(stock.textKey, { count: stock.count });
     };
-
-
-
-    const getStockBadgeClass = (plan) => {
-
-      if (plan.capacity_limit === 0) {
-
-        return 'stock-danger';
-
-      } else if (plan.capacity_limit > 0 && plan.capacity_limit < 5) {
-
-        return 'stock-warning';
-
-      } else {
-
-        return 'stock-plenty';
-
-      }
-
-    };
-
-
+    const getStockBadgeClass = plan => getPlanStock(plan, SHOP_CONFIG.lowStockThreshold).className;
 
     const getPriceTypeKey = (type) => {
 
@@ -833,7 +821,7 @@ export default {
 
     const verifyCoupon = async () => {
 
-      if (!couponCode.value || verifying.value) return;
+      if (!couponCode.value || verifying.value || !quoteReady.value) return;
 
 
 
@@ -956,7 +944,7 @@ export default {
 
     const submitOrder = async () => {
 
-      if (!selectedPriceType.value || loading.submitting) return;
+      if (!canSubmit.value) return;
 
 
 
@@ -983,6 +971,7 @@ export default {
     // 实际的订单提交逻辑
 
     const executeOrderSubmission = async () => {
+      if (!canSubmit.value) return;
 
       loading.submitting = true;
 
@@ -998,10 +987,9 @@ export default {
 
         };
 
-        if (route.query.subscription_action === 'renew' && route.query.subscription_user_id) {
-          orderData.subscription_action = 'renew';
-          orderData.subscription_user_id = Number(route.query.subscription_user_id);
-        }
+        orderData.subscription_action = purchaseAction.value;
+        orderData.purchase_source = purchaseSource.value;
+        if (purchaseAction.value === 'renew') orderData.subscription_user_id = selectedSubscriptionId.value;
 
 
 
@@ -1088,67 +1076,61 @@ export default {
 
 
     const fetchPlanData = async () => {
-
-      loading.plan = true;
-
-      try {
-
-        if (!route.query.id) {
-
-          showToast(t('order.no_plan_selected'), 'error');
-
-          router.push('/shop');
-
-          return;
-
-        }
-
-
-
-        const response = await fetchPlanById(route.query.id, route.query.subscription_action === 'renew' ? route.query.subscription_user_id : null);
-
-        if (response.data) {
-
-          plan.value = response.data;
-
-
-
-          if (route.query.period && plan.value[route.query.period] !== null) {
-
-            selectedPriceType.value = route.query.period;
-
-          } else {
-
-            const firstValidPriceType = Object.hasOwn(availablePrices.value, plan.value.billing_period)
-              ? plan.value.billing_period : Object.keys(availablePrices.value)[0];
-
-            selectedPriceType.value = firstValidPriceType || '';
-
-          }
-
-        } else {
-
-          showToast(response.message || t('order.plan_not_found'), 'error');
-
-          router.push('/shop');
-
-        }
-
-      } catch (error) {
-
-        console.error('获取套餐数据失败:', error);
-
-        showToast(error.response?.message || error.message || t('order.failed_to_fetch_plan'), 'error');
-
-      } finally {
-
+      const sequence = ++quoteSequence;
+      quoteReady.value = false;
+      quoteError.value = '';
+      if (!packagesLoaded.value) return;
+      if (purchaseAction.value === 'renew' && !renewalTarget.value) {
         loading.plan = false;
-
+        quoteError.value = '请选择要续费的同款套餐；原选择可能已经取消或变更。';
+        return;
       }
-
+      loading.plan = true;
+      selectedPriceType.value = '';
+      couponApplied.value = false; couponInfo.value = null; discountPercent.value = 0;
+      try {
+        const response = await fetchPlanById(route.query.id, purchaseAction.value === 'renew' ? selectedSubscriptionId.value : null, purchaseAction.value, purchaseSource.value);
+        if (sequence !== quoteSequence) return;
+        if (!response.data || Number(response.data.id) !== Number(route.query.id)) throw new Error(response.message || '暂时无法获取套餐价格');
+        plan.value = response.data;
+        const preferred = purchaseAction.value === 'renew' ? plan.value.billing_period : route.query.period;
+        selectedPriceType.value = Object.hasOwn(availablePrices.value, preferred) ? preferred : Object.keys(availablePrices.value)[0] || '';
+        if (!selectedPriceType.value) throw new Error('当前没有可购买的计费周期，请选择其他套餐。');
+        quoteReady.value = true;
+      } catch (error) {
+        if (sequence !== quoteSequence) return;
+        quoteError.value = error.response?.data?.message || error.response?.message || error.message || '读取价格失败，请重试';
+      } finally {
+        if (sequence === quoteSequence) loading.plan = false;
+      }
     };
-
-
+    const fetchSubscriptions = async () => {
+      loading.packages = true; packagesLoaded.value = false; packageError.value = '';
+      try {
+        const response = await getSubscribe();
+        if (!Array.isArray(response.data?.subscriptions)) throw new Error('未能读取已持有套餐，请重试');
+        subscriptions.value = response.data.subscriptions.filter(item => item.plan_id != null);
+        packagesLoaded.value = true;
+      } catch (error) {
+        packageError.value = '读取已持有套餐失败，请重新读取后再下单。';
+      } finally { loading.packages = false; }
+    };
+    const changePurchaseAction = action => {
+      if (loading.submitting || verifying.value || action === purchaseAction.value) return;
+      if (action === 'renew' && !matchingSubscriptions.value.length) return;
+      purchaseAction.value = action;
+      if (action === 'renew' && !renewalTarget.value) selectedSubscriptionId.value = Number(matchingSubscriptions.value[0].id);
+      fetchPlanData();
+    };
+    const changeRenewalTarget = id => {
+      if (loading.submitting || verifying.value) return;
+      selectedSubscriptionId.value = id;
+      fetchPlanData();
+    };
+    const retryPurchaseData = async () => {
+      if (!packagesLoaded.value) await fetchSubscriptions();
+      await fetchPlanData();
+    };
 
     const fetchUserInfo = async () => {
 
@@ -1230,34 +1212,16 @@ export default {
 
 
 
-    const showExistingPlanWarning = computed(() => {
-
-      if (route.query.subscription_action === 'renew' || loading.userInfo || loading.plan || !plan.value || !userInfo.value) {
-
-        return false;
-
-      }
-
-
-
-      return userHasActivePlan.value && plan.value.id !== userInfo.value.plan_id;
-
-    });
-
-
-
     onMounted(async () => {
-
-      await Promise.all([fetchPlanData(), fetchUserInfo(), fetchConfig()]);
-
+      await Promise.all([fetchSubscriptions(), fetchUserInfo(), fetchConfig()]);
+      await fetchPlanData();
     });
-
-
 
     return {
 
-      renewalTargetName: route.query.subscription_name || '当前套餐',
-      renewalTargetId: route.query.subscription_action === 'renew' ? route.query.subscription_user_id : null,
+      subscriptions, matchingSubscriptions, purchaseAction, selectedSubscriptionId, packageError, quoteError,
+      renewalTargetName, purchaseActionLabel, renewalHint, priceSourceLabel, priceSourceHint, purchaseConfirmContent, canSubmit,
+      changePurchaseAction, changeRenewalTarget, retryPurchaseData,
 
       plan,
 
@@ -1285,7 +1249,6 @@ export default {
 
       finalPrice,
 
-      userHasActivePlan,
 
       availablePrices,
 
@@ -1311,7 +1274,6 @@ export default {
 
       removeCoupon,
 
-      showExistingPlanWarning,
 
       // 新增的返回值
       ORDER_CONFIG,
@@ -1330,6 +1292,8 @@ export default {
 
 
 <style lang="scss" scoped>
+.purchase-target-name { max-width: 65%; overflow-wrap: anywhere; text-align: right; }
+.purchase-quote-error { color: #c2410c; font-size: 13px; margin-bottom: 12px; }
 
 .order-confirm-container {
 

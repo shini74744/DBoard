@@ -504,6 +504,8 @@ export default {
       purchase: '購入',
       sold_out_btn: '売り切れ',
       stock: {
+        remaining: "残り {count} 枠",
+        unlimited: "枠数無制限",
         plenty: '在庫十分',
         warning: '在庫僅少',
         sold_out: '売り切れ'

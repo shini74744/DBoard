@@ -44,7 +44,7 @@
         <keep-alive :include="cachedRoutes" :max="5">
           <component
             :is="Component"
-            :key="route.path"
+            :key="['OrderConfirm', 'Payment'].includes(route.name) ? route.fullPath : route.path"
             :is-active="true"
           />
         </keep-alive>

@@ -290,22 +290,36 @@ class ServerService
         );
     }
 
-    /** Expand account-specific rules to each package's node identity. */
+    /** Expand account selections (including every package identity) for existing node kernels. */
     public static function expandAccountRouteRules(array $rules): array
     {
-        $accountIds = collect($rules)->flatMap(fn ($rule) => data_get($rule, 'match.user_ids', []))
-            ->map(fn ($id) => (int) $id)->filter()->unique()->all();
+        $hasExclusions = collect($rules)->contains(fn ($rule) => !empty(data_get($rule, 'match.excluded_user_ids')));
+        $accountIds = collect($rules)->flatMap(fn ($rule) => array_merge(
+            (array) data_get($rule, 'match.user_ids', []),
+            (array) data_get($rule, 'match.excluded_user_ids', [])
+        ))->map(fn ($id) => (int) $id)->filter()->unique()->all();
         if (!$accountIds) return $rules;
         $children = User::whereIn('parent_id', $accountIds)->get(['id', 'parent_id'])->groupBy('parent_id');
-        $expanded = [];
-        foreach ($rules as $rule) {
-            $ids = array_values(array_unique(array_map('intval', data_get($rule, 'match.user_ids', []))));
-            if (!$ids) { $expanded[] = $rule; continue; }
+        // Include inactive identities too: renewal/traffic reset must not require a
+        // config refresh. New identities refresh exclusion rules before user sync.
+        $allIds = $hasExclusions ? User::orderBy('id')->pluck('id')->map(fn ($id) => (int) $id)->all() : [];
+        $expand = static function (array $ids) use ($children): array {
+            $ids = array_values(array_unique(array_map('intval', $ids)));
             $originalIds = $ids;
             foreach ($originalIds as $accountId) {
                 foreach ($children->get($accountId, collect()) as $child) $ids[] = (int) $child->id;
             }
-            $ids = array_values(array_unique($ids));
+            return array_values(array_unique($ids));
+        };
+        $expanded = [];
+        foreach ($rules as $rule) {
+            $selected = (array) data_get($rule, 'match.user_ids', []);
+            $excluded = (array) data_get($rule, 'match.excluded_user_ids', []);
+            unset($rule['match']['excluded_user_ids']);
+            if (!$selected && !$excluded) { $expanded[] = $rule; continue; }
+            $ids = $selected ? $expand($selected) : $allIds;
+            $ids = array_values(array_diff($ids, $expand($excluded)));
+            // Never emit an empty user matcher: kernels interpret that as ALL users.
             foreach (array_chunk($ids, 100) as $chunk) {
                 $copy = $rule;
                 data_set($copy, 'match.user_ids', $chunk);
@@ -320,7 +334,7 @@ class ServerService
         if ($userRoutesCapable) {
             return $rules;
         }
-        return array_values(array_filter($rules, fn ($rule) => empty(data_get($rule, 'match.user_ids'))));
+        return array_values(array_filter($rules, fn ($rule) => empty(data_get($rule, 'match.user_ids')) && empty(data_get($rule, 'match.excluded_user_ids'))));
     }
 
     public static function buildNodeConfig(Server $node): array

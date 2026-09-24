@@ -25,9 +25,9 @@ changes.extend([
     ('c(e??null),i(!0)},[]);return Q.jsx(d4t.Provider',
      'c({machine_id:e?.machine_id??null,enabled:e?.enabled??null,...(window.DBoardAdminGroups?.newNodeGroup?.()||{})}),i(!0)},[]);return Q.jsx(d4t.Provider'),
     ('qL({...s,type:l,transfer_enable:i})).data&&(D(),gE.success(e("form.success")),h())',
-     'qL({...s,type:l,transfer_enable:i,...(!o&&d?.admin_group_id?{admin_group_id:d.admin_group_id}:{})})).data&&(D(),gE.success(e("form.success")),h(),window.DBoardAdminGroups?.refresh?.())'),
+     'qL({...s,type:l,transfer_enable:i,...(!o?{admin_scope:d?.admin_scope||"node",...(d?.admin_group_id?{admin_group_id:d.admin_group_id}:{})}:{})})).data&&(D(),gE.success(e("form.success")),h(),window.DBoardAdminGroups?.refresh?.())'),
     ('Q.jsx(vtt,{className:"font-mono text-xs opacity-70",children:e("manage.description")})]}),Q.jsxs(zy,{...x',
-     'Q.jsx(vtt,{className:"font-mono text-xs opacity-70",children:!o&&d?.admin_group_name?"保存后自动归入管理分组："+d.admin_group_name:e("manage.description")})]}),Q.jsxs(zy,{...x'),
+     'Q.jsx(vtt,{className:"font-mono text-xs opacity-70",children:!o&&(d?.admin_group_name||d?.admin_scope==="node_landing")?"保存后自动归入："+(d?.admin_scope==="node_landing"?"落地分区 / ":"普通分区 / ")+(d?.admin_group_name||"未分组"):e("manage.description")})]}),Q.jsxs(zy,{...x'),
 ])
 for old, new in changes:
     if source.count(new) == 1:

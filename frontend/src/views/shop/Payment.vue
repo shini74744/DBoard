@@ -35,6 +35,15 @@
                   <div class="info-value">{{ orderDetail.plan?.name || '-' }}</div>
                 </div>
                 <div class="info-row">
+                  <div class="info-label">购买方式</div><div class="info-value">{{ orderActionLabel(orderDetail) }}</div>
+                </div>
+                <div v-if="orderRenewalTarget(orderDetail)" class="info-row">
+                  <div class="info-label">续费目标</div><div class="info-value">{{ orderRenewalTarget(orderDetail).replace(/^续费前到期：/, '原到期 ') }}</div>
+                </div>
+                <div v-if="orderPriceSource(orderDetail)" class="info-row">
+                  <div class="info-label">价格依据</div><div class="info-value">{{ orderPriceSource(orderDetail) }}</div>
+                </div>
+                <div class="info-row">
                   <div class="info-label">{{ $t('payment.period') }}</div>
                   <div class="info-value">{{ formatPeriod(orderDetail.period) }}</div>
                 </div>
@@ -428,6 +437,7 @@ import {
   IconHelp
 } from '@tabler/icons-vue';
 
+import { orderActionLabel, orderPriceSource, orderOriginalPrice, orderRenewalTarget } from '@/utils/orderPresentation';
 import { detectBrowser } from '@/utils/baseConfig';
 
 export default {
@@ -630,12 +640,7 @@ export default {
       return feeText ? `${t('payment.fee')}: ${feeText}` : '';
     };
 
-    const getPlanPrice = () => {
-      if (!orderDetail.value || !orderDetail.value.plan || !orderDetail.value.period) {
-        return 0;
-      }
-      return orderDetail.value.plan[orderDetail.value.period] || 0;
-    };
+    const getPlanPrice = () => orderOriginalPrice(orderDetail.value);
 
     const checkPayment = async () => {
       if (orderDetail.value.total_amount > 0 && !selectedMethod.value) {
@@ -1102,7 +1107,7 @@ export default {
       checkPayment,
       cancelCurrentOrder,
       goToDashboard,
-      getPlanPrice,
+      getPlanPrice, orderActionLabel, orderPriceSource, orderRenewalTarget,
       showCancelConfirm,
       confirmCancel,
       closeModal,

@@ -545,6 +545,8 @@ export default {
             purchase: '购买',
             sold_out_btn: '已售罄',
             stock: {
+        remaining: "剩余 {count} 份",
+        unlimited: "名额不限",
                 plenty: '库存充足',
                 warning: '库存紧张',
                 sold_out: '已售罄'

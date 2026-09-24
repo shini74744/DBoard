@@ -48,7 +48,7 @@
     renumberLabel.style.cssText='display:flex;align-items:center;gap:8px;margin:12px 0';
     renumberLabel.append(renumber,document.createTextNode('按当前排序从 1 重新分配显示 ID'));
     const preview=()=>{for(const [index,row]of [...list.children].entries()){
-      if(config.resource==='route')row.querySelector('small').textContent='显示 ID: '+(renumber.checked?index+1:row.dataset.displayId)+' · 原始 ID: '+row.dataset.sortId;
+      row.querySelector('small').textContent='显示 ID: '+(renumber.checked?index+1:row.dataset.displayId)+' · 原始 ID: '+row.dataset.sortId;
     }};
     renumber.onchange=preview;
     const close = () => {
@@ -61,7 +61,7 @@
     dialog.append(el('h2', '', config.label + '拖动排序'),
       el('p', '', '拖动左侧把手调整顺序，也可使用上下按钮。保存后列表按此顺序显示。'),
       list, status, actions);
-    if(config.resource==='route')dialog.insertBefore(renumberLabel,list);
+    dialog.insertBefore(renumberLabel,list);
     host.append(dialog); document.body.append(host);
     cancel.addEventListener('click', close);
     host.addEventListener('click', e => { if (e.target === host) close(); });
@@ -108,7 +108,7 @@
         saving = true; renumber.disabled = save.disabled = cancel.disabled = true;
         save.textContent = '正在保存…'; status.textContent = '';
         try {
-          await request(config, 'sort', { ids: [...list.children].map(row => Number(row.dataset.sortId)), ...(config.resource==='route'?{renumber:renumber.checked}:{}) });
+          await request(config, 'sort', { ids: [...list.children].map(row => Number(row.dataset.sortId)), renumber:renumber.checked });
           location.reload();
         } catch (error) {
           status.textContent = error.message || '保存失败';

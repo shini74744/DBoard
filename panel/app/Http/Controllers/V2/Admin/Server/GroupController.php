@@ -32,11 +32,14 @@ class GroupController extends Controller
     public function sort(Request $request)
     {
         $data = $request->validate([
+            'renumber' => 'sometimes|boolean',
             'ids' => 'required|array',
             'ids.*' => 'required|integer|distinct|min:1',
         ]);
         $ids = array_map('intval', $data['ids']);
-        DB::transaction(function () use ($ids) {
+        DB::transaction(function () use ($ids, $data) {
+            $sequence = DB::table('dboard_group_sequence')->where('id', 1);
+            $last = (int) $sequence->lockForUpdate()->value('last_number');
             $current = ServerGroup::query()->lockForUpdate()->pluck('id')->map(fn($id) => (int) $id)->all();
             sort($current);
             $incoming = $ids;
@@ -44,9 +47,14 @@ class GroupController extends Controller
             if ($current !== $incoming) {
                 throw new ApiException('权限组列表已更新，请刷新后重新排序');
             }
+            $renumber = (bool) ($data['renumber'] ?? false);
+            if ($renumber) ServerGroup::query()->update(['display_id' => null]);
             foreach ($ids as $position => $id) {
-                ServerGroup::whereKey($id)->update(['sort' => $position + 1]);
+                $values = ['sort' => $position + 1];
+                if ($renumber) $values['display_id'] = $position + 1;
+                ServerGroup::whereKey($id)->update($values);
             }
+            if ($renumber) $sequence->update(['last_number' => max($last, count($ids))]);
         });
         return $this->success(true);
     }

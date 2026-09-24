@@ -17,7 +17,7 @@ class ManageController extends Controller
     public function getNodes(Request $request)
     {
         $servers = ServerService::getAllServers()->map(function ($item) {
-            $item->makeVisible(array_merge(['admin_group', 'admin_group_number'],\App\Services\NodeFrontGateService::FIELDS));
+            $item->makeVisible(array_merge(['admin_scope', 'admin_group', 'admin_group_number'],\App\Services\NodeFrontGateService::FIELDS));
             $item['front_gate_status']=\App\Services\NodeFrontGateService::summary($item);
             $item['groups'] = ServerGroup::whereIn('id', $item['group_ids'] ?? [])->get(['name', 'id']);
             $item['parent'] = $item->parent;
@@ -41,8 +41,10 @@ class ManageController extends Controller
         $params = $request->validate([
             'id' => 'required|integer|exists:v2_server,id',
             'admin_group' => 'present|nullable|string|max:64',
+            'admin_scope' => 'sometimes|required|in:node,node_landing',
         ]);
 
+        $scope=$params['admin_scope'] ?? (Server::findOrFail($params['id'])->admin_scope ?? 'node');
         $group = trim((string) ($params['admin_group'] ?? ''));
         if ($group !== '' && preg_match('/[\x00-\x1F\x7F]/u', $group)) {
             return $this->fail([422, '分组名称不能包含控制字符']);
@@ -50,11 +52,11 @@ class ManageController extends Controller
 
         if ($group !== '') {
             DB::table('dboard_admin_groups')->insertOrIgnore([
-                'kind' => 'node', 'name' => $group,
+                'kind' => $scope, 'name' => $group,
                 'created_at' => time(), 'updated_at' => time(),
             ]);
         }
-        \App\Services\NodeAdminGroupService::move([(int) $params['id']], $group ?: null);
+        \App\Services\NodeAdminGroupService::move([(int) $params['id']], $group ?: null, $scope);
         return $this->success(true);
     }
 
@@ -89,6 +91,7 @@ class ManageController extends Controller
         $adminGroupId = $params['admin_group_id'] ?? null;
         unset($params['admin_group_id']);
         if ($request->input('id')) {
+            unset($params['admin_scope']); // Moving partitions is handled by group membership.
             $server = Server::find($request->input('id'));
             if (!$server) {
                 return $this->fail([400202, '服务器不存在']);
@@ -109,7 +112,7 @@ class ManageController extends Controller
             return DB::transaction(function () use ($params, $adminGroupId) {
                 if ($adminGroupId !== null) {
                     $group = DB::table('dboard_admin_groups')->where('id', $adminGroupId)
-                        ->where('kind', 'node')->lockForUpdate()->first();
+                        ->where('kind', $params['admin_scope'] ?? 'node')->lockForUpdate()->first();
                     if (!$group) {
                         return $this->fail([422, '所选管理分组已删除，请关闭窗口后重新选择分组']);
                     }

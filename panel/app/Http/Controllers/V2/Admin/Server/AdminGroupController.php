@@ -12,11 +12,12 @@ class AdminGroupController extends Controller
     private const TABLES = [
         'machine' => 'v2_server_machine',
         'node' => 'v2_server',
+        'node_landing' => 'v2_server',
     ];
 
     public function fetch(Request $request)
     {
-        $params = $request->validate(['kind' => 'required|in:machine,node']);
+        $params = $request->validate(['kind' => 'required|in:machine,node,node_landing']);
         return $this->success(DB::table('dboard_admin_groups')
             ->where('kind', $params['kind'])->orderBy('name')->get(['id', 'kind', 'name']));
     }
@@ -25,7 +26,7 @@ class AdminGroupController extends Controller
     {
         $params = $request->validate([
             'id' => 'nullable|integer|exists:dboard_admin_groups,id',
-            'kind' => 'required|in:machine,node',
+            'kind' => 'required|in:machine,node,node_landing',
             'name' => 'required|string|max:64',
         ]);
         $name = trim($params['name']);
@@ -51,8 +52,8 @@ class AdminGroupController extends Controller
                 $group = $this->lockedGroup((int) $group->id);
                 DB::table('dboard_admin_groups')->where('id', $group->id)
                     ->update(['name' => $name, 'updated_at' => time()]);
-                if ($kind === 'node') NodeAdminGroupService::rename($group->name, $name);
-                DB::table(self::TABLES[$kind])->where('admin_group', $group->name)
+                if ($kind !== 'machine') NodeAdminGroupService::rename($group->name, $name, $kind);
+                DB::table(self::TABLES[$kind])->when($kind !== 'machine', fn($q) => $q->where('admin_scope', $kind))->where('admin_group', $group->name)
                     ->update(['admin_group' => $name]);
             });
             return $this->success(['id' => $group->id, 'kind' => $kind, 'name' => $name]);
@@ -82,13 +83,13 @@ class AdminGroupController extends Controller
         }
         DB::transaction(function () use ($table, $group, $ids) {
             $group = $this->lockedGroup((int) $group->id);
-            $remove = DB::table($table)->where('admin_group', $group->name);
+            $remove = DB::table($table)->when($group->kind !== 'machine', fn($q) => $q->where('admin_scope', $group->kind))->where('admin_group', $group->name);
             if ($ids) {
                 $remove->whereNotIn('id', $ids);
             }
-            if ($group->kind === 'node') {
-                NodeAdminGroupService::move($remove->pluck('id')->all(), null);
-                NodeAdminGroupService::move($ids, $group->name);
+            if ($group->kind !== 'machine') {
+                NodeAdminGroupService::move($remove->pluck('id')->all(), null, $group->kind);
+                NodeAdminGroupService::move($ids, $group->name, $group->kind);
             } else {
                 $remove->update(['admin_group' => null]);
                 if ($ids) DB::table($table)->whereIn('id', $ids)->update(['admin_group' => $group->name]);
@@ -103,10 +104,10 @@ class AdminGroupController extends Controller
         $group = DB::table('dboard_admin_groups')->where('id', $params['id'])->first();
         DB::transaction(function () use ($group) {
             $group = $this->lockedGroup((int) $group->id);
-            $members = DB::table(self::TABLES[$group->kind])->where('admin_group', $group->name);
-            if ($group->kind === 'node') {
-                NodeAdminGroupService::move($members->pluck('id')->all(), null);
-                DB::table('dboard_node_group_sequences')->where('group_name', $group->name)->delete();
+            $members = DB::table(self::TABLES[$group->kind])->when($group->kind !== 'machine', fn($q) => $q->where('admin_scope', $group->kind))->where('admin_group', $group->name);
+            if ($group->kind !== 'machine') {
+                NodeAdminGroupService::move($members->pluck('id')->all(), null, $group->kind);
+                DB::table('dboard_node_scope_sequences')->where('scope', $group->kind)->where('group_name', $group->name)->delete();
             } else $members->update(['admin_group' => null]);
             DB::table('dboard_admin_groups')->where('id', $group->id)->delete();
         });

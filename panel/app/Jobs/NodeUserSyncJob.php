@@ -29,6 +29,14 @@ class NodeUserSyncJob implements ShouldQueue
     {
         $user = User::find($this->userId);
 
+        // A new account/package must be included in the compiled ALL-except rules
+        // before its credentials become usable. Existing identities are already
+        // present even when expired, banned, or moved between permission groups.
+        if ($this->action === 'created' && $user) {
+            NodeSyncService::notifyRouteIdentitiesCreated();
+        }
+
+
         if ($this->action === 'updated' || $this->action === 'created') {
             if ($this->oldGroupId) {
                 NodeSyncService::notifyUserRemovedFromGroup($this->userId, $this->oldGroupId);

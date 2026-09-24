@@ -130,7 +130,10 @@ class NodeAdminGroupCreationTest extends TestCase
         }
         $before = Server::orderBy('id')->get(['id', 'name', 'admin_group', 'group_ids'])->map->getAttributes()->all();
         $migration = require database_path('migrations/2026_09_24_000012_add_node_admin_group_numbers.php');
+        $scopeMigration = require database_path('migrations/2026_09_24_000019_add_node_landing_scope.php');
+        $scopeMigration->down();
         $migration->down(); $migration->up();
+        $scopeMigration->up();
         $this->assertSame([1, 1, 2, 1], Server::orderBy('id')->pluck('admin_group_number')->all());
         $this->assertSame($before, Server::orderBy('id')->get(['id', 'name', 'admin_group', 'group_ids'])->map->getAttributes()->all());
         $list = $this->getJson('/api/v2/00000000/server/manage/getNodes')->assertOk()->json('data');

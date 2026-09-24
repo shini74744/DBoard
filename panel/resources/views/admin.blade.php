@@ -90,7 +90,9 @@
   <script>{!! file_get_contents(resource_path('js/dboard-front-gate.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-telegram-settings.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-sort-drag.js')) !!}</script>
+  <script>{!! file_get_contents(resource_path('js/dboard-route-scroll.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-resource-sort.js')) !!}</script>
+  <script>{!! file_get_contents(resource_path('js/dboard-user-notice.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-marketing-notifications.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-telegram-binding.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-user-traffic.js')) !!}</script>

@@ -26,6 +26,7 @@ class PlanService
     {
         return Plan::where('show', true)
             ->where('sell', true)
+            ->withCount(['users as capacity_used' => fn ($query) => $query->where(fn ($q) => $q->where('expired_at', '>=', time())->orWhereNull('expired_at'))])
             ->orderBy('sort')
             ->get()
             ->filter(function ($plan) {
@@ -162,20 +163,21 @@ class PlanService
         }
     }
 
+    /** Remaining subscription slots, using the same expiry rule as purchase admission. */
+    public static function remainingCapacity(Plan $plan): ?int
+    {
+        if ($plan->capacity_limit === null) return null;
+        $used = $plan->getAttribute('capacity_used');
+        if ($used === null) {
+            $used = $plan->users()->where(fn ($q) => $q->where('expired_at', '>=', time())->orWhereNull('expired_at'))->count();
+        }
+        return max(0, (int) $plan->capacity_limit - (int) $used);
+    }
+
     public function hasCapacity(Plan $plan): bool
     {
-        if ($plan->capacity_limit === null) {
-            return true;
-        }
-
-        $activeUserCount = User::where('plan_id', $plan->id)
-            ->where(function ($query) {
-                $query->where('expired_at', '>=', time())
-                    ->orWhereNull('expired_at');
-            })
-            ->count();
-
-        return ($plan->capacity_limit - $activeUserCount) > 0;
+        $remaining = self::remainingCapacity($plan);
+        return $remaining === null || $remaining > 0;
     }
 
     public function getAvailablePeriods(Plan $plan): array

@@ -65,7 +65,8 @@ class OrderController extends Controller
             'plan_id' => 'required|exists:App\Models\Plan,id',
             'period' => 'required|string',
             'subscription_action' => 'nullable|in:auto,add,renew',
-            'subscription_user_id' => 'nullable|integer'
+            'subscription_user_id' => 'nullable|integer',
+            'purchase_source' => 'nullable|in:shop,package'
         ]);
 
         $user = User::findOrFail($request->user()->id);
@@ -85,7 +86,8 @@ class OrderController extends Controller
             $request->input('period'),
             $request->input('coupon_code'),
             $request->input('subscription_action', 'auto'),
-            $request->integer('subscription_user_id') ?: null
+            $request->integer('subscription_user_id') ?: null,
+            $request->input('purchase_source')
         );
 
         return $this->success($order->trade_no);

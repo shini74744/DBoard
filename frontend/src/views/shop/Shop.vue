@@ -208,28 +208,9 @@
 
             <h2 class="card-title">{{ plan.name }}</h2>
 
-            <div class="card-badge glassmorphism stock-plenty" v-if="plan.capacity_limit >= SHOP_CONFIG.lowStockThreshold || plan.capacity_limit === null">
-
+            <div class="card-badge glassmorphism" :class="getStockBadgeClass(plan)">
               <IconBox :size="16" class="badge-icon" />
-
-              <span>{{ $t('shop.plan.stock.plenty') }}</span>
-
-            </div>
-
-            <div class="card-badge glassmorphism stock-warning" v-else-if="plan.capacity_limit > 0 && plan.capacity_limit < SHOP_CONFIG.lowStockThreshold">
-
-              <IconBox :size="16" class="badge-icon" />
-
-              <span>{{ $t('shop.plan.stock.warning') }}</span>
-
-            </div>
-
-            <div class="card-badge glassmorphism stock-danger" v-if="plan.capacity_limit === 0">
-
-              <IconBox :size="16" class="badge-icon" />
-
-              <span>{{ $t('shop.plan.stock.sold_out') }}</span>
-
+              <span>{{ getPlanStockText(plan) }}</span>
             </div>
 
           </div>
@@ -246,7 +227,7 @@
 
                 <span class="amount">{{ getPlanMainPrice(plan) }}</span>
 
-                <span class="period">{{ $t(`shop.plan.periods.${getPriceTypeKey(getDisplayPriceType(plan))}`) }}</span>
+                <span v-if="getDisplayPriceType(plan)" class="period">{{ $t(`shop.plan.periods.${getPriceTypeKey(getDisplayPriceType(plan))}`) }}</span>
 
               </div>
 
@@ -268,19 +249,15 @@
 
                     :class="{
 
-                      'active': getDisplayPriceType(plan) === type,
-
-                      'disabled': price === null
+                      'active': getDisplayPriceType(plan) === type
 
                     }"
 
-                    @click="price !== null && selectPlanPriceType(plan.id, type)"
+                    @click="selectPlanPriceType(plan.id, type)"
 
                   >
 
-                    <IconCheck v-if="price !== null" class="tag-icon check" />
-
-                    <IconX v-else class="tag-icon error" />
+                    <IconCheck class="tag-icon check" />
 
                     {{ $t(`shop.plan.price_options.${getPriceTypeKey(type)}`) }}
 
@@ -319,6 +296,9 @@
             <!-- 套餐特性 -->
 
             <div class="plan-features">
+              <div class="feature-item" data-plan-device-limit>
+                <span>设备限制：{{ Number(plan.device_limit) > 0 ? plan.device_limit + ' 台' : $t('dashboard.unlimited') }}</span>
+              </div>
               <div class="feature-item" title="每个节点的 TCP 连接与 UDP 会话合计">
                 <span>连接数限制：{{ Number(plan.connection_limit) > 0 ? plan.connection_limit + ' / 节点' : $t('dashboard.unlimited') }}</span>
               </div>
@@ -363,11 +343,11 @@
 
               class="btn-purchase glassmorphism"
 
-              :class="{ 'btn-disabled': plan.capacity_limit === 0 }"
+              :class="{ 'btn-disabled': plan.capacity_limit === 0 || !getDisplayPriceType(plan) }"
 
               @click="purchasePlan(plan)"
 
-              :disabled="plan.capacity_limit === 0"
+              :disabled="plan.capacity_limit === 0 || !getDisplayPriceType(plan)"
 
             >
 
@@ -420,6 +400,8 @@ import { useI18n } from 'vue-i18n';
 import { useToast } from '@/composables/useToast';
 
 import { fetchPlans, getCommConfig } from '@/api/shop';
+import { isAvailablePlanPrice } from '@/utils/planPrices';
+import { getPlanStock } from '@/utils/planStock';
 
 import { SHOP_CONFIG } from '@/utils/baseConfig';
 
@@ -646,7 +628,7 @@ export default {
 
       const recurringTypes = priceTypes.filter(type => type !== 'onetime_price');
 
-      const defaultRecurring = recurringTypes.find(type => plan[type] !== null);
+      const defaultRecurring = recurringTypes.find(type => isAvailablePlanPrice(plan[type]));
 
 
 
@@ -658,7 +640,7 @@ export default {
 
 
 
-      if (plan.onetime_price !== null) {
+      if (isAvailablePlanPrice(plan.onetime_price)) {
 
         return 'onetime_price';
 
@@ -666,7 +648,7 @@ export default {
 
 
 
-      return priceTypes.find(type => plan[type] !== null) || priceTypes[0];
+      return priceTypes.find(type => isAvailablePlanPrice(plan[type])) || '';
 
     };
 
@@ -676,7 +658,7 @@ export default {
 
       const priceType = getDisplayPriceType(plan);
 
-      if (!priceType || plan[priceType] === null || plan[priceType] === undefined) {
+      if (!priceType || !isAvailablePlanPrice(plan[priceType])) {
 
         return '--';
 
@@ -748,7 +730,7 @@ export default {
 
                 const recurringTypes = priceTypes.filter(type => type !== 'onetime_price');
 
-                const defaultRecurring = recurringTypes.find(type => plan[type] !== null);
+                const defaultRecurring = recurringTypes.find(type => isAvailablePlanPrice(plan[type]));
 
 
 
@@ -756,13 +738,13 @@ export default {
 
                   selectedPriceType[plan.id] = defaultRecurring;
 
-                } else if (plan.onetime_price !== null) {
+                } else if (isAvailablePlanPrice(plan.onetime_price)) {
 
                   selectedPriceType[plan.id] = 'onetime_price';
 
                 } else {
 
-                  selectedPriceType[plan.id] = priceTypes.find(type => plan[type] !== null) || priceTypes[0];
+                  selectedPriceType[plan.id] = priceTypes.find(type => isAvailablePlanPrice(plan[type])) || '';
 
                 }
 
@@ -822,29 +804,18 @@ export default {
 
 
 
-    const getPlanPrices = (plan) => {
-
-      return {
-
-        month_price: plan.month_price,
-
-        quarter_price: plan.quarter_price,
-
-        half_year_price: plan.half_year_price,
-
-        year_price: plan.year_price,
-
-        two_year_price: plan.two_year_price,
-
-        three_year_price: plan.three_year_price,
-
-        onetime_price: plan.onetime_price
-
-      };
-
+    const getStockBadgeClass = plan => getPlanStock(plan, SHOP_CONFIG.lowStockThreshold).className;
+    const getPlanStockText = plan => {
+      const stock = getPlanStock(plan, SHOP_CONFIG.lowStockThreshold);
+      return t(stock.textKey, { count: stock.count });
     };
 
-
+    const getPlanPrices = (plan) => Object.fromEntries(
+      ['month_price', 'quarter_price', 'half_year_price', 'year_price',
+        'two_year_price', 'three_year_price', 'onetime_price']
+        .filter(type => isAvailablePlanPrice(plan[type]))
+        .map(type => [type, plan[type]])
+    );
 
     const getPriceTypeKey = (type) => {
 
@@ -936,7 +907,7 @@ export default {
 
       const type = selectedPriceType[plan.id];
 
-      if (plan[type] === null) return '--';
+      if (!isAvailablePlanPrice(plan[type])) return '--';
 
       return (plan[type] / 100).toFixed(2);
 
@@ -993,10 +964,7 @@ export default {
 
 
       const priceType = getDisplayPriceType(plan);
-
-
-
-
+      if (!priceType) return;
 
       router.push({
 
@@ -1028,7 +996,7 @@ export default {
 
       } else if (selectedFilter.value === 'onetime') {
 
-        return plans.value.filter(plan => plan.onetime_price !== null);
+        return plans.value.filter(plan => isAvailablePlanPrice(plan.onetime_price));
 
       }
 
@@ -1042,7 +1010,7 @@ export default {
 
       const recurringTypes = ['month_price', 'quarter_price', 'half_year_price', 'year_price', 'two_year_price', 'three_year_price'];
 
-      return recurringTypes.some(type => plan[type] !== null);
+      return recurringTypes.some(type => isAvailablePlanPrice(plan[type]));
 
     };
 
@@ -1052,7 +1020,7 @@ export default {
 
       const recurringTypes = ['month_price', 'quarter_price', 'half_year_price', 'year_price', 'two_year_price', 'three_year_price'];
 
-      return plan.onetime_price !== null && !recurringTypes.some(type => plan[type] !== null);
+      return isAvailablePlanPrice(plan.onetime_price) && !recurringTypes.some(type => isAvailablePlanPrice(plan[type]));
 
     };
 
@@ -1062,7 +1030,7 @@ export default {
 
       const plan = plans.value.find(p => p.id === planId);
 
-      if (plan && plan[type] !== null) {
+      if (plan && isAvailablePlanPrice(plan[type])) {
 
         selectedPriceType[planId] = type;
 
@@ -1220,6 +1188,8 @@ export default {
 
 
     return {
+      getStockBadgeClass,
+      getPlanStockText,
 
       plans,
 

@@ -517,6 +517,8 @@ export default {
       purchase: '購買',
       sold_out_btn: '已售罄',
       stock: {
+        remaining: "剩餘 {count} 份",
+        unlimited: "名額不限",
         plenty: '庫存充足',
         warning: '庫存緊張',
         sold_out: '已售罄'

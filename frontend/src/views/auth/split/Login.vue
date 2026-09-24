@@ -157,7 +157,7 @@ import DomainAuthAlert from '@/components/common/DomainAuthAlert.vue';
 import { handleTokenLogin, hasVerifyToken } from '@/utils/tokenLogin';
 import { AUTH_LAYOUT_CONFIG, SITE_CONFIG, AUTH_CONFIG } from '@/utils/baseConfig';
 import AuthPopup from '@/components/auth/AuthPopup.vue';
-import { shouldShowAuthPopup } from '@/utils/authPopupState';
+import { useAuthPopup } from '@/composables/useAuthPopup';
 import { useNavigator } from "@/composables/useNavigator";
 
 export default {
@@ -202,13 +202,7 @@ export default {
     const showCaptchaModal = ref(false);
     const isClosingModal = ref(false);
 
-    const showAuthPopup = ref(false);
-    const authPopupConfig = reactive({
-      title: AUTH_CONFIG.popup?.title || '',
-      content: AUTH_CONFIG.popup?.content || '',
-      cooldownHours: AUTH_CONFIG.popup?.cooldownHours || 24,
-      closeWaitSeconds: AUTH_CONFIG.popup?.closeWaitSeconds || 0
-    });
+    const { showAuthPopup, authPopupConfig, openAuthPopup } = useAuthPopup();
 
     const handleAuthPopupClose = () => {
       showAuthPopup.value = false;
@@ -312,7 +306,7 @@ export default {
           }, 500);
         }
 
-        showAuthPopup.value = shouldShowAuthPopup(AUTH_CONFIG.popup);
+        openAuthPopup();
       } catch (error) {
         console.error("登录状态检查失败", error);
       }

@@ -502,6 +502,8 @@ export default {
             purchase: 'Mua',
             sold_out_btn: 'Hết hàng',
             stock: {
+        remaining: "Còn {count} suất",
+        unlimited: "Không giới hạn suất",
                 plenty: 'Còn đủ hàng',
                 warning: 'Sắp hết hàng',
                 sold_out: 'Hết hàng'

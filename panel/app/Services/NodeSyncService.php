@@ -34,6 +34,19 @@ class NodeSyncService
         self::push($nodeId, 'sync.config', ['config' => ServerService::buildNodeConfig($node)]);
     }
 
+    /** Refresh dynamic account exclusions before publishing a newly created identity. */
+    public static function notifyRouteIdentitiesCreated(): void
+    {
+        foreach (Server::whereNotNull('custom_route_rules')->get(['id', 'custom_route_rules']) as $node) {
+            foreach ($node->custom_route_rules ?? [] as $rule) {
+                if (!empty(data_get($rule, 'match.excluded_user_ids'))) {
+                    self::notifyConfigUpdated((int) $node->id);
+                    break;
+                }
+            }
+        }
+    }
+
     /**
      * Push all users to all nodes in the group
      */

@@ -504,6 +504,8 @@ export default {
       purchase: 'خرید',
       sold_out_btn: 'فروخته شد',
       stock: {
+        remaining: "{count} ظرفیت باقی‌مانده",
+        unlimited: "ظرفیت نامحدود",
         plenty: 'موجودی کافی',
         warning: 'موجودی کم',
         sold_out: 'فروخته شد'

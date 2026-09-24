@@ -8,6 +8,8 @@
   const hideGroupedKey = 'dboard.node.hideGroupedInAll';
   let hideGroupedInAll = true;
   try { hideGroupedInAll = localStorage.getItem(hideGroupedKey) !== 'false'; } catch {}
+  let nodeScope = 'node';
+  try { if(localStorage.getItem('dboard.node.partition')==='node_landing') nodeScope='node_landing'; } catch {}
   const state = {
     kind: null, items: [], groups: [], selected: 'all', error: '', loading: false,
     header: null, native: null, bar: null, results: null, modal: null, loadId: 0, refreshPending: false,
@@ -17,9 +19,11 @@
     selected: { machine: 'all', node: 'all' },
     cache: { machine: null, node: null },
     newNodeGroup() {
-      if (state.kind !== 'node' || !state.selected.startsWith('group:')) return {};
+      if (state.kind !== 'node') return {};
+      const preset={admin_scope:nodeScope};
+      if(!state.selected.startsWith('group:')) return preset;
       const group = state.groups.find(item => item.name === state.selected.slice(6));
-      return group ? { admin_group_id: Number(group.id), admin_group_name: group.name } : {};
+      return group ? { ...preset, admin_group_id: Number(group.id), admin_group_name: group.name } : preset;
     },
     refresh() {
       if (state.loading) state.refreshPending = true;
@@ -28,14 +32,17 @@
     filter(kind, rows) {
       const selected = this.selected[kind];
       const hideGrouped = kind === 'node' && hideGroupedInAll && (!selected || selected === 'all');
-      if ((!selected || selected === 'all') && !hideGrouped) return rows;
+      if (kind !== 'node' && (!selected || selected === 'all') && !hideGrouped) return rows;
       const cached = this.cache[kind];
       if (cached?.rows === rows && cached.selected === selected && cached.version === this.version) {
         return cached.result;
       }
       const groups = new Map((state.kind === kind ? state.items : [])
         .map(item => [String(item.id), groupName(item)]));
+      const scopes=new Map((state.kind===kind?state.items:[]).map(item=>[String(item.id),item.admin_scope||'node']));
       const result = rows.filter(item => {
+        if(kind==='node' && (scopes.get(String(item.id)) ?? item.admin_scope ?? 'node')!==nodeScope)return false;
+        if((!selected||selected==='all')&&!hideGrouped)return true;
         const name = groups.get(String(item.id)) ?? groupName(item);
         return hideGrouped || selected === 'ungrouped' ? !name : name === selected.slice(6);
       });
@@ -113,7 +120,7 @@
     try {
       const [items, groups] = await Promise.all([
         request(endpoints[kind].list),
-        request('server/admin-group/fetch?kind=' + kind),
+        request('server/admin-group/fetch?kind=' + (kind==='node'?nodeScope:kind)),
       ]);
       if (state.kind !== kind || state.loadId !== loadId) return;
       const previousAssignments = assignmentKey(state.items);
@@ -132,14 +139,16 @@
     }
   }
   function assignmentKey(items) {
-    return JSON.stringify(items.map(item => [String(item.id), groupName(item)]).sort((a, b) => a[0].localeCompare(b[0])));
+    return JSON.stringify(items.map(item => [String(item.id), groupName(item),item.admin_scope||'node']).sort((a, b) => a[0].localeCompare(b[0])));
   }
   function groupName(item) {
     return String(item.admin_group || '').trim();
   }
+  const inScope = item => state.kind!=='node' || (item.admin_scope||'node')===nodeScope;
+  const scopedItems = () => state.items.filter(inScope);
   function groupCounts() {
     const counts = new Map();
-    for (const item of state.items) {
+    for (const item of scopedItems()) {
       const name = groupName(item);
       counts.set(name, (counts.get(name) || 0) + 1);
     }
@@ -158,10 +167,17 @@
       state.selected = 'all';
       notifyGroup();
     }
-    const title = el('strong', '', '管理分组');
+    const title = el(state.kind==='node'?'button':'strong', '', nodeScope==='node_landing'&&state.kind==='node'?'落地分组 ⇄':'管理分组'+(state.kind==='node'?' ⇄':''));
+    if(state.kind==='node') {
+      title.type='button';title.className='dboard-admin-group-scope';
+      title.title=nodeScope==='node'?'切换到落地节点分区':'切换到普通节点分区';
+      title.setAttribute('aria-label',title.title);
+      title.style.cssText='white-space:nowrap;font-weight:600;flex-shrink:0;border:0;background:transparent;color:inherit;padding:6px;cursor:pointer';
+      title.onclick=()=>{closeManager();nodeScope=nodeScope==='node'?'node_landing':'node';try{localStorage.setItem('dboard.node.partition',nodeScope)}catch{}state.selected='all';state.groups=[];state.loadId++;state.loading=false;notifyGroup();render();void load();};
+    }
     const chips = el('div', 'dboard-admin-group-chips');
     const options = [
-      ['all', '全部', state.kind === 'node' && hideGroupedInAll ? (counts.get('') || 0) : state.items.length],
+      ['all', '全部', state.kind === 'node' && hideGroupedInAll ? (counts.get('') || 0) : scopedItems().length],
       ['ungrouped', '未分组', counts.get('') || 0],
       ...[...names].sort((a, b) => a.localeCompare(b, 'zh-CN'))
         .map(name => ['group:' + name, name, counts.get(name) || 0]),
@@ -170,7 +186,7 @@
       const button = el('button', 'dboard-admin-group-chip' + (state.selected === key ? ' active' : ''), label);
       button.type = 'button';
       button.title = key === 'all' && state.kind === 'node' && hideGroupedInAll
-        ? '显示 ' + count + ' 个未分组节点，已隐藏 ' + (state.items.length - count) + ' 个已分组节点'
+        ? '显示 ' + count + ' 个未分组节点，已隐藏 ' + (scopedItems().length - count) + ' 个已分组节点'
         : label + '（' + count + '）';
       button.setAttribute('aria-pressed', String(state.selected === key));
       button.append(el('span', 'dboard-admin-group-count', String(count)));
@@ -208,7 +224,7 @@
       head.append(sort);
     }
     // Keep the same controls during polling so focus and horizontal scroll survive.
-    const renderKey = JSON.stringify([state.kind, state.selected, options, hideGroupedInAll]);
+    const renderKey = JSON.stringify([state.kind, nodeScope, state.selected, options, hideGroupedInAll]);
     if (state.bar.dataset.renderKey !== renderKey) {
       const scrollLeft = state.bar.querySelector('.dboard-admin-group-chips')?.scrollLeft || 0;
       state.bar.replaceChildren(head);
@@ -239,6 +255,8 @@
     if (!state.kind || (state.loading && !state.items.length && !state.groups.length)) return;
     closeManager();
     const kind = state.kind;
+    const groupKind = kind==='node'?nodeScope:kind;
+    const member = (item,name) => groupName(item)===name && (kind!=='node'||(item.admin_scope||'node')===groupKind);
     const api = 'server/admin-group/';
     let selectedId = state.groups.find(group => 'group:' + group.name === state.selected)?.id
       ?? state.groups[0]?.id ?? null;
@@ -249,12 +267,12 @@
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
     const head = el('div', 'dboard-admin-group-dialog-head');
-    head.append(el('h2', '', '管理' + endpoints[kind].title + '分组'));
+    head.append(el('h2', '', '管理' + (groupKind==='node_landing'?'落地节点':endpoints[kind].title) + '分组'));
     const close = el('button', '', '关闭');
     close.type = 'button';
     close.addEventListener('click', closeManager);
     head.append(close);
-    const hint = el('p', 'dboard-admin-group-meta', '先创建分组，再勾选要加入的' + endpoints[kind].title + '并保存。每项只属于一个后台分组。');
+    const hint = el('p', 'dboard-admin-group-meta', '先创建分组，再勾选要加入的' + endpoints[kind].title + '并保存。每项只属于一个后台分组。'+(kind==='node'?'跨分区选择会将节点移动到当前分区。':'' ));
     const status = el('p', 'dboard-admin-group-status');
     status.setAttribute('role', 'status');
 
@@ -324,7 +342,7 @@
         const details = el('span', 'dboard-admin-group-item');
         details.append(el('strong', '', item.name || '未命名'));
         const oldGroup = groupName(item);
-        details.append(el('small', '', 'ID ' + item.id + (oldGroup && oldGroup !== group.name ? ' · 当前在“' + oldGroup + '”' : '')));
+        details.append(el('small', '', 'ID ' + item.id + (kind==='node'?' · '+((item.admin_scope||'node')==='node_landing'?'落地分区':'普通分区'):'') + (oldGroup && oldGroup !== group.name ? ' · 当前在“' + oldGroup + '”' : '')));
         row.append(box, details);
         list.append(row);
       }
@@ -347,7 +365,7 @@
     const chooseGroup = id => {
       selectedId = id;
       const group = currentGroup();
-      draft = new Set(state.items.filter(item => groupName(item) === group?.name)
+      draft = new Set(state.items.filter(item => member(item,group?.name))
         .map(item => String(item.id)));
       search.value = '';
       drawGroupSelector();
@@ -370,7 +388,7 @@
       createButton.disabled = true;
       status.textContent = '正在创建分组…';
       try {
-        const group = await request(api + 'save', { kind, name });
+        const group = await request(api + 'save', { kind:groupKind, name });
         state.groups.push(group);
         createInput.value = '';
         chooseGroup(group.id);
@@ -391,8 +409,8 @@
       renameButton.disabled = true;
       try {
         const oldName = group.name;
-        const updated = await request(api + 'save', { id: group.id, kind, name });
-        for (const item of state.items) if (groupName(item) === oldName) item.admin_group = updated.name;
+        const updated = await request(api + 'save', { id: group.id, kind:groupKind, name });
+        for (const item of state.items) if (member(item,oldName)) item.admin_group = updated.name;
         group.name = updated.name;
         if (state.selected === 'group:' + oldName) state.selected = 'group:' + updated.name;
         notifyGroup();
@@ -414,8 +432,8 @@
         const ids = [...draft].map(Number);
         await request(api + 'syncMembers', { id: group.id, item_ids: ids });
         for (const item of state.items) {
-          if (draft.has(String(item.id))) item.admin_group = group.name;
-          else if (groupName(item) === group.name) item.admin_group = null;
+          if (draft.has(String(item.id))) { item.admin_group = group.name; if(kind==='node')item.admin_scope=groupKind; }
+          else if (member(item,group.name)) item.admin_group = null;
         }
         notifyGroup();
         render();
@@ -433,7 +451,7 @@
       dropButton.disabled = true;
       try {
         await request(api + 'drop', { id: group.id });
-        for (const item of state.items) if (groupName(item) === group.name) item.admin_group = null;
+        for (const item of state.items) if (member(item,group.name)) item.admin_group = null;
         state.groups = state.groups.filter(item => item.id !== group.id);
         if (state.selected === 'group:' + group.name) state.selected = 'all';
         notifyGroup();

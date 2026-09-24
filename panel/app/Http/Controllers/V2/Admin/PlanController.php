@@ -23,7 +23,7 @@ class PlanController extends Controller
                 'users',
                 'users as active_users_count' => function ($query) {
                     $query->where(function ($q) {
-                        $q->where('expired_at', '>', time())
+                        $q->where('expired_at', '>=', time())
                           ->orWhereNull('expired_at');
                     });
                 }

@@ -17,11 +17,16 @@ export function getCommConfig() {
 }
 
 
-export function fetchPlanById(id, subscriptionUserId = null) {
+export function fetchPlanById(id, subscriptionUserId = null, subscriptionAction = null, purchaseSource = null) {
+  // The encrypted gateway forwards only the decrypted URL. Include the query
+  // before the request interceptor encrypts it; Axios params would be lost.
+  const query = new URLSearchParams({id});
+  if (subscriptionUserId) query.set('subscription_user_id', subscriptionUserId);
+  if (subscriptionAction) query.set('subscription_action', subscriptionAction);
+  if (purchaseSource) query.set('purchase_source', purchaseSource);
   return request({
-    url: '/user/plan/fetch',
-    method: 'get',
-    params: {id, ...(subscriptionUserId ? {subscription_user_id: subscriptionUserId} : {})}
+    url: `/user/plan/fetch?${query.toString()}`,
+    method: 'get'
   });
 }
 

@@ -65,7 +65,10 @@ class OrderService
         ?string $couponCode = null,
         string $subscriptionAction = 'auto',
         ?int $subscriptionUserId = null,
+        ?string $purchaseSource = null,
     ): Order {
+        if ($purchaseSource !== null && !in_array($purchaseSource, ['shop','package'], true)) throw new ApiException('无效的购买入口');
+        if ($subscriptionAction === 'add') $purchaseSource = 'shop';
         $userService = app(UserService::class);
         $planService = new PlanService($plan);
         if (!in_array($subscriptionAction, ['auto', 'add', 'renew'], true)) {
@@ -82,12 +85,12 @@ class OrderService
             if ((int) $target->plan_id !== (int) $plan->id) {
                 throw new ApiException('续费套餐与所选套餐不一致');
             }
-            $plan=PackageBillingService::forPackage($plan,$target);
+            if ($purchaseSource !== 'shop') $plan=PackageBillingService::forPackage($plan,$target);
             $planService=new PlanService($plan);
             $planService->validatePurchase($target, $period);
         } else {
             $purchaseUser = $subscriptionAction === 'add' ? new User(['plan_id' => null]) : $user;
-            if ($subscriptionAction !== 'add') {
+            if ($subscriptionAction !== 'add' && $purchaseSource !== 'shop') {
                 $plan=PackageBillingService::forPackage($plan,$user);
                 $planService=new PlanService($plan);
             }
@@ -95,7 +98,7 @@ class OrderService
         }
         HookManager::call('order.create.before', [$user, $plan, $period, $couponCode]);
 
-        return DB::transaction(function () use ($user, $plan, $period, $couponCode, $userService, $subscriptionAction, $subscriptionUserId) {
+        return DB::transaction(function () use ($user, $plan, $period, $couponCode, $userService, $subscriptionAction, $subscriptionUserId, $purchaseSource) {
             $user = User::lockForUpdate()->find($user->id);
             if (!$user) {
                 throw new ApiException(__('The user does not exist'));
@@ -115,7 +118,7 @@ class OrderService
                     || (int)$pricingUser->plan_id!==(int)$plan->id)
                     throw new ApiException('续费套餐已变更，请重新选择');
             }
-            if ($subscriptionAction!=='add') $plan=PackageBillingService::forPackage($plan,$pricingUser);
+            if ($subscriptionAction!=='add' && $purchaseSource !== 'shop') $plan=PackageBillingService::forPackage($plan,$pricingUser);
             (new PlanService($plan))->validatePurchase($pricingUser,$period);
             $newPeriod = PlanService::getPeriodKey($period);
 
@@ -126,6 +129,9 @@ class OrderService
                 'trade_no' => Helper::generateOrderNo(),
                 'total_amount' => (int) round(optional($plan->prices)[$newPeriod] * 100),
                 'subscription_action' => $subscriptionAction,
+                'purchase_source' => $purchaseSource,
+                'subscription_expired_at_before' => $subscriptionAction === 'renew' ? $pricingUser->expired_at : null,
+                'quoted_price' => (int) round(optional($plan->prices)[$newPeriod] * 100),
                 'subscription_user_id' => $subscriptionAction === 'renew' ? $subscriptionUserId : null,
             ]);
 

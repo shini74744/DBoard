@@ -21,6 +21,7 @@ use App\Http\Controllers\V2\Admin\KnowledgeController;
 use App\Http\Controllers\V2\Admin\PaymentController;
 use App\Http\Controllers\V2\Admin\SystemController;
 use App\Http\Controllers\V2\Admin\ThemeController;
+use App\Http\Controllers\V2\Admin\UserNoticeController;
 use App\Http\Controllers\V2\Admin\ShopPromotionController;
 use App\Http\Controllers\V2\Admin\TelegramCampaignController;
 use App\Http\Controllers\V2\Admin\TelegramBindingController;
@@ -49,6 +50,8 @@ class AdminRoute
                 $router->post('/testSendMail', [ConfigController::class, 'testSendMail']);
             });
 
+            $router->get('/user-notice/fetch', [UserNoticeController::class, 'fetch']);
+            $router->post('/user-notice/save', [UserNoticeController::class, 'save']);
             $router->get('/shop-promotion/fetch', [ShopPromotionController::class, 'fetch']);
             $router->post('/shop-promotion/save', [ShopPromotionController::class, 'save']);
             $router->get('/notification-center/options', [TelegramCampaignController::class, 'options']);

@@ -13,6 +13,7 @@ class CommController extends Controller
     public function config()
     {
         $data = [
+            'user_notice' => \App\Services\UserNotice::configured(),
             'frontend_theme' => admin_setting('frontend_theme', 'Xboard'),
             'tos_url' => admin_setting('tos_url'),
             'is_email_verify' => (int) admin_setting('email_verify', 0) ? 1 : 0,

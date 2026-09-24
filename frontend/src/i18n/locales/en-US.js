@@ -546,6 +546,8 @@ export default {
             purchase: 'Purchase',
             sold_out_btn: 'Sold Out',
             stock: {
+        remaining: "{count} slots left",
+        unlimited: "Unlimited slots",
                 plenty: 'Plenty in Stock',
                 warning: 'Low Stock',
                 sold_out: 'Sold Out'

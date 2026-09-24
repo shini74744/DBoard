@@ -3,6 +3,7 @@
     ['store', '商店宣传'],
     ['notice', '通知中心'],
     ['binding', '机器人绑定'],
+    ['user-notice', '用户须知'],
   ];
   const promoFields = [
     ['hero_title', '页面标题'], ['hero_description', '页面介绍'],
@@ -332,6 +333,10 @@
     if (key === 'store') openStore();
     else if (key === 'notice') openNotice();
     else if (key === 'binding') openBinding();
+    else if (key === 'user-notice') {
+      page = key;
+      window.DBoardUserNotice.open({ panel, shell, request, el, isCurrent: () => page === key });
+    }
   }
   function restorePageFromUrl() {
     const key = pageFromUrl();
@@ -363,6 +368,7 @@
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', key === 'store'
         ? 'M3 3h2l2.4 11h10.8l2-8H6 M8 20h.01 M18 20h.01'
+        : key === 'user-notice' ? 'M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5'
         : key === 'notice' ? 'M18 8a6 6 0 0 0-12 0c0 7-3 8-3 9h18c0-1-3-2-3-9 M10 21h4'
         : 'M8 12a4 4 0 0 1 4-4h7v8h-7a4 4 0 0 1-4-4z M8 12H5a2 2 0 0 0 0 4h2 M14 8V5a2 2 0 0 0-4 0v3 M15 12h.01');
       svg.append(path);

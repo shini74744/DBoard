@@ -81,7 +81,9 @@
               </div>
 
               <div class="order-card-body">
-                <div class="order-activity-heading">{{ order.is_admin_created ? '管理员手动' : (order.type === 5 ? '新增套餐' : '订单') }} · {{ order.plan?.name || '套餐' }}</div>
+                <div class="order-activity-heading">{{ orderActionLabel(order) }} · {{ order.plan?.name || '套餐' }}</div>
+                <span v-if="orderPriceSource(order)" class="order-price-source">{{ orderPriceSource(order) }}</span>
+                <p v-if="orderRenewalTarget(order)" class="order-renewal-target">{{ orderRenewalTarget(order) }}</p>
                 <p v-if="order.activity_summary" class="order-activity-summary">{{ order.activity_summary }}</p>
                 <div class="info-row">
                   <span class="label">{{ headerTexts.createdAt }}:</span>
@@ -93,7 +95,7 @@
                 </div>
                 <div class="info-row">
                   <span class="label">{{ headerTexts.totalAmount }}:</span>
-                  <span class="value amount">{{ order.record_kind === 'activity' ? '—' : formatAmount(order.total_amount) }}</span>
+                  <span class="value amount">{{ order.record_kind === 'activity' ? '—' : formatAmount(orderAmount(order)) }}</span>
                 </div>
               </div>
 
@@ -142,12 +144,14 @@
                 <tr v-for="order in paginatedOrders" :key="order.trade_no">
                   <td class="trade-no">
                     <div>{{ order.trade_no }}</div>
-                    <strong class="order-activity-heading">{{ order.is_admin_created ? '管理员手动' : (order.type === 5 ? '新增套餐' : '订单') }} · {{ order.plan?.name || '套餐' }}</strong>
-                    <p v-if="order.activity_summary" class="order-activity-summary">{{ order.activity_summary }}</p>
+                    <strong class="order-activity-heading">{{ orderActionLabel(order) }} · {{ order.plan?.name || '套餐' }}</strong>
+                    <span v-if="orderPriceSource(order)" class="order-price-source">{{ orderPriceSource(order) }}</span>
+                <p v-if="orderRenewalTarget(order)" class="order-renewal-target">{{ orderRenewalTarget(order) }}</p>
+                <p v-if="order.activity_summary" class="order-activity-summary">{{ order.activity_summary }}</p>
                   </td>
                   <td>{{ formatDate(order.created_at) }}</td>
                   <td>{{ formatCycle(order.period) }}</td>
-                  <td class="amount">{{ order.record_kind === 'activity' ? '—' : formatAmount(order.total_amount) }}</td>
+                  <td class="amount">{{ order.record_kind === 'activity' ? '—' : formatAmount(orderAmount(order)) }}</td>
                   <td>
                     <span class="status-badge" :class="getStatusClass(order.status)">
                       {{ order.record_kind === 'activity' ? '已记录' : getStatusText(order.status) }}
@@ -248,6 +252,7 @@ import {
   IconArrowRight
 } from '@tabler/icons-vue';
 import { fetchOrderList, cancelOrder } from '@/api/orderlist';
+import { orderActionLabel, orderPriceSource, orderAmount, orderRenewalTarget } from '@/utils/orderPresentation';
 import { getCommConfig } from '@/api/shop';
 
 const { t, locale } = useI18n();
@@ -1225,4 +1230,9 @@ watch(locale, () => {
 .order-activity-summary{margin:6px 0 0;font-size:13px;line-height:1.65;white-space:normal;overflow-wrap:anywhere;color:var(--secondary-text-color)}
 .order-table .trade-no{min-width:230px;max-width:450px;white-space:normal;overflow-wrap:anywhere}
 .order-card .order-activity-heading{margin-bottom:5px}
+</style>
+
+<style scoped>
+.order-renewal-target { margin: 7px 0 0; font-size: 11px; line-height: 1.6; white-space: normal; color: var(--secondary-text-color); }
+.order-price-source { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 6px; font-size: 11px; line-height: 1.6; color: var(--theme-color, #355cc2); background: rgba(var(--theme-color-rgb, 53,92,194), .08); }
 </style>

@@ -121,7 +121,8 @@ class ServerSave extends FormRequest
             'show' => '',
             'name' => 'required|string',
             'group_ids' => 'nullable|array',
-            'admin_group_id' => ['nullable', 'integer', Rule::exists('dboard_admin_groups', 'id')->where('kind', 'node')],
+            'admin_scope' => 'sometimes|required|in:node,node_landing',
+            'admin_group_id' => ['nullable', 'integer', Rule::exists('dboard_admin_groups', 'id')->whereIn('kind', ['node', 'node_landing'])],
             'route_ids' => 'nullable|array',
             'outbound_ids' => 'nullable|array',
             'outbound_ids.*' => 'integer|exists:v2_server_outbound,id',
@@ -151,6 +152,8 @@ class ServerSave extends FormRequest
             'custom_route_rules.*.match' => 'nullable|array',
             'custom_route_rules.*.match.user_ids' => 'nullable|array|max:100',
             'custom_route_rules.*.match.user_ids.*' => 'required|integer|min:1|distinct|exists:v2_user,id',
+            'custom_route_rules.*.match.excluded_user_ids' => 'nullable|array|max:100',
+            'custom_route_rules.*.match.excluded_user_ids.*' => 'required|integer|min:1|distinct|exists:v2_user,id',
             'custom_route_rules.*.match.domains' => 'nullable|array',
             'custom_route_rules.*.match.domain_suffixes' => 'nullable|array',
             'custom_route_rules.*.match.ip_cidrs' => 'nullable|array',
@@ -380,7 +383,7 @@ class ServerSave extends FormRequest
             }
 
             foreach ((array) $this->input('custom_route_rules', []) as $index => $rule) {
-                if (!empty(data_get($rule, 'match.user_ids')) && !Cache::get('dboard_user_routes_capable:' . (int) $this->input('id'))) {
+                if ((!empty(data_get($rule, 'match.user_ids')) || !empty(data_get($rule, 'match.excluded_user_ids'))) && !Cache::get('dboard_user_routes_capable:' . (int) $this->input('id'))) {
                     $validator->errors()->add(
                         "custom_route_rules.{$index}.match.user_ids",
                         '节点程序需要先升级到支持按用户分流的版本，升级并重新连接后才能保存此规则'

@@ -113,16 +113,19 @@ class Server extends Model
     protected $table = 'v2_server';
 
     protected $guarded = ['id'];
-    protected $hidden = ['admin_group', 'admin_group_number', 'front_gate_enabled', 'front_gate_node_ids', 'front_gate_group_ids'];
+    protected $hidden = ['admin_scope', 'admin_group', 'admin_group_number', 'front_gate_enabled', 'front_gate_node_ids', 'front_gate_group_ids'];
     protected static function booted(): void
     {
         static::creating(function (Server $server) {
             // Every new instance, including a copy, receives a fresh group number.
-            $server->admin_group_number = \App\Services\NodeAdminGroupService::next($server->admin_group);
+            $server->admin_group_number = \App\Services\NodeAdminGroupService::next($server->admin_group, 1, $server->admin_scope ?? 'node');
+        });
+        static::saved(function (Server $server) {
+            if ($server->wasRecentlyCreated || $server->wasChanged('outbound_ids')) \App\Services\NodeOutboundTrafficService::attached($server);
         });
         static::updating(function (Server $server) {
-            if ($server->isDirty('admin_group')) {
-                $server->admin_group_number = \App\Services\NodeAdminGroupService::next($server->admin_group);
+            if ($server->isDirty('admin_group') || $server->isDirty('admin_scope')) {
+                $server->admin_group_number = \App\Services\NodeAdminGroupService::next($server->admin_group, 1, $server->admin_scope ?? 'node');
             }
         });
     }

@@ -14,6 +14,21 @@ class MultiSubscriptionTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function createApplication()
+    {
+        $app = parent::createApplication();
+        $app->detectEnvironment(fn () => 'testing');
+        $app['config']->set('app.env', 'testing');
+        $app['config']->set('database.default', 'sqlite');
+        $app['config']->set('database.connections.sqlite', [
+            'driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => true,
+        ]);
+        \Illuminate\Support\Facades\DB::purge('sqlite');
+        \Illuminate\Support\Facades\Cache::setDefaultDriver('array');
+        return $app;
+    }
+
+
     public function test_same_plan_can_be_added_twice_without_overwriting_existing_package(): void
     {
         $plan = $this->plan();
@@ -344,7 +359,7 @@ class MultiSubscriptionTest extends TestCase
     private function plan(): Plan
     {
         return Plan::create([
-            'name' => 'Test Plan', 'group_id' => 1, 'transfer_enable' => 100,
+            'capacity_limit' => null, 'name' => 'Test Plan', 'group_id' => 1, 'transfer_enable' => 100,
             'show' => 1, 'sell' => 1, 'renew' => 1, 'sort' => 0,
             'reset_traffic_method' => Plan::RESET_TRAFFIC_MONTHLY,
             'prices' => [Plan::PERIOD_MONTHLY => 10],
