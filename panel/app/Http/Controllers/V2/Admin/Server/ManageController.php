@@ -28,8 +28,8 @@ class ManageController extends Controller
 
     public function connections(Request $request)
     {
-        $params=$request->validate(['id'=>'required|integer|exists:v2_server,id']);
-        return $this->success(\App\Services\NodeConnectionService::details(Server::findOrFail($params['id'])));
+        $params=$request->validate(['id'=>'required|integer|exists:v2_server,id','user_id'=>'nullable|integer|min:1']);
+        return $this->success(\App\Services\NodeConnectionService::details(Server::findOrFail($params['id']),isset($params['user_id'])?(int)$params['user_id']:null));
     }
 
     /**

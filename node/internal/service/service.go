@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"github.com/shini74744/DBoard/node/internal/connstats"
 	"io"
-	"math"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -194,7 +193,8 @@ func (s *Service) Run(ctx context.Context) error {
 
 	// Set up tickers
 	trackTicker := time.NewTicker(time.Duration(s.cfg.Node.TrackInterval) * time.Second)
-	pushInterval := time.Duration(math.Max(float64(s.pushInterval), 5)) * time.Second
+	// Connection telemetry is reported every five seconds; a slow report never overlaps.
+	pushInterval := 5 * time.Second
 	pullInterval := time.Duration(s.pullInterval) * time.Second
 	reportTicker := time.NewTicker(pushInterval)
 	pullTicker := time.NewTicker(pullInterval)

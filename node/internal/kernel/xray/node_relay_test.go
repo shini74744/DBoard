@@ -61,7 +61,7 @@ func TestNodeRelayDedicatedIdentity(t *testing.T) {
 		t.Fatalf("unexpected response: %s", data)
 	}
 	connectionSnapshot := entry.ConnectionStats()
-	if len(connectionSnapshot.Sources) == 0 || connectionSnapshot.Sources[0].Value != "127.0.0.1" || len(connectionSnapshot.TCPRows) == 0 || connectionSnapshot.TCPRows[0].Count < 1 {
+	if len(connectionSnapshot.Sources) == 0 || connectionSnapshot.Sources[0].Value != "127.0.0.1" || len(connectionSnapshot.TCPRows) == 0 || connectionSnapshot.TCPRows[0].Count < 1 || connectionSnapshot.TCPRows[0].UserID != 1 || connectionSnapshot.Sources[0].UserID != 1 {
 		t.Fatalf("real proxy connection metadata missing: %+v", connectionSnapshot)
 	}
 	snapshot := entry.GetOutboundTraffic()

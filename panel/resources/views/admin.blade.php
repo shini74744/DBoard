@@ -87,6 +87,7 @@
 <body>
   <div id="root"></div>
   <script>{!! file_get_contents(resource_path('js/dboard-telegram-settings.js')) !!}</script>
+  <script>{!! file_get_contents(resource_path('js/dboard-sort-drag.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-resource-sort.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-marketing-notifications.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-telegram-binding.js')) !!}</script>

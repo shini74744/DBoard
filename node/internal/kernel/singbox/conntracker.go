@@ -250,7 +250,7 @@ func (t *ConnTracker) RoutedConnection(
 	}
 
 	return &trackedConn{
-		statsDone: t.connections.Begin(sourceIP, metadata.Destination.String(), "tcp"),
+		statsDone: t.connections.BeginUser(uid, sourceIP, metadata.Destination.String(), "tcp"),
 		Conn:      conn,
 		tracker:   t,
 		us:        us,
@@ -303,7 +303,7 @@ func (t *ConnTracker) RoutedPacketConnection(
 	}
 
 	return &trackedPacketConn{
-		statsDone:  t.connections.Begin(sourceIP, metadata.Destination.String(), "udp"),
+		statsDone:  t.connections.BeginUser(uid, sourceIP, metadata.Destination.String(), "udp"),
 		PacketConn: conn,
 		tracker:    t,
 		us:         us,

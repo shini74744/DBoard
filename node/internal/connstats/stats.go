@@ -11,9 +11,10 @@ import (
 )
 
 const maxEntries = 100000
-const maxRows = 300
+const maxRows = 1000
 
 type Row struct {
+	UserID  int     `json:"user_id"`
 	Value   string  `json:"value"`
 	Active  int     `json:"active"`
 	Count   int64   `json:"count"`
@@ -21,6 +22,7 @@ type Row struct {
 }
 type Snapshot struct {
 	Version    int   `json:"version"`
+	UserSince  int64 `json:"user_since"`
 	At         int64 `json:"at"`
 	Since      int64 `json:"since"`
 	SourceIPs  int   `json:"source_ips"`
@@ -32,17 +34,23 @@ type Snapshot struct {
 	Truncated  bool  `json:"truncated"`
 	Resolution int   `json:"resolution_seconds"`
 }
-type key struct{ kind, value string }
+type key struct {
+	kind, value string
+	userID      int
+}
 type counter struct {
 	count   int64
 	seconds float64
 }
 type Session struct {
+	userID                  int
 	source, target, network string
 	last                    time.Time
 }
 type Store struct {
 	path      string
+	lastSave  time.Time
+	userSince time.Time
 	persistMu sync.Mutex
 	lastPrune int64
 	mu        sync.Mutex
@@ -60,6 +68,7 @@ func (s *Store) init(now time.Time) {
 		s.active = make(map[*Session]struct{})
 		s.buckets = make(map[int64]map[key]*counter)
 		s.since = now
+		s.userSince = now
 	}
 }
 func normalizeIP(ip string) string {
@@ -70,6 +79,9 @@ func normalizeIP(ip string) string {
 	return parsed.String()
 }
 func (s *Store) Begin(source, target, network string) func() {
+	return s.BeginUser(0, source, target, network)
+}
+func (s *Store) BeginUser(userID int, source, target, network string) func() {
 	if s == nil {
 		return func() {}
 	}
@@ -84,13 +96,13 @@ func (s *Store) Begin(source, target, network string) func() {
 	if target == "" {
 		target = "未知"
 	}
-	c := &Session{source: normalizeIP(source), target: target, network: network, last: now}
+	c := &Session{userID: userID, source: normalizeIP(source), target: target, network: network, last: now}
 	s.mu.Lock()
 	s.init(now)
 	s.prune(now)
 	s.active[c] = struct{}{}
-	s.add(now.Unix()/60, key{"source", c.source}, 1, 0, now)
-	s.add(now.Unix()/60, key{network, target}, 1, 0, now)
+	s.add(now.Unix()/60, key{"source", c.source, c.userID}, 1, 0, now)
+	s.add(now.Unix()/60, key{network, target, c.userID}, 1, 0, now)
 	s.mu.Unlock()
 	var once sync.Once
 	return func() {
@@ -148,8 +160,8 @@ func (s *Store) accrue(c *Session, now time.Time) {
 			end = now
 		}
 		seconds := end.Sub(from).Seconds()
-		s.add(minute, key{"source", c.source}, 0, seconds, now)
-		s.add(minute, key{c.network, c.target}, 0, seconds, now)
+		s.add(minute, key{"source", c.source, c.userID}, 0, seconds, now)
+		s.add(minute, key{c.network, c.target, c.userID}, 0, seconds, now)
 		from = end
 	}
 	c.last = now
@@ -163,7 +175,7 @@ func (s *Store) Snapshot() Snapshot {
 	for c := range s.active {
 		s.accrue(c, now)
 	}
-	result := Snapshot{Version: 1, At: now.Unix(), Since: s.since.Unix(), Resolution: 60, Truncated: now.Before(s.lostUntil)}
+	result := Snapshot{Version: 2, UserSince: s.userSince.Unix(), At: now.Unix(), Since: s.since.Unix(), Resolution: 60, Truncated: now.Before(s.lostUntil)}
 	if cutoff := now.Add(-24 * time.Hour).Unix(); result.Since < cutoff {
 		result.Since = cutoff
 	}
@@ -171,7 +183,7 @@ func (s *Store) Snapshot() Snapshot {
 	get := func(k key) *Row {
 		r := rows[k]
 		if r == nil {
-			r = &Row{Value: k.value}
+			r = &Row{Value: k.value, UserID: k.userID}
 			rows[k] = r
 		}
 		return r
@@ -194,8 +206,8 @@ func (s *Store) Snapshot() Snapshot {
 		if c.source != "未知" {
 			ips[c.source] = struct{}{}
 		}
-		get(key{"source", c.source}).Active++
-		get(key{c.network, c.target}).Active++
+		get(key{"source", c.source, c.userID}).Active++
+		get(key{c.network, c.target, c.userID}).Active++
 		if c.network == "tcp" {
 			result.TCP++
 		} else {
@@ -224,7 +236,10 @@ func (s *Store) Snapshot() Snapshot {
 			if v[i].Count != v[j].Count {
 				return v[i].Count > v[j].Count
 			}
-			return v[i].Value < v[j].Value
+			if v[i].Value != v[j].Value {
+				return v[i].Value < v[j].Value
+			}
+			return v[i].UserID < v[j].UserID
 		})
 		if len(v) > maxRows {
 			result.Truncated = true

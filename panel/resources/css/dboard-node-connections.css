@@ -31,3 +31,6 @@
  .dboard-connections-head h2 { font-size:16px; }
  .dboard-connections-note { font-size:11px; }
 }
+
+.dboard-connections-tools select { min-width:0;flex:1;max-width:100%;padding:8px 10px;border:1px solid hsl(var(--border));border-radius:6px;background:hsl(var(--background));color:inherit; }
+.dboard-connections-tools label { flex:none;align-self:center;font-size:13px; }

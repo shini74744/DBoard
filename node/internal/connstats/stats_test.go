@@ -98,3 +98,42 @@ func TestHistorySurvivesRestartWithoutActiveConnections(t *testing.T) {
 		t.Fatalf("%+v", v)
 	}
 }
+
+func TestSharedIPAndTargetRemainSeparatedByUser(t *testing.T) {
+	now := time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC)
+	s := New()
+	s.now = func() time.Time { return now }
+	path := t.TempDir() + "/history.json"
+	if err := s.Restore(path); err != nil {
+		t.Fatal(err)
+	}
+	a := s.BeginUser(41, "1.1.1.1", "shared.example:443", "tcp")
+	b := s.BeginUser(46, "::ffff:1.1.1.1", "shared.example:443", "tcp")
+	now = now.Add(10 * time.Second)
+	a()
+	now = now.Add(10 * time.Second)
+	v := s.Snapshot()
+	if v.Version != 2 || v.SourceIPs != 1 || v.TCP != 1 || len(v.TCPRows) != 2 {
+		t.Fatalf("%+v", v)
+	}
+	found := map[int]Row{}
+	for _, r := range v.TCPRows {
+		found[r.UserID] = r
+	}
+	if found[41].Active != 0 || found[41].Seconds != 10 || found[46].Active != 1 || found[46].Seconds != 20 {
+		t.Fatalf("%+v", found)
+	}
+	b()
+	if err := s.Save(); err != nil {
+		t.Fatal(err)
+	}
+	restored := New()
+	restored.now = s.now
+	if err := restored.Restore(path); err != nil {
+		t.Fatal(err)
+	}
+	r := restored.Snapshot()
+	if len(r.TCPRows) != 2 || r.TCP != 0 || r.UserSince != v.UserSince {
+		t.Fatalf("%+v", r)
+	}
+}

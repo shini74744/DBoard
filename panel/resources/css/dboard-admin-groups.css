@@ -242,3 +242,6 @@
 .dboard-admin-group-hide-grouped { display: inline-flex; align-items: center; gap: .35rem; min-height: 32px; font-size: .8rem; white-space: nowrap; cursor: pointer; }
 .dboard-admin-group-hide-grouped input { width: 14px; height: 14px; margin: 0; accent-color: hsl(var(--primary)); cursor: pointer; }
 .dboard-admin-group-hide-grouped input:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+
+.dboard-drop-target { outline: 2px solid hsl(var(--primary)); outline-offset: -2px; }
+.dboard-machine-sort-handle { touch-action: none; }

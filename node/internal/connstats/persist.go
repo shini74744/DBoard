@@ -10,12 +10,14 @@ import (
 )
 
 type diskEntry struct {
+	UserID      int
 	Minute      int64
 	Kind, Value string
 	Count       int64
 	Seconds     float64
 }
 type diskState struct {
+	UserSince int64
 	Since     int64
 	LostUntil int64
 	Entries   []diskEntry
@@ -44,6 +46,9 @@ func (s *Store) Restore(path string) error {
 	if data.Since > 0 && data.Since <= now.Unix() {
 		s.since = time.Unix(data.Since, 0)
 	}
+	if data.UserSince > 0 && data.UserSince <= now.Unix() {
+		s.userSince = time.Unix(data.UserSince, 0)
+	}
 	s.lostUntil = time.Unix(data.LostUntil, 0)
 	for _, e := range data.Entries {
 		if s.entries >= maxEntries {
@@ -59,7 +64,7 @@ func (s *Store) Restore(path string) error {
 		if len(e.Value) > 512 || e.Count < 0 || e.Seconds < 0 {
 			continue
 		}
-		s.add(e.Minute, key{e.Kind, e.Value}, e.Count, e.Seconds, now)
+		s.add(e.Minute, key{e.Kind, e.Value, e.UserID}, e.Count, e.Seconds, now)
 	}
 	return nil
 }
@@ -69,11 +74,14 @@ func (s *Store) Save() error {
 	}
 	s.persistMu.Lock()
 	defer s.persistMu.Unlock()
+	if !s.lastSave.IsZero() && s.now().Sub(s.lastSave) < time.Minute {
+		return nil
+	}
 	s.mu.Lock()
-	data := diskState{Since: s.since.Unix(), LostUntil: s.lostUntil.Unix(), Entries: make([]diskEntry, 0, s.entries)}
+	data := diskState{UserSince: s.userSince.Unix(), Since: s.since.Unix(), LostUntil: s.lostUntil.Unix(), Entries: make([]diskEntry, 0, s.entries)}
 	for minute, b := range s.buckets {
 		for k, v := range b {
-			data.Entries = append(data.Entries, diskEntry{minute, k.kind, k.value, v.count, v.seconds})
+			data.Entries = append(data.Entries, diskEntry{k.userID, minute, k.kind, k.value, v.count, v.seconds})
 		}
 	}
 	s.mu.Unlock()
@@ -92,5 +100,8 @@ func (s *Store) Save() error {
 	if err = tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), s.path)
+	if err = os.Rename(tmp.Name(), s.path); err == nil {
+		s.lastSave = s.now()
+	}
+	return err
 }

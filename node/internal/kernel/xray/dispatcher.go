@@ -168,7 +168,10 @@ func (d *LimitDispatcher) trackLink(link *transport.Link, email, sourceIP string
 	if dest.Address.Family().IsIPv6() {
 		target = "[" + dest.Address.String() + "]:" + dest.Port.String()
 	}
-	done := d.connections.Begin(sourceIP, target, network)
+	d.mu.RLock()
+	uid := d.emailToUID[email]
+	d.mu.RUnlock()
+	done := d.connections.BeginUser(uid, sourceIP, target, network)
 
 	onClose := func() {
 		done()

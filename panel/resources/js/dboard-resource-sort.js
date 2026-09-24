@@ -43,6 +43,14 @@
     cancel.type = save.type = 'button';
     save.disabled = true;
     let saving = false;
+    const renumber = el('input'); renumber.type='checkbox';
+    const renumberLabel=el('label','dboard-sort-renumber');
+    renumberLabel.style.cssText='display:flex;align-items:center;gap:8px;margin:12px 0';
+    renumberLabel.append(renumber,document.createTextNode('按当前排序从 1 重新分配显示 ID'));
+    const preview=()=>{for(const [index,row]of [...list.children].entries()){
+      if(config.resource==='route')row.querySelector('small').textContent='显示 ID: '+(renumber.checked?index+1:row.dataset.displayId)+' · 原始 ID: '+row.dataset.sortId;
+    }};
+    renumber.onchange=preview;
     const close = () => {
       if (saving) return;
       host.remove(); if (overlay === host) overlay = null;
@@ -53,13 +61,14 @@
     dialog.append(el('h2', '', config.label + '拖动排序'),
       el('p', '', '拖动左侧把手调整顺序，也可使用上下按钮。保存后列表按此顺序显示。'),
       list, status, actions);
+    if(config.resource==='route')dialog.insertBefore(renumberLabel,list);
     host.append(dialog); document.body.append(host);
     cancel.addEventListener('click', close);
     host.addEventListener('click', e => { if (e.target === host) close(); });
     host.addEventListener('keydown', e => {
       if (e.key === 'Escape') close();
       if (e.key === 'Tab') {
-        const controls = [...dialog.querySelectorAll('button:not(:disabled)')];
+        const controls = [...dialog.querySelectorAll('button:not(:disabled),input:not(:disabled)')];
         const first = controls[0], last = controls[controls.length - 1];
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
@@ -74,34 +83,12 @@
       status.textContent = '';
       for (const entry of entries) {
         const row = el('li', 'dboard-machine-sort-row');
-        row.dataset.sortId = String(entry.id);
+        row.dataset.sortId = String(entry.id); row.dataset.displayId=String(entry.display_id??entry.id);
         const handle = el('button', 'dboard-machine-sort-handle', '⠿');
         handle.type = 'button'; handle.style.touchAction = 'none';
         handle.setAttribute('aria-label', '拖动' + entry.name);
         const label = el('span', 'dboard-machine-sort-label');
         label.append(el('span', 'dboard-machine-sort-name', entry.name), el('small', '', 'ID: ' + entry.id));
-        let pointer = null;
-        handle.addEventListener('pointerdown', e => {
-          if (saving || (e.pointerType === 'mouse' && e.button !== 0)) return;
-          e.preventDefault(); handle.focus(); pointer = e.pointerId;
-          handle.setPointerCapture(pointer); row.classList.add('dragging');
-        });
-        handle.addEventListener('pointermove', e => {
-          if (pointer !== e.pointerId || saving) return;
-          e.preventDefault();
-          const rect = list.getBoundingClientRect();
-          if (e.clientY < rect.top + 40) list.scrollTop -= 16;
-          else if (e.clientY > rect.bottom - 40) list.scrollTop += 16;
-          const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('li[data-sort-id]');
-          if (!target || target === row || target.parentElement !== list) return;
-          const before = [...list.children].indexOf(row) > [...list.children].indexOf(target);
-          list.insertBefore(row, before ? target : target.nextSibling);
-          if (!handle.hasPointerCapture(pointer)) handle.setPointerCapture(pointer);
-        });
-        for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) handle.addEventListener(event, e => {
-          if (e.pointerId !== pointer) return;
-          pointer = null; row.classList.remove('dragging');
-        });
         const controls = el('span', 'dboard-machine-sort-controls');
         for (const [direction, text, symbol] of [[-1, '上移', '↑'], [1, '下移', '↓']]) {
           const button = el('button', '', symbol); button.type = 'button';
@@ -109,22 +96,23 @@
           button.addEventListener('click', () => {
             if (saving) return;
             const target = direction < 0 ? row.previousElementSibling : row.nextElementSibling;
-            if (target) list.insertBefore(row, direction < 0 ? target : target.nextSibling);
+            if (target) { list.insertBefore(row, direction < 0 ? target : target.nextSibling); preview(); }
           });
           controls.append(button);
         }
         row.append(handle, label, controls); list.append(row);
       }
+      window.DBoardSortDrag.bind(list,{rowSelector:'li[data-sort-id]',disabled:()=>saving,onMove:preview}); preview();
       save.disabled = false;
       save.addEventListener('click', async () => {
-        saving = true; save.disabled = cancel.disabled = true;
+        saving = true; renumber.disabled = save.disabled = cancel.disabled = true;
         save.textContent = '正在保存…'; status.textContent = '';
         try {
-          await request(config, 'sort', { ids: [...list.children].map(row => Number(row.dataset.sortId)) });
+          await request(config, 'sort', { ids: [...list.children].map(row => Number(row.dataset.sortId)), ...(config.resource==='route'?{renumber:renumber.checked}:{}) });
           location.reload();
         } catch (error) {
           status.textContent = error.message || '保存失败';
-          saving = false; save.disabled = cancel.disabled = false; save.textContent = '保存排序';
+          saving = false; renumber.disabled = save.disabled = cancel.disabled = false; save.textContent = '保存排序';
         }
       });
     } catch (error) { if (host.isConnected) status.textContent = error.message || '读取失败'; }

@@ -78,11 +78,14 @@ class RouteController extends Controller
     public function sort(Request $request)
     {
         $data = $request->validate([
+            'renumber' => 'sometimes|boolean',
             'ids' => 'required|array',
             'ids.*' => 'required|integer|distinct|min:1',
         ]);
         $ids = array_map('intval', $data['ids']);
-        DB::transaction(function () use ($ids) {
+        DB::transaction(function () use ($ids, $data) {
+            $sequence = DB::table('dboard_outbound_sequence')->where('id',1);
+            $last = (int)$sequence->lockForUpdate()->value('last_number');
             $current = ServerOutbound::query()->lockForUpdate()->pluck('id')->map(fn($id) => (int) $id)->all();
             sort($current);
             $incoming = $ids;
@@ -90,9 +93,14 @@ class RouteController extends Controller
             if ($current !== $incoming) {
                 throw new ApiException('出站列表已更新，请刷新后重新排序');
             }
+            $renumber = (bool)($data['renumber'] ?? false);
+            if ($renumber) ServerOutbound::query()->update(['display_id'=>null]);
             foreach ($ids as $position => $id) {
-                ServerOutbound::whereKey($id)->update(['sort' => $position + 1]);
+                $values = ['sort'=>$position + 1];
+                if ($renumber) $values['display_id'] = $position + 1;
+                ServerOutbound::whereKey($id)->update($values);
             }
+            if ($renumber) $sequence->update(['last_number'=>max($last,count($ids))]);
         });
         return $this->success(true);
     }

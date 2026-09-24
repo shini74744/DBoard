@@ -16,7 +16,7 @@
   }
   window.DBoardNodeConnections={open(node,kind='sources'){
     close();
-    const state=current={node,kind,data:null,page:1,query:'',busy:false,controller:null,
+    const state=current={node,kind,data:null,page:1,query:'',userId:'',requestId:0,busy:false,controller:null,
       trigger:document.activeElement,overflow:document.body.style.overflow};
     const overlay=state.overlay=el('div','dboard-connections-overlay');
     const dialog=el('section','dboard-connections-dialog');dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');
@@ -31,6 +31,12 @@
       const button=el('button','',name);button.type='button';button.dataset.kind=key;
       button.onclick=()=>{state.kind=key;state.page=1;state.query='';search.value='';draw();};tabs.append(button);
     }
+    const ownerTools=el('div','dboard-connections-tools');
+    const ownerLabel=el('label','','筛选用户');ownerLabel.htmlFor='dboard-connections-owner';
+    const owner=el('select');owner.id='dboard-connections-owner';owner.setAttribute('aria-label','筛选当前拥有此节点的用户');
+    const allUsers=el('option','','全部用户');allUsers.value='';owner.append(allUsers);
+    owner.onchange=()=>{state.userId=owner.value;state.page=1;state.data=null;state.query='';search.value='';status.textContent='正在读取…';drawRows();void load(true);};
+    ownerTools.append(ownerLabel,owner);
     const tools=el('div','dboard-connections-tools');
     const search=el('input');search.type='search';search.placeholder='搜索 IP、运营商或连接目标';search.setAttribute('aria-label',search.placeholder);
     search.oninput=()=>{state.query=search.value.trim().toLowerCase();state.page=1;drawRows();};
@@ -39,12 +45,12 @@
     const body=el('div','dboard-connections-body');
     const footer=el('div','dboard-connections-footer');
     const hint=el('p','dboard-connections-note','次数为会话建立次数；时长为各连接累计时长，并发连接会分别累计。UDP 按会话统计，历史按分钟汇总，最多保留最近 24 小时。');
-    dialog.append(header,meta,tabs,tools,status,body,footer,hint);overlay.append(dialog);document.body.append(overlay);document.body.style.overflow='hidden';
+    dialog.append(header,meta,tabs,ownerTools,tools,status,body,footer,hint);overlay.append(dialog);document.body.append(overlay);document.body.style.overflow='hidden';
     overlay.onclick=e=>{if(e.target===overlay)close();};
     state.onKey=e=>{
       if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();return;}
       if(e.key==='Tab'){
-        const focus=[...dialog.querySelectorAll('button:not(:disabled),input')];const first=focus[0],last=focus[focus.length-1];
+        const focus=[...dialog.querySelectorAll('button:not(:disabled),input,select')];const first=focus[0],last=focus[focus.length-1];
         if(!dialog.contains(document.activeElement)){e.preventDefault();first.focus();}
         else if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
         else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
@@ -75,26 +81,39 @@
     function draw(){
       for(const b of tabs.children){b.classList.toggle('active',b.dataset.kind===state.kind);b.setAttribute('aria-pressed',String(b.dataset.kind===state.kind));}
       const d=state.data;
-      meta.textContent=d?.supported?'统计范围：'+date(d.since)+' 至 '+date(d.updated_at)+' · 每 15 秒刷新':'等待节点上报；旧版节点需升级后才能采集。';
+      meta.textContent=d?.supported?'统计范围：'+date(d.since)+' 至 '+date(d.updated_at)+' · 每 5 秒刷新':'等待节点上报；旧版节点需升级后才能采集。';
       status.textContent=d?.supported?[
         d.stale?'节点上报已过期，当前连接数暂不显示；以下为最后一次上报的历史记录。':'',
-        d.truncated?'记录较多，明细已截取，次数和时长可能不完整；当前连接总数仍为完整统计。':''
+        d.truncated?'记录较多，明细已截取，次数和时长可能不完整。'+(state.userId?'筛选后的当前连接数也可能不完整。':'当前连接总数仍为完整统计。'):'',
+        state.userId?'仅显示所选用户当前有权使用此节点的套餐；按用户统计从新版采集开始，旧记录不追溯。':''
       ].filter(Boolean).join(' '):'';
       drawRows();
     }
-    async function load(){
-      if(state.busy||current!==state)return;state.busy=true;refresh.disabled=true;state.controller=new AbortController();
-      const timeout=setTimeout(()=>state.controller.abort(),12000);
+    async function load(force=false){
+      if((state.busy&&!force)||current!==state)return;
+      if(force)state.controller?.abort();
+      const requestId=++state.requestId,controller=new AbortController();
+      state.busy=true;refresh.disabled=true;state.controller=controller;
+      const timeout=setTimeout(()=>controller.abort(),12000);
       try{
         let token;try{token=JSON.parse(localStorage.getItem('XBOARD_ACCESS_TOKEN')||'{}').value;}catch{}
         const prefix=String(window.settings?.base_url||'/').replace(/\/?$/,'/')+'api/v2/'+String(window.settings?.secure_path||'').replace(/^\/+|\/+$/g,'')+'/';
-        const response=await fetch(prefix+'server/manage/connections?id='+encodeURIComponent(node.id),{headers:{Authorization:token||''},signal:state.controller.signal});
+        const response=await fetch(prefix+'server/manage/connections?id='+encodeURIComponent(node.id)+(state.userId?'&user_id='+encodeURIComponent(state.userId):''),{headers:{Authorization:token||''},signal:controller.signal});
         const result=await response.json();if(!response.ok||(result.code&&result.code!==0))throw new Error(result.message||'读取失败');
-        if(current!==state)return;state.data=result.data;draw();
-      }catch(error){if(current===state)status.textContent='读取失败，可点击刷新重试。'+(error.name==='AbortError'?'请求超时。':error.message);}
-      finally{clearTimeout(timeout);state.busy=false;refresh.disabled=false;}
+        if(current!==state||requestId!==state.requestId)return;
+        state.data=result.data;
+        const options=JSON.stringify(result.data.users||[]);
+        if(options!==state.ownerOptions){
+          state.ownerOptions=options;owner.replaceChildren(allUsers);
+          for(const user of result.data.users||[]){const option=el('option','',user.email+' · #'+user.id);option.value=String(user.id);owner.append(option);}
+          if(state.userId&&![...owner.options].some(o=>o.value===state.userId)){const missing=el('option','','当前用户已无权限');missing.value=state.userId;owner.append(missing);}
+          owner.value=state.userId;
+        }
+        draw();
+      }catch(error){if(current===state&&requestId===state.requestId)status.textContent='读取失败，可点击刷新重试。'+(error.name==='AbortError'?'请求超时。':error.message);}
+      finally{clearTimeout(timeout);if(requestId===state.requestId){state.busy=false;refresh.disabled=false;}}
     }
-    draw();closeButton.focus();void load();state.timer=setInterval(load,15000);
+    draw();closeButton.focus();void load();state.timer=setInterval(()=>load(),5000);
   }};
   window.addEventListener('hashchange',close);
 })();

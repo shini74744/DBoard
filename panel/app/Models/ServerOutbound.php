@@ -10,6 +10,7 @@ class ServerOutbound extends Model
     protected $guarded = ['id'];
 
     protected $casts = [
+        'display_id' => 'integer',
         'settings' => 'array',
         'traffic_upload' => 'integer',
         'traffic_download' => 'integer',
@@ -23,7 +24,16 @@ class ServerOutbound extends Model
 
     protected static function booted(): void
     {
-        static::creating(function (self $outbound) { $outbound->traffic_started_at = time(); });
+        static::creating(function (self $outbound) {
+            $outbound->traffic_started_at = time();
+            // Reserve a number under one shared DB lock, including node-created outbounds.
+            $outbound->display_id = \Illuminate\Support\Facades\DB::transaction(function () {
+                $db = \Illuminate\Support\Facades\DB::table('dboard_outbound_sequence')->where('id', 1);
+                $next = (int)$db->lockForUpdate()->value('last_number') + 1;
+                $db->update(['last_number'=>$next]);
+                return $next;
+            });
+        });
     }
 
     public function toNodeConfig(): array

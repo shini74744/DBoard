@@ -64,36 +64,19 @@
       if (!Array.isArray(machines)) throw new Error('服务器列表格式不正确');
       if (!machines.length) { status.textContent = '暂无服务器'; return; }
       status.textContent = '';
-      let dragged = null;
+
       for (const machine of machines) {
         const row = el('li', 'dboard-machine-sort-row');
         row.dataset.machineId = String(machine.id);
         const handle = el('button', 'dboard-machine-sort-handle', '⠿');
         handle.type = 'button';
-        handle.draggable = true;
+        handle.style.touchAction = "none";
         handle.title = '拖动排序';
         handle.setAttribute('aria-label', '拖动 ' + machine.name);
         const name = el('span', 'dboard-machine-sort-name', machine.name);
         const meta = el('small', '', 'SID: ' + machine.id + (machine.admin_group ? ' · ' + machine.admin_group : ''));
         const label = el('span', 'dboard-machine-sort-label');
         label.append(name, meta);
-        handle.addEventListener('dragstart', event => {
-          dragged = row;
-          event.dataTransfer.effectAllowed = 'move';
-          event.dataTransfer.setData('text/plain', row.dataset.machineId);
-          row.classList.add('dragging');
-        });
-        handle.addEventListener('dragend', () => { row.classList.remove('dragging'); dragged = null; });
-        row.addEventListener('dragover', event => {
-          if (dragged) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }
-        });
-        row.addEventListener('drop', event => {
-          event.preventDefault();
-          if (!dragged || dragged === row) return;
-          const before = [...list.children].indexOf(dragged) > [...list.children].indexOf(row);
-          list.insertBefore(dragged, before ? row : row.nextSibling);
-          dragged = null;
-        });
         const controls = el('span', 'dboard-machine-sort-controls');
         for (const [direction, text, symbol] of [[-1, '上移', '↑'], [1, '下移', '↓']]) {
           const button = el('button', '', symbol);
@@ -109,6 +92,7 @@
         row.append(handle, label, controls);
         list.append(row);
       }
+      window.DBoardSortDrag.bind(list,{rowSelector:'li[data-machine-id]',disabled:()=>save.textContent==='正在保存…'});
       save.disabled = false;
       save.addEventListener('click', async () => {
         save.disabled = true;

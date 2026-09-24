@@ -14,7 +14,6 @@
     try { return JSON.parse(localStorage.getItem('XBOARD_ACCESS_TOKEN') || '{}').value; }
     catch { return null; }
   };
-  let dragged = null;
   let saving = false;
   async function save(table) {
     const visibleIds = [...table.querySelectorAll('tbody tr[data-outbound-id]')]
@@ -61,23 +60,11 @@
     for (const row of table.querySelectorAll('tbody tr')) {
       const cell = row.cells[0];
       const badge = cell?.firstElementChild;
-      const id = Number(row.dataset.outboundId || badge?.textContent.trim());
+      const id = Number(row.dataset.outboundId);
       if (!Number.isSafeInteger(id) || id < 1) continue;
       row.dataset.outboundId = String(id);
       if (!row.dataset.dboardSortReady) {
         row.dataset.dboardSortReady = 'true';
-        row.addEventListener('dragover', event => {
-          if (dragged && !saving) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }
-        });
-        row.addEventListener('drop', event => {
-          event.preventDefault();
-          if (!dragged || dragged === row || saving) return;
-          const body = row.parentElement;
-          const before = [...body.children].indexOf(dragged) > [...body.children].indexOf(row);
-          body.insertBefore(dragged, before ? row : row.nextSibling);
-          dragged = null;
-          persist(table);
-        });
       }
       if (cell.querySelector('.dboard-outbound-controls')) continue;
       const controls = document.createElement('span');
@@ -88,18 +75,6 @@
       handle.textContent = '⠿';
       handle.title = '拖动调整出站顺序';
       handle.setAttribute('aria-label', '拖动调整出站顺序');
-      handle.draggable = true;
-      handle.addEventListener('dragstart', event => {
-        if (saving) { event.preventDefault(); return; }
-        dragged = row;
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', String(id));
-        row.classList.add('dboard-dragging');
-      });
-      handle.addEventListener('dragend', () => {
-        row.classList.remove('dboard-dragging');
-        dragged = null;
-      });
       controls.append(handle);
       for (const [direction, label, symbol] of [[-1, '上移出站', '↑'], [1, '下移出站', '↓']]) {
         const button = document.createElement('button');
@@ -112,6 +87,10 @@
         controls.append(button);
       }
       cell.prepend(controls);
+    }
+    if (!table.dataset.dboardPointerSort) {
+      table.dataset.dboardPointerSort='true';
+      window.DBoardSortDrag.bind(table.tBodies[0],{rowSelector:'tr[data-outbound-id]',handleSelector:'.dboard-outbound-handle',disabled:()=>saving,onEnd:()=>persist(table)});
     }
     if (!table.parentElement.querySelector('.dboard-sort-hint')) {
       const hint = document.createElement('p');
