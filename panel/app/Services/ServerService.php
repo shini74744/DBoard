@@ -243,6 +243,15 @@ class ServerService
      */
     public static function updateMetrics(Server $node, array $metrics): void
     {
+        if (isset($metrics['outbound_traffic'])) {
+            try {
+                OutboundTrafficService::record($node, $metrics['outbound_traffic']);
+            } catch (\Throwable $e) {
+                // The next cumulative snapshot recovers these bytes. Do not fail
+                // the customer traffic report, which is processed as deltas.
+                \Illuminate\Support\Facades\Log::warning('Outbound traffic snapshot not saved', ['node_id'=>$node->id,'error'=>$e->getMessage()]);
+            }
+        }
         $nodeType = strtoupper($node->type);
         $nodeId = $node->id;
         $cacheTime = max(300, (int) admin_setting('server_push_interval', 60) * 3);

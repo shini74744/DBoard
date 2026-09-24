@@ -263,6 +263,6 @@ require (
 
 replace github.com/sagernet/sing-box => ./third_party/sing-box
 
-replace github.com/xtls/xray-core => github.com/cedar2025/Xray-core v0.0.0-20260409213332-f47935539965
+replace github.com/xtls/xray-core => ./third_party/xray-core
 
 replace github.com/sagernet/sing => ./third_party/sing

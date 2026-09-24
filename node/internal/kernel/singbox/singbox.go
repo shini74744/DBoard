@@ -35,7 +35,8 @@ const drainTimeout = 5 * time.Second
 // UpdatableInbound interface, which hot-swaps user credentials without
 // restarting listeners — zero connection disruption.
 type SingBox struct {
-	cfg config.KernelConfig
+	cfg             config.KernelConfig
+	outboundTraffic kernel.OutboundTrafficStore
 
 	mu     sync.RWMutex
 	box    *box.Box
@@ -115,7 +116,15 @@ func (s *SingBox) Start(nodeConfig *model.NodeSpec, users []model.UserSpec, tls 
 	ctx, cancel := context.WithCancel(context.Background())
 	registry := include.OutboundRegistry()
 	registerUniversalBalancer(registry)
-	ctx = box.Context(ctx, include.InboundRegistry(), registry, include.EndpointRegistry(), include.DNSTransportRegistry(), include.ServiceRegistry())
+	ids := make(map[string]int)
+	for _, out := range nodeConfig.CustomOutbounds {
+		if out.ID > 0 {
+			ids[out.Tag] = out.ID
+			s.outboundTraffic.Counter(out.ID)
+		}
+	}
+	countedRegistry := &trafficOutboundRegistry{OutboundRegistry: registry, ids: ids, store: &s.outboundTraffic}
+	ctx = box.Context(ctx, include.InboundRegistry(), countedRegistry, include.EndpointRegistry(), include.DNSTransportRegistry(), include.ServiceRegistry())
 
 	opts, err := singJSON.UnmarshalExtendedContext[option.Options](ctx, data)
 	if err != nil {

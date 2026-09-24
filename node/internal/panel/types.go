@@ -212,6 +212,7 @@ func (c *CertConfig) UnmarshalJSON(data []byte) error {
 
 // OutboundConfig defines a custom outbound for kernel
 type OutboundConfig struct {
+	ID       int            `json:"id,omitempty"`
 	Tag      string         `json:"tag"`                 // Unique tag for routing
 	Protocol string         `json:"protocol"`            // vmess, vless, shadowsocks, wireguard, etc.
 	Settings map[string]any `json:"settings,omitempty"`  // Protocol-specific settings

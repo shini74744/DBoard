@@ -1049,6 +1049,9 @@ func (s *Service) buildMetrics(status monitor.Status) map[string]interface{} {
 	s.metricsMu.RUnlock()
 
 	m := make(map[string]interface{})
+	if provider, ok := s.kernel.(kernel.OutboundTrafficProvider); ok {
+		m["outbound_traffic"] = provider.GetOutboundTraffic()
+	}
 	online := s.tracker.CurrentOnline()
 
 	m["uptime"] = status.Uptime

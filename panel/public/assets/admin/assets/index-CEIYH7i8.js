@@ -1029,9 +1029,19 @@ function q3t({refetch:e,dialogTrigger:t,defaultValues:n=null,type:i="create"}){
   ]})
 }
 function K3t({refetch:e,search:t,setSearch:n}){const{t:i}=jy("route");return Q.jsxs("div",{className:"flex flex-col gap-2 sm:flex-row sm:items-center",children:[Q.jsx(q3t,{refetch:e}),Q.jsx(u8e,{placeholder:i("toolbar.searchPlaceholder"),value:t,onChange:e=>n(e.target.value),className:"h-8 w-full sm:w-[280px]"})]})}
+function DBoardOutboundTrafficCell({outbound:n}){
+ const bytes=value=>{const x=Math.max(0,Number(value)||0);if(!x)return "0 B";const k=Math.min(5,Math.floor(Math.log(x)/Math.log(1024)));return (x/Math.pow(1024,k)).toFixed(k?2:0)+" "+["B","KB","MB","GB","TB","PB"][k]};
+ const uploaded=Number(n.traffic_upload)||0,downloaded=Number(n.traffic_download)||0;
+ const since=n.traffic_started_at?new Date(n.traffic_started_at*1000).toLocaleString():"尚未开始";
+ const updated=n.traffic_updated_at?new Date(n.traffic_updated_at*1000).toLocaleString():"尚未收到上报";
+ return Q.jsxs("div",{style:{minWidth:175,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums"},title:"统计起始："+since+"；最后上报："+updated,children:[
+ Q.jsx("div",{style:{fontWeight:600},children:n.traffic_updated_at?bytes(uploaded+downloaded):"—"}),
+ Q.jsx("div",{className:"text-xs text-muted-foreground",style:{marginTop:4},children:n.traffic_updated_at?"上传 "+bytes(uploaded)+" · 下载 "+bytes(downloaded):"等待节点上报（需新版节点）"}),
+ Q.jsx("div",{className:"text-xs text-muted-foreground",style:{marginTop:4},children:n.traffic_started_at?"自 "+new Date(n.traffic_started_at*1000).toLocaleDateString()+" 起累计":"尚未开始统计"})]})
+}
 function G3t({data:e,refetch:t,isLoading:n,search:i}){
   const{t:r}=jy("route"),s=(e||[]).filter(e=>{const t=i.trim().toLowerCase();return!t||String(e.name||"").toLowerCase().includes(t)||String(e.tag||"").toLowerCase().includes(t)||String(e.protocol||"").toLowerCase().includes(t)});
-  return Q.jsx("div",{className:"overflow-x-auto rounded-md border",children:Q.jsxs("table",{className:"w-full text-sm",children:[
+  return Q.jsx("div",{className:"overflow-x-auto rounded-md border",children:Q.jsxs("table",{className:"dboard-outbound-table w-full text-sm",children:[
     Q.jsx("thead",{className:"bg-muted/40",children:Q.jsxs("tr",{className:"border-b",children:[
       Q.jsx("th",{className:"px-4 py-3 text-left font-medium",children:r("columns.id")}),
       Q.jsx("th",{className:"px-4 py-3 text-left font-medium",children:r("columns.name")}),
@@ -1039,15 +1049,17 @@ function G3t({data:e,refetch:t,isLoading:n,search:i}){
       Q.jsx("th",{className:"px-4 py-3 text-left font-medium",children:r("columns.protocol")}),
       Q.jsx("th",{className:"px-4 py-3 text-left font-medium",children:r("columns.endpoint")}),
       Q.jsx("th",{className:"px-4 py-3 text-left font-medium",children:r("columns.status")}),
+      Q.jsx("th",{className:"px-4 py-3 text-left font-medium",style:{minWidth:190},children:"累计流量"}),
       Q.jsx("th",{className:"px-4 py-3 text-right font-medium",children:r("columns.actions")})
     ]})}),
-    Q.jsx("tbody",{children:n?Q.jsx("tr",{children:Q.jsx("td",{colSpan:7,className:"px-4 py-12 text-center text-muted-foreground",children:r("loading")})}):0===s.length?Q.jsx("tr",{children:Q.jsx("td",{colSpan:7,className:"px-4 py-12 text-center text-muted-foreground",children:r("empty")})}):s.map(n=>Q.jsxs("tr",{className:"border-b last:border-0",children:[
+    Q.jsx("tbody",{children:n?Q.jsx("tr",{children:Q.jsx("td",{colSpan:8,className:"px-4 py-12 text-center text-muted-foreground",children:r("loading")})}):0===s.length?Q.jsx("tr",{children:Q.jsx("td",{colSpan:8,className:"px-4 py-12 text-center text-muted-foreground",children:r("empty")})}):s.map(n=>Q.jsxs("tr",{className:"border-b last:border-0",children:[
       Q.jsx("td",{className:"px-4 py-3",children:Q.jsx(nKt,{variant:"outline",children:n.id})}),
       Q.jsx("td",{className:"px-4 py-3 font-medium",children:n.name}),
       Q.jsx("td",{className:"px-4 py-3 font-mono text-xs",children:n.tag}),
       Q.jsx("td",{className:"px-4 py-3",children:Q.jsx(nKt,{variant:"secondary",children:String(n.protocol||"").toUpperCase()})}),
       Q.jsx("td",{className:"px-4 py-3 font-mono text-xs",children:n.settings?.server?String(n.settings.server)+":"+String(n.settings.server_port||""):"-"}),
       Q.jsx("td",{className:"px-4 py-3",children:Q.jsx(nKt,{variant:n.enabled?"secondary":"outline",children:r(n.enabled?"status.enabled":"status.disabled")})}),
+      Q.jsx("td",{className:"px-4 py-3",children:Q.jsx(DBoardOutboundTrafficCell,{outbound:n})}),
       Q.jsx("td",{className:"px-4 py-3",children:Q.jsxs("div",{className:"flex justify-end gap-1",children:[
         Q.jsx(q3t,{defaultValues:n,refetch:t,type:"edit",dialogTrigger:Q.jsx(Lf,{variant:"ghost",size:"sm",children:r("form.edit")})}),
         Q.jsx(hQt,{title:r("messages.deleteConfirm"),description:r("messages.deleteDescription"),confirmText:r("messages.deleteButton"),variant:"destructive",onConfirm:async()=>{try{await cD({id:n.id});gE.success(r("messages.deleteSuccess"));t()}catch(K0t){}},children:Q.jsx(Lf,{variant:"ghost",size:"sm",className:"text-destructive",children:r("messages.deleteButton")})})
@@ -1058,11 +1070,12 @@ function G3t({data:e,refetch:t,isLoading:n,search:i}){
 const Y3t=Object.freeze(Object.defineProperty({__proto__:null,default:function(){
   const{t:e}=jy("route"),[t,n]=H.useState([]),[i,r]=H.useState(!0),[s,o]=H.useState("");
   function a(){r(!0),aD().then(({data:e})=>{n(Array.isArray(e)?e:[])}).finally(()=>r(!1))}
-  return H.useEffect(()=>{a()},[]),Q.jsxs(eot,{children:[
+  return H.useEffect(()=>{a();let active=true;const timer=setInterval(()=>{if(document.hidden)return;aD().then(({data:e})=>{if(active)n(Array.isArray(e)?e:[])}).catch(()=>{})},30000);return()=>{active=false;clearInterval(timer)}},[]),Q.jsxs(eot,{children:[
     Q.jsxs(tot,{children:[Q.jsx(Eut,{}),Q.jsxs("div",{className:"ml-auto flex items-center space-x-4",children:[Q.jsx(Lut,{}),Q.jsx(sht,{})]})]}),
     Q.jsxs(not,{className:"flex flex-col",fixedHeight:!0,children:[
       Q.jsx("div",{className:"mb-4",children:Q.jsxs("div",{children:[Q.jsx("h2",{className:"text-2xl font-bold tracking-tight",children:e("title")}),Q.jsx("p",{className:"mt-2 text-muted-foreground",children:e("description")})]})}),
       Q.jsx("div",{className:"mb-3",children:Q.jsx(K3t,{refetch:a,search:s,setSearch:o})}),
+      Q.jsx("p",{className:"mb-3 text-xs text-muted-foreground",children:"累计上传与下载，不随流量重置而清零；旧出站从接入统计功能后开始记录，此前流量无法补算。链式出站各自计数。"}),
       Q.jsx("div",{className:"flex-1 overflow-auto",children:Q.jsx(G3t,{data:t,refetch:a,isLoading:i,search:s})})
     ]})
   ]})

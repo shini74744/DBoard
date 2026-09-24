@@ -36,7 +36,7 @@ func TestNodeRelayDedicatedIdentity(t *testing.T) {
 	defer exit.Stop()
 	entry := New(config.KernelConfig{Type: "xray", LogLevel: "error"})
 	nc := &panel.NodeConfig{Protocol: "socks", ListenIP: "127.0.0.1", ServerPort: entryPort,
-		CustomOutbounds:  []panel.OutboundConfig{{Tag: "node-exit", Protocol: "vless", Settings: map[string]any{"server": "127.0.0.1", "server_port": exitPort, "uuid": uuid, "network": "tcp", "tls_mode": "none"}}},
+		CustomOutbounds:  []panel.OutboundConfig{{ID: 51, Tag: "node-exit", Protocol: "vless", Settings: map[string]any{"server": "127.0.0.1", "server_port": exitPort, "uuid": uuid, "network": "tcp", "tls_mode": "none"}}},
 		CustomRouteRules: []panel.CustomRouteRule{{Name: "exit", Action: panel.RouteAction{Type: "route", Target: "node-exit"}}}}
 	if err := entry.Start(testNodeSpec(nc), []model.UserSpec{{ID: 1, UUID: uuid}}, kernel.TLSCert{}); err != nil {
 		t.Fatal(err)
@@ -59,6 +59,18 @@ func TestNodeRelayDedicatedIdentity(t *testing.T) {
 	data, _ := io.ReadAll(response.Body)
 	if string(data) != "node-relay-ok" {
 		t.Fatalf("unexpected response: %s", data)
+	}
+	snapshot := entry.GetOutboundTraffic()
+	for deadline := time.Now().Add(time.Second); time.Now().Before(deadline) && snapshot.Traffic[51][0] == 0; {
+		time.Sleep(10 * time.Millisecond)
+		snapshot = entry.GetOutboundTraffic()
+	}
+	if v := snapshot.Traffic[51]; v[0] <= 0 || v[1] <= 0 {
+		t.Fatalf("outbound traffic missing: %+v", snapshot)
+	}
+	again := entry.GetOutboundTraffic()
+	if again.Session != snapshot.Session || again.Traffic[51] != snapshot.Traffic[51] {
+		t.Fatalf("snapshot repeated or reset: %+v %+v", snapshot, again)
 	}
 	traffic, _, _, err := exit.GetUserTraffic(context.Background())
 	if err != nil {

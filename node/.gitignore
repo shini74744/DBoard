@@ -42,3 +42,4 @@ internal/tracker/tracker_bench_test.go
 cmd/DBoard-node-bench-compare
 cmd/DBoard-node-bench
 .env
+!/third_party/xray-core/

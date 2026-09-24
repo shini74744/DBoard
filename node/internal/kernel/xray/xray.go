@@ -53,7 +53,9 @@ const (
 //   - instance.Start() and instance.Close() run OUTSIDE the lock.
 //   - running (atomic) gates fast-path checks in IsRunning / GetConnections.
 type Xray struct {
-	cfg config.KernelConfig
+	cfg             config.KernelConfig
+	outboundTraffic kernel.OutboundTrafficStore
+	outboundSources map[*xrayCore.Instance]outboundStatsSource
 
 	// mu protects instance, limitDispatcher, users, protocol, inboundTag,
 	// lastKernelHash, and cumTraffic. Never held during slow I/O.
@@ -162,6 +164,7 @@ func (x *Xray) Start(nodeConfig *model.NodeSpec, users []model.UserSpec, tls ker
 	// ── Phase 4: Swap old → new (brief kernel lock) ─────────────────────
 	x.mu.Lock()
 	old := x.instance
+	x.registerOutboundStats(inst, nodeConfig)
 	oldLD := x.limitDispatcher
 	x.instance = inst
 	x.limitDispatcher = ld
@@ -177,7 +180,7 @@ func (x *Xray) Start(nodeConfig *model.NodeSpec, users []model.UserSpec, tls ker
 	x.mu.Unlock()
 
 	// ── Phase 5: Recycle old (background, non-blocking) ─────────────────
-	closeOld(old, oldLD)
+	closeOld(old, oldLD, func() { x.finishOutboundStats(old) })
 
 	x.updateDispatcherLimits(users)
 	x.updateBandwidthLimits(users)
@@ -235,7 +238,7 @@ func (x *Xray) Stop() {
 	if ld != nil {
 		drainConns(ld, drainTimeout)
 	}
-	closeOld(inst, ld)
+	closeOld(inst, ld, func() { x.finishOutboundStats(inst) })
 }
 
 func (x *Xray) IsRunning() bool { return x.running.Load() }
@@ -696,7 +699,7 @@ func startWithTimeout(inst *xrayCore.Instance, timeout time.Duration) error {
 // closeOld shuts down a previously running instance and its dispatcher.
 // Recycling happens in a background goroutine to prevent the main thread
 // from blocking on slow connection draining, enabling "hitless" reload.
-func closeOld(inst *xrayCore.Instance, ld *LimitDispatcher) {
+func closeOld(inst *xrayCore.Instance, ld *LimitDispatcher, after ...func()) {
 	if inst == nil {
 		return
 	}
@@ -711,6 +714,9 @@ func closeOld(inst *xrayCore.Instance, ld *LimitDispatcher) {
 		inst.Close()
 		if ld != nil {
 			ld.ResetConns()
+		}
+		for _, fn := range after {
+			fn()
 		}
 		nlog.Core().Debug("xray: old instance recycled")
 	}()

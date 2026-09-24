@@ -58,6 +58,7 @@ func NodeSpecFromPanel(nc *panel.NodeConfig) *NodeSpec {
 	outbounds := make([]OutboundConfig, 0, len(nc.CustomOutbounds))
 	for _, outbound := range nc.CustomOutbounds {
 		outbounds = append(outbounds, OutboundConfig{
+			ID:       outbound.ID,
 			Tag:      outbound.Tag,
 			Protocol: outbound.Protocol,
 			Settings: cloneAnyMap(outbound.Settings),
@@ -214,6 +215,7 @@ func (n *NodeSpec) ToPanel() *panel.NodeConfig {
 	outbounds := make([]panel.OutboundConfig, 0, len(n.CustomOutbounds))
 	for _, outbound := range n.CustomOutbounds {
 		outbounds = append(outbounds, panel.OutboundConfig{
+			ID:       outbound.ID,
 			Tag:      outbound.Tag,
 			Protocol: outbound.Protocol,
 			Settings: cloneAnyMap(outbound.Settings),

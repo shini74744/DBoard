@@ -123,3 +123,5 @@ html.dboard-marketing-open :is(#root, #content) { overflow: hidden !important; }
 .dboard-traffic-entry { display: flex; justify-content: space-between; gap: 1rem; padding: .3rem 0 .6rem 1rem; color: hsl(var(--muted-foreground)); font-size: .82rem; }
 .dboard-traffic-entry span { overflow-wrap: anywhere; }
 .dboard-traffic-entry strong { white-space: nowrap; color: hsl(var(--card-foreground)); }
+
+@media(max-width:640px){.dboard-outbound-table td:last-child>div{flex-direction:column;align-items:stretch}.dboard-outbound-table td:last-child{min-width:110px}.dboard-outbound-table td:last-child button{white-space:nowrap}}

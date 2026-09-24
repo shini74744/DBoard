@@ -11,16 +11,26 @@ class ServerOutbound extends Model
 
     protected $casts = [
         'settings' => 'array',
+        'traffic_upload' => 'integer',
+        'traffic_download' => 'integer',
+        'traffic_started_at' => 'integer',
+        'traffic_updated_at' => 'integer',
         'target_server_id' => 'integer',
         'enabled' => 'boolean',
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
     ];
 
+    protected static function booted(): void
+    {
+        static::creating(function (self $outbound) { $outbound->traffic_started_at = time(); });
+    }
+
     public function toNodeConfig(): array
     {
-        if ($this->target_server_id) return \App\Services\NodeOutboundService::config($this);
+        if ($this->target_server_id) return ['id'=>$this->id] + \App\Services\NodeOutboundService::config($this);
         $config = [
+            'id' => $this->id,
             'tag' => $this->tag,
             'protocol' => $this->protocol,
             'settings' => $this->settings ?: [],

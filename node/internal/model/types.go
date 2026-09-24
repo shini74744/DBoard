@@ -49,6 +49,7 @@ type NodeSpec struct {
 }
 
 type OutboundConfig struct {
+	ID       int
 	Tag      string
 	Protocol string
 	Settings map[string]any
