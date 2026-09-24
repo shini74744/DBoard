@@ -1,11 +1,13 @@
 package upgrade
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"regexp"
+	"time"
 )
 
 var requestPattern = regexp.MustCompile(`^[a-f0-9]{16,32}$`)
@@ -25,9 +27,17 @@ func Run(requestID, version string) error {
 			return fmt.Errorf("remote upgrade unavailable: %s: %w", path, err)
 		}
 	}
-	command := exec.Command("systemd-run", "--unit=dboard-node-upgrade", "--collect", "--wait", "--service-type=exec", "/usr/local/bin/xbctl", "upgrade", "--version", version)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, "systemd-run", launchArgs(requestID, version)...)
 	if output, err := command.CombinedOutput(); err != nil {
 		return fmt.Errorf("launch upgrade: %w: %s", err, output)
 	}
 	return nil
+}
+
+// Do not wait for unit completion: restarting the node kills systemd-run's
+// parent cgroup. The detached xbctl writes durable progress for the new node.
+func launchArgs(id, version string) []string {
+	return []string{"--unit=dboard-node-upgrade", "--collect", "--no-block", "--service-type=exec", "--property=RuntimeMaxSec=50min", "/usr/local/bin/xbctl", "upgrade", "--version", version, "--request-id", id}
 }

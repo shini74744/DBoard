@@ -8,6 +8,7 @@ use App\Models\Server;
 use App\Models\ServerMachine;
 use App\Models\ServerMachineLoadHistory;
 use App\Services\NodeSyncService;
+use App\Services\MachineUpgradeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
@@ -48,18 +49,8 @@ class MachineController extends Controller
 
     private function upgradeState(int $machineId): ?array
     {
-        $key = "dboard_machine_upgrade:{$machineId}";
-        $status = Cache::get($key);
-        if (!is_array($status)) {
-            return null;
-        }
-        if (in_array($status['state'] ?? '', ['queued', 'accepted'], true)
-            && time() - (int) ($status['created_at'] ?? 0) > 600) {
-            $status['state'] = 'failed';
-            $status['message'] = '节点未在 10 分钟内以目标版本重新连接，请检查节点升级日志';
-            $status['updated_at'] = time();
-            Cache::put($key, $status, 3600);
-        }
+        $status = MachineUpgradeService::state($machineId);
+        if (!$status) return null;
         unset($status['request_id']);
         return $status;
     }
@@ -86,7 +77,7 @@ class MachineController extends Controller
     {
         return Cache::remember('dboard_latest_node_release', 300, function () {
             $response = Http::withHeaders(['Accept' => 'application/vnd.github+json', 'User-Agent' => 'DBoard'])
-                ->timeout(8)->get('https://api.github.com/repos/shini74744/DBoard/releases/latest');
+                ->connectTimeout(5)->timeout(15)->retry(2, 1000)->get('https://api.github.com/repos/shini74744/DBoard/releases/latest');
             if (!$response->successful()) {
                 throw new \RuntimeException('GitHub Release 查询失败');
             }
@@ -106,6 +97,7 @@ class MachineController extends Controller
             foreach (ServerMachine::query()->get(['id', 'is_active']) as $machine) {
                 $current = (string) Cache::get('dboard_machine_version:' . $machine->id, '');
                 if ($machine->is_active && Cache::get('dboard_machine_upgrade_capable:' . $machine->id)
+                    && !MachineUpgradeService::busy(MachineUpgradeService::state($machine->id))
                     && $current !== '' && version_compare(ltrim($current, 'v'), ltrim($version, 'v'), '<')) {
                     $upgradeable[] = $machine->id;
                 }
@@ -144,26 +136,31 @@ class MachineController extends Controller
                 $results[$id] = ['state' => 'skipped', 'message' => $current === '' ? '节点版本未知' : '已是最新版本'];
                 continue;
             }
+            $dispatchLock=Cache::lock('dboard_machine_upgrade_dispatch:'.$id,20);
+            if(!$dispatchLock->get()){$results[$id]=['state'=>'skipped','message'=>'正在下发升级任务，请稍候'];continue;}
+            try {
             $previous = $this->upgradeState((int) $id);
-            if (in_array($previous['state'] ?? '', ['queued', 'accepted'], true)) {
+            if (MachineUpgradeService::busy($previous)) {
                 $results[$id] = ['state' => 'skipped', 'message' => '已有升级任务正在执行'];
                 continue;
             }
             $requestId = bin2hex(random_bytes(8));
             $status = [
                 'request_id' => $requestId, 'state' => 'queued', 'target_version' => $version,
+                'protocol'=>(int)Cache::get('dboard_machine_upgrade_protocol:'.$id,1),
                 'from_version' => $current, 'message' => '', 'created_at' => time(), 'updated_at' => time(),
             ];
-            Cache::put("dboard_machine_upgrade:{$id}", $status, 3600);
+            MachineUpgradeService::start((int) $id, $status);
             if (!NodeSyncService::pushMachine((int) $id, 'node.upgrade', [
                 'request_id' => $requestId, 'version' => $version,
             ])) {
                 $status['state'] = 'failed';
                 $status['message'] = '升级指令发送失败，请检查面板消息服务';
-                Cache::put("dboard_machine_upgrade:{$id}", $status, 3600);
+                MachineUpgradeService::result((int) $id, $status);
             }
             unset($status['request_id']);
             $results[$id] = $status;
+            } finally { $dispatchLock->release(); }
         }
         return $this->success(['target_version' => $version, 'machines' => $results]);
     }

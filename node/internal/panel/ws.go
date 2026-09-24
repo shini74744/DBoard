@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net/url"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -115,6 +116,7 @@ type WSClient struct {
 
 	// writeCh allows sending messages from outside the connect loop.
 	// It is set in connect() and cleared on disconnect.
+	writeMu sync.RWMutex
 	writeCh chan wsMessage
 }
 
@@ -212,6 +214,7 @@ func (w *WSClient) connect(ctx context.Context) error {
 	q.Set("node_version", NodeVersion)
 	if w.cfg.MachineID > 0 {
 		q.Set("remote_upgrade", "1")
+		q.Set("upgrade_protocol", "2")
 	}
 	if w.cfg.MachineID > 0 {
 		q.Set("machine_id", strconv.Itoa(w.cfg.MachineID))
@@ -268,8 +271,11 @@ func (w *WSClient) connect(ctx context.Context) error {
 
 	// writeCh decouples data collection from network I/O.
 	writeCh := make(chan wsMessage, 16)
+	w.writeMu.Lock()
 	w.writeCh = writeCh
-	defer func() { w.writeCh = nil }()
+	w.writeMu.Unlock()
+	defer func() { w.writeMu.Lock(); w.writeCh = nil; w.writeMu.Unlock() }()
+	w.reportUpgradeStatus()
 
 	errCh := make(chan error, 1)
 	done := make(chan struct{})
@@ -309,6 +315,7 @@ func (w *WSClient) connect(ctx context.Context) error {
 			return fmt.Errorf("read: %w", err)
 
 		case <-reportTicker.C:
+			w.reportUpgradeStatus()
 			// Send periodic node.status via WebSocket
 			if w.onPing != nil {
 				msg := wsMessage{Event: "node.status"}
@@ -505,7 +512,7 @@ func (w *WSClient) SendDeviceReportForNode(nodeID int, devices map[int][]string)
 	}
 
 	select {
-	case w.writeCh <- msg:
+	case w.messageChannel() <- msg:
 	default:
 		nlog.Core().Warn("ws write channel full, skipping device report")
 	}
@@ -526,7 +533,7 @@ func (w *WSClient) SendNodeStatus(nodeID int, stats map[string]interface{}) {
 		Timestamp: time.Now().Unix(),
 	}
 	select {
-	case w.writeCh <- msg:
+	case w.messageChannel() <- msg:
 	default:
 		nlog.Core().Warn("ws write channel full, skipping node status")
 	}
@@ -545,8 +552,28 @@ func (w *WSClient) SendRaw(event string, data json.RawMessage) {
 	}
 
 	select {
-	case w.writeCh <- msg:
+	case w.messageChannel() <- msg:
 	default:
 		nlog.Core().Warn("ws write channel full, skipping raw message", "event", event)
 	}
+}
+
+func (w *WSClient) reportUpgradeStatus() {
+	if w.cfg.MachineID <= 0 {
+		return
+	}
+	status, err := upgrade.ReadStatus(upgrade.StatusPath)
+	if err != nil || status == nil {
+		return
+	}
+	data, err := json.Marshal(status)
+	if err == nil {
+		w.SendRaw("upgrade.result", data)
+	}
+}
+
+func (w *WSClient) messageChannel() chan wsMessage {
+	w.writeMu.RLock()
+	defer w.writeMu.RUnlock()
+	return w.writeCh
 }

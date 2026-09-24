@@ -10,7 +10,11 @@
   async function request(action, body) {
     const authorization = token();
     if (!authorization) throw new Error('请先登录管理后台');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000);
+    try {
     const response = await fetch(api() + action, {
+      signal: controller.signal,
       method: body === undefined ? 'GET' : 'POST',
       headers: { Authorization: authorization, 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -21,6 +25,7 @@
       throw new Error(first || result.message || '操作失败');
     }
     return result.data;
+    } finally { clearTimeout(timeout); }
   }
   const el = (tag, className, value) => {
     const node = document.createElement(tag);
@@ -44,6 +49,9 @@
   async function open() {
     if (overlay) return;
     overlay = el('div', 'dboard-machine-sort-overlay');
+    const host = overlay;
+    const isOpen = () => overlay === host && host.isConnected;
+    let polling = false;
     const dialog = el('section', 'dboard-machine-sort-dialog dboard-machine-upgrade-dialog');
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
@@ -56,7 +64,7 @@
     modes.append(pickButton, allButton);
     const count = el('p', 'dboard-machine-upgrade-count', '正在读取服务器…');
     const list = el('ol', 'dboard-machine-sort-list');
-    const notice = el('p', 'dboard-machine-sort-status', '旧版节点程序不支持后台升级，需要先手动更新一次。');
+    const notice = el('p', 'dboard-machine-sort-status', '下载和校验期间旧节点保持运行；重启后确认结果，异常时尝试回退。慢网络请耐心等待，勿重复下发。');
     notice.setAttribute('role', 'status');
     const actions = el('div', 'dboard-machine-sort-actions');
     const cancel = el('button', '', '关闭');
@@ -78,8 +86,9 @@
     let submittedIds = [];
     const selected = new Set();
     const statusNodes = new Map();
-    const labels = { queued: '指令已下发', accepted: '正在下载并升级', success: '升级成功',
-      failed: '升级失败', skipped: '已跳过' };
+    const labels = { queued: '指令已下发', accepted: '任务已接收', downloading: '下载中', validating: '校验中', restarting: '重启中', verifying: '正在确认结果', rolling_back: '正在回退', rolled_back: '升级未完成，已回退', unknown: '结果待确认', success: '升级成功', failed: '升级失败', skipped: '已跳过' };
+    const activeStates = new Set(['queued','accepted','downloading','validating','restarting','verifying','rolling_back']);
+    const isPending = status => activeStates.has(status?.state) || (status?.state === 'unknown' && Date.now()/1000 - Number(status.created_at || 0) < 3300);
     const chosenIds = () => mode === 'all' ? [...eligibleIds] : [...selected].filter(id => eligibleIds.has(id));
     function refreshCount() {
       const ids = chosenIds();
@@ -115,6 +124,7 @@
         statusNodes.set(id, state);
         row.append(checkbox, label, state);
         list.append(row);
+        if (machine.upgrade_status?.state) update(id, machine.upgrade_status.state, machine.upgrade_status.message, machine.upgrade_status.target_version);
       }
       refreshCount();
     }
@@ -128,19 +138,39 @@
       node.dataset.state = state || '';
     }
     async function poll() {
-      if (!overlay?.isConnected || !submittedIds.length) return;
+      if (!isOpen() || !submittedIds.length || polling) return;
+      polling = true;
       try {
         let pending = false;
         for (const group of chunks(submittedIds, 25)) {
           const data = await request('upgradeStatus?ids=' + encodeURIComponent(group.join(',')));
+          if (!isOpen()) return;
           for (const [id, item] of Object.entries(data || {})) {
             const state = item.status?.state;
-            if (state) update(id, state, item.status.message, item.version || item.status.target_version);
-            if (state === 'queued' || state === 'accepted') pending = true;
+            const machine = entries.find(entry => Number(entry.id) === Number(id));
+            if (machine) { machine.node_version = item.version || machine.node_version; machine.upgrade_status = item.status; }
+            if (state) update(id, state, item.status.message, item.status.target_version || item.version);
+            const currentLabel = statusNodes.get(Number(id))?.parentElement?.querySelector('small');
+            if (currentLabel) currentLabel.textContent = `SID: ${id} · 当前 ${item.version || '版本未知'}`;
+            if (state === 'success') { eligibleIds.delete(Number(id)); selected.delete(Number(id)); }
+            if (isPending(item.status)) pending = true;
           }
         }
-        if (!pending && timer) { clearInterval(timer); timer = null; }
-      } catch (error) { notice.textContent = error.message || '读取升级状态失败'; }
+        if (!pending) {
+          if (timer) clearInterval(timer);
+          timer = null;
+          running = false;
+          notice.textContent = '本批任务状态已更新，请查看各服务器的结果。';
+          try {
+            const release = await request('latestRelease');
+            if (!isOpen()) return;
+            latestVersion = release.version;
+            eligibleIds = new Set(release.upgradeable_machine_ids.map(Number));
+          } catch { notice.textContent = '结果已更新，暂时无法刷新可升级列表，请稍后重新打开。'; }
+          renderRows();
+        }
+      } catch (error) { if(isOpen()) notice.textContent = '暂时无法读取状态，正在重试；这不代表升级失败。'; }
+      finally { polling = false; }
     }
     confirm.addEventListener('click', async () => {
       submittedIds = chosenIds();
@@ -155,35 +185,44 @@
           const data = await request('upgrade', { ids: group });
           target = data.target_version;
           for (const [id, item] of Object.entries(data.machines || {})) {
+            const machine = entries.find(entry => Number(entry.id) === Number(id));
+            if (machine) machine.upgrade_status = item;
             update(id, item.state, item.message, item.target_version);
           }
         }
         notice.textContent = `目标版本 ${target}；等待服务器重新连接后确认结果。`;
+        if (!isOpen()) return;
+        if (timer) clearInterval(timer);
         timer = setInterval(poll, 3000);
         await poll();
       } catch (error) {
-        notice.textContent = error.message || '升级指令下发失败';
-        running = false;
-        refreshCount();
+        if (!isOpen()) return;
+        notice.textContent = (error.message || '下发结果暂未确认') + '；正在查询服务器实际任务状态。';
+        if (timer) clearInterval(timer);
+        timer = setInterval(poll, 3000);
+        await poll();
       }
     });
     try {
       const machines = await request('fetch');
-      if (!overlay?.isConnected) return;
+      if (!isOpen()) return;
       if (!Array.isArray(machines)) throw new Error('服务器列表格式不正确');
       entries = machines;
       if (!entries.length) { count.textContent = '暂无服务器'; return; }
       count.textContent = '正在检测 GitHub 最新版本…';
       const release = await request('latestRelease');
-      if (!overlay?.isConnected) return;
+      if (!isOpen()) return;
       if (!Array.isArray(release?.upgradeable_machine_ids) || !release.version) {
         throw new Error('最新版本信息格式不正确');
       }
       latestVersion = release.version;
       eligibleIds = new Set(release.upgradeable_machine_ids.map(Number));
+      submittedIds = entries.filter(entry => isPending(entry.upgrade_status)).map(entry => Number(entry.id));
+      running = submittedIds.length > 0;
       renderRows();
+      if (submittedIds.length) { if(timer) clearInterval(timer); timer = setInterval(poll,3000); await poll(); }
     } catch (error) {
-      if (!overlay?.isConnected) return;
+      if (!isOpen()) return;
       if (entries.length) { renderRows(); notice.textContent = error.message || '版本检测失败'; }
       else count.textContent = error.message || '读取服务器失败';
     }

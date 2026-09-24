@@ -19,3 +19,11 @@ func TestRunRejectsUntrustedCommandArguments(t *testing.T) {
 		}
 	}
 }
+
+func TestLauncherDetachesAndPreservesRequest(t *testing.T) {
+	args := launchArgs("0123456789abcdef", "v0.1.8")
+	joined := strings.Join(args, " ")
+	if strings.Contains(joined, "--wait") || !strings.Contains(joined, "--no-block") || !strings.Contains(joined, "--request-id 0123456789abcdef") {
+		t.Fatal(joined)
+	}
+}

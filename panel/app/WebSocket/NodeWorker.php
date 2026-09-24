@@ -275,34 +275,13 @@ class NodeWorker
         $conn->remoteUpgradeCapable = $capable;
         Cache::put("dboard_machine_version:{$machineId}", $version, 86400);
         Cache::put("dboard_machine_upgrade_capable:{$machineId}", $capable, 86400);
-        $statusKey = "dboard_machine_upgrade:{$machineId}";
-        $status = Cache::get($statusKey);
-        if (is_array($status) && in_array($status['state'] ?? '', ['queued', 'accepted'], true)
-            && ($status['target_version'] ?? '') === $version) {
-            $status['state'] = 'success';
-            $status['updated_at'] = time();
-            Cache::put($statusKey, $status, 3600);
-        }
+        Cache::put("dboard_machine_upgrade_protocol:{$machineId}",(int)($params['upgrade_protocol']??1),86400);
+        \App\Services\MachineUpgradeService::version($machineId,$version);
     }
 
     private function recordUpgradeResult(int $machineId, array $data): void
     {
-        $statusKey = "dboard_machine_upgrade:{$machineId}";
-        $status = Cache::get($statusKey);
-        if (!is_array($status) || !hash_equals((string) ($status['request_id'] ?? ''), (string) ($data['request_id'] ?? ''))) {
-            return;
-        }
-        $state = $data['state'] ?? '';
-        if (!in_array($state, ['accepted', 'failed'], true)) {
-            return;
-        }
-        if (($status['state'] ?? '') === 'success') {
-            return;
-        }
-        $status['state'] = $state;
-        $status['message'] = substr((string) ($data['message'] ?? ''), 0, 240);
-        $status['updated_at'] = time();
-        Cache::put($statusKey, $status, 3600);
+        \App\Services\MachineUpgradeService::result($machineId,$data);
     }
 
     private function setUserRouteCapability(int $nodeId, bool $capable): void

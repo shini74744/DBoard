@@ -547,6 +547,28 @@ resolve_download_url() {
     fi
 }
 
+download_release_file() {
+    local url="$1" destination="$2"
+    curl -fsSL --connect-timeout 20 --max-time 1200 --speed-limit 1024 --speed-time 90 \
+        --retry 3 --retry-delay 5 --retry-connrefused "$url" -o "$destination"
+}
+
+verify_release_file() {
+    local artifact="$1" staged="$2" expected actual
+    if [ ! -f "$TMP_DIR/SHA256SUMS" ]; then
+        resolve_download_url "SHA256SUMS"
+        download_release_file "$DOWNLOAD_URL" "$TMP_DIR/SHA256SUMS" || return 1
+    fi
+    expected=$(awk -v name="$artifact" '$2 == name {print $1}' "$TMP_DIR/SHA256SUMS")
+    if ! [[ "$expected" =~ ^[a-fA-F0-9]{64}$ ]]; then
+        log_error "Missing or invalid checksum: $artifact"; return 1
+    fi
+    actual=$(sha256sum "$staged" | awk '{print $1}')
+    if [ "$actual" != "$expected" ]; then
+        log_error "Checksum mismatch: $artifact; existing program preserved"; return 1
+    fi
+}
+
 stage_binary() {
     local staged="$TMP_DIR/DBoard-node"
     local local_src
@@ -557,10 +579,11 @@ stage_binary() {
     else
         resolve_download_url "DBoard-node-linux-${ARCH}"
         log_step "Downloading binary: ${DOWNLOAD_URL}"
-        if ! curl -fsSL "$DOWNLOAD_URL" -o "$staged"; then
+        if ! download_release_file "$DOWNLOAD_URL" "$staged"; then
             log_error "Failed to download binary from ${DOWNLOAD_URL}"
             exit 1
         fi
+        verify_release_file "DBoard-node-linux-${ARCH}" "$staged" || exit 1
     fi
     chmod +x "$staged"
     if ! "$staged" -v >/dev/null 2>&1; then
@@ -589,10 +612,11 @@ stage_xbctl() {
     else
         resolve_download_url "xbctl-linux-${ARCH}"
         log_step "Downloading xbctl: ${DOWNLOAD_URL}"
-        if ! curl -fsSL "$DOWNLOAD_URL" -o "$staged"; then
+        if ! download_release_file "$DOWNLOAD_URL" "$staged"; then
             log_error "Failed to download xbctl from ${DOWNLOAD_URL}"
             exit 1
         fi
+        verify_release_file "xbctl-linux-${ARCH}" "$staged" || exit 1
     fi
     chmod +x "$staged"
     if ! "$staged" version > /dev/null 2>&1; then
@@ -790,6 +814,9 @@ perform_install() {
 }
 
 perform_upgrade() {
+    # Share the lock with xbctl to prevent manual/remote upgrades racing.
+    exec 9>/run/lock/dboard-node-upgrade.lock
+    if ! flock -n 9; then log_error "Another upgrade is already running"; exit 1; fi
     migrate_legacy_layout
     detect_current_state
     load_health_port_from_config "$CONFIG_FILE"
