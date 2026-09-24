@@ -17,7 +17,8 @@ class ManageController extends Controller
     public function getNodes(Request $request)
     {
         $servers = ServerService::getAllServers()->map(function ($item) {
-            $item->makeVisible(['admin_group', 'admin_group_number']);
+            $item->makeVisible(array_merge(['admin_group', 'admin_group_number'],\App\Services\NodeFrontGateService::FIELDS));
+            $item['front_gate_status']=\App\Services\NodeFrontGateService::summary($item);
             $item['groups'] = ServerGroup::whereIn('id', $item['group_ids'] ?? [])->get(['name', 'id']);
             $item['parent'] = $item->parent;
             $item['connection_stats'] = \App\Services\NodeConnectionService::summary($item);
@@ -92,6 +93,8 @@ class ManageController extends Controller
             if (!$server) {
                 return $this->fail([400202, '服务器不存在']);
             }
+            $candidate=clone $server;$candidate->fill($params);
+            \App\Services\NodeFrontGateService::validate($candidate,(bool)$server->front_gate_enabled);
             try {
                 $server->update($params);
                 return $this->success(true);
@@ -101,6 +104,7 @@ class ManageController extends Controller
             }
         }
 
+        \App\Services\NodeFrontGateService::validate(new Server($params));
         try {
             return DB::transaction(function () use ($params, $adminGroupId) {
                 if ($adminGroupId !== null) {

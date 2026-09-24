@@ -107,7 +107,8 @@ class ServerService
                 'id',
                 'uuid',
                 'speed_limit',
-                'device_limit'
+                'device_limit',
+                'connection_limit'
             ])
             ->get();
         return collect(HookManager::filter('server.users.get', $users, $node))->concat(NodeOutboundService::users($node))->values();
@@ -119,25 +120,22 @@ class ServerService
         return ServerRoute::select(['id', 'match', 'action', 'action_value'])->whereIn('id', $routeIds)->get();
     }
 
-    public static function getOutbounds(array $outboundIds): array
+    public static function getOutbounds(array $outboundIds, ?Server $source=null): array
     {
         if (empty($outboundIds)) {
             return [];
         }
 
         $ids = array_values(array_unique(array_map('intval', $outboundIds)));
-        $outbounds = ServerOutbound::query()
-            ->whereIn('id', $ids)
-            ->where('enabled', true)
-            ->get()
-            ->keyBy('id');
-
-        $result = [];
-        foreach ($ids as $id) {
-            if (isset($outbounds[$id])) {
-                $result[] = $outbounds[$id]->toNodeConfig();
-            }
-        }
+        $outbounds = ServerOutbound::where('enabled',true)->get()->keyBy('id');
+        $byTag=$outbounds->keyBy('tag');$result=[];$seen=[];
+        $append=function($outbound)use(&$append,&$result,&$seen,$byTag,$source){
+            if (!$outbound || isset($seen[$outbound->id]))return;
+            $seen[$outbound->id]=true;
+            $result[]=$outbound->toNodeConfig($source);
+            if ($outbound->proxy_tag)$append($byTag->get($outbound->proxy_tag));
+        };
+        foreach($ids as $id)$append($outbounds->get($id));
 
         return $result;
     }
@@ -243,6 +241,9 @@ class ServerService
      */
     public static function updateMetrics(Server $node, array $metrics): void
     {
+        if (($metrics['front_gate_version']??0)===1) Cache::put('dboard_front_gate_capable:'.$node->id,true,600);
+        else Cache::forget('dboard_front_gate_capable:'.$node->id);
+        Cache::put('dboard_front_gate_applied:'.$node->id,(string)($metrics['front_gate_revision']??''),30);
         if (isset($metrics['connection_stats'])) {
             try { NodeConnectionService::record($node, $metrics['connection_stats']); }
             catch (\Throwable $e) {
@@ -447,7 +448,7 @@ class ServerService
             $response['routes'] = self::getRoutes($node['route_ids']);
         }
 
-        $managedOutbounds = self::getOutbounds($node['outbound_ids'] ?? []);
+        $managedOutbounds = self::getOutbounds($node['outbound_ids'] ?? [],$node);
         $legacyOutbounds = is_array($node['custom_outbounds'] ?? null) ? $node['custom_outbounds'] : [];
         if (!empty($managedOutbounds) || !empty($legacyOutbounds)) {
             $outboundsByTag = [];
@@ -494,6 +495,11 @@ class ServerService
             }
         }
 
+        if ($node->front_gate_enabled) {
+            $response['front_gate']=NodeFrontGateService::inbound($node);
+            $response['protocol']='dboard-front-only';
+            unset($response['cert_config'],$response['auto_tls']);
+        }
         return $response;
     }
 

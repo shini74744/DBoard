@@ -83,6 +83,7 @@ type MachineBaseConfig struct {
 
 // NodeConfig is the response from GET /api/v1/server/UniProxy/config
 type NodeConfig struct {
+	FrontGate *FrontGateConfig `json:"front_gate,omitempty"`
 	// NodeID is populated in machine-mode WS events for routing.
 	NodeID          int                    `json:"node_id,omitempty"`
 	Protocol        string                 `json:"protocol"`
@@ -268,12 +269,24 @@ type CustomBalancer struct {
 
 // User represents a user returned by the panel
 type User struct {
-	ID          int    `json:"id"`
-	UUID        string `json:"uuid"`
-	SpeedLimit  int    `json:"speed_limit"`  // Mbps, 0 = unlimited
-	DeviceLimit int    `json:"device_limit"` // max devices, 0 = unlimited
+	ID              int    `json:"id"`
+	UUID            string `json:"uuid"`
+	SpeedLimit      int    `json:"speed_limit"`      // Mbps, 0 = unlimited
+	ConnectionLimit int    `json:"connection_limit"` // concurrent TCP + UDP sessions per node, 0 = unlimited
+	DeviceLimit     int    `json:"device_limit"`     // max devices, 0 = unlimited
 }
 
 type UsersResponse struct {
 	Users []User `json:"users"`
+}
+
+// FrontGateConfig is delivered only over the authenticated control plane.
+// It must never be exported into user subscriptions or log output.
+type FrontGateConfig struct {
+	Version          int      `json:"version"`
+	OriginalProtocol string   `json:"original_protocol"`
+	Certificate      string   `json:"certificate"`
+	PrivateKey       string   `json:"private_key"`
+	TrustedClients   []string `json:"trusted_clients"`
+	Revision         string   `json:"revision"`
 }

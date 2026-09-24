@@ -22,13 +22,14 @@ class OrderController extends Controller
 
     public function detail(Request $request)
     {
-        $order = Order::with(['user', 'plan', 'commission_log', 'invite_user'])->find($request->input('id'));
+        $order = \App\Services\SubscriptionActivityService::feed()->with(['user', 'plan', 'commission_log', 'invite_user'])->find($request->input('id'));
         if (!$order)
             return $this->fail([400202, '订单不存在']);
         if ($order->surplus_order_ids) {
             $order['surplus_orders'] = Order::whereIn('id', $order->surplus_order_ids)->get();
         }
-        $order['period'] = PlanService::getLegacyPeriod((string) $order->period);
+        \App\Services\SubscriptionActivityService::decorate($order);
+        $order['period'] = $order->period ? PlanService::getLegacyPeriod((string) $order->period) : null;
         return $this->success($order);
     }
 
@@ -36,7 +37,7 @@ class OrderController extends Controller
     {
         $current = $request->input('current', 1);
         $pageSize = $request->input('pageSize', 10);
-        $orderModel = Order::with('plan:id,name');
+        $orderModel = \App\Services\SubscriptionActivityService::feed()->with('plan:id,name');
 
         if ($request->boolean('is_commission')) {
             $orderModel->whereNotNull('invite_user_id')
@@ -55,8 +56,9 @@ class OrderController extends Controller
             );
 
         $paginatedResults->getCollection()->transform(function ($order) {
+            \App\Services\SubscriptionActivityService::decorate($order);
             $orderArray = $order->toArray();
-            $orderArray['period'] = PlanService::getLegacyPeriod((string) $order->period);
+            $orderArray['period'] = $order->period ? PlanService::getLegacyPeriod((string) $order->period) : null;
             return $orderArray;
         });
 
@@ -220,11 +222,14 @@ class OrderController extends Controller
             $order = new Order();
             $orderService = new OrderService($order);
             $order->user_id = $user->id;
+            $order->is_admin_created = true;
+            $order->admin_actor_id = $request->user()->id;
             $order->plan_id = $plan->id;
             $period = $request->input('period');
             $order->period = PlanService::getPeriodKey((string) $period);
             $order->trade_no = Helper::guid();
             $order->total_amount = $request->input('total_amount');
+            $order->renewal_price = $request->input('renewal_price');
             $order->subscription_action = $request->input('subscription_action', 'auto');
             $order->subscription_user_id = $request->integer('subscription_user_id') ?: null;
             $order->custom_duration_days = $request->filled('custom_duration_days') ? $request->integer('custom_duration_days') : null;

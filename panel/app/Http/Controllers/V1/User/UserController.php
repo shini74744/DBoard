@@ -148,6 +148,7 @@ class UserController extends Controller
                 'email',
                 'uuid',
                 'device_limit',
+                'connection_limit',
                 'speed_limit',
                 'next_reset_at',
                 'created_at'

@@ -17,10 +17,11 @@ export function getCommConfig() {
 }
 
 
-export function fetchPlanById(id) {
+export function fetchPlanById(id, subscriptionUserId = null) {
   return request({
-    url: `/user/plan/fetch?id=${id}`,
-    method: 'get'
+    url: '/user/plan/fetch',
+    method: 'get',
+    params: {id, ...(subscriptionUserId ? {subscription_user_id: subscriptionUserId} : {})}
   });
 }
 

@@ -180,6 +180,10 @@
                   }}
                 </span>
               </div>
+              <div class="info-item" title="每个节点的 TCP 连接与 UDP 会话合计">
+                <span class="info-label">连接数限制</span>
+                <span class="info-value">{{ Number(userPlan.connectionLimit) > 0 ? userPlan.connectionLimit + ' / 节点' : $t('dashboard.unlimited') }}</span>
+              </div>
             </div>
             <div class="subscription-actions">
               <button v-if="showImportSubscription" class="btn-outline" :class="{
@@ -929,6 +933,7 @@ export default {
     const autoRotateNotices = ref(true);
     const userPlan = ref({
       deviceLimit: null,
+      connectionLimit: null,
       aliveIp: 0,
       resetDay: null
     });
@@ -1427,6 +1432,7 @@ export default {
             userPlan.value.subscribeUrl = subscribe.subscribe_url;
           }
 
+          userPlan.value.connectionLimit = subscribe.connection_limit ?? null;
           if (subscribe.device_limit !== undefined) {
             userPlan.value.deviceLimit = subscribe.device_limit;
           }
@@ -1887,6 +1893,8 @@ export default {
         return;
       }
 
+      const target = subscriptions.value.find(item => Number(item.plan_id) === Number(userPlanId.value));
+      if (target) { renewPackage(target); return; }
       router.push(`/order-confirm?id=${userPlanId.value}`);
     };
 

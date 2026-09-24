@@ -319,6 +319,9 @@
             <!-- 套餐特性 -->
 
             <div class="plan-features">
+              <div class="feature-item" title="每个节点的 TCP 连接与 UDP 会话合计">
+                <span>连接数限制：{{ Number(plan.connection_limit) > 0 ? plan.connection_limit + ' / 节点' : $t('dashboard.unlimited') }}</span>
+              </div>
 
               <!-- JSON格式内容 -->
 

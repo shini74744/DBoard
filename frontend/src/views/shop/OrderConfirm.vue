@@ -1105,7 +1105,7 @@ export default {
 
 
 
-        const response = await fetchPlanById(route.query.id);
+        const response = await fetchPlanById(route.query.id, route.query.subscription_action === 'renew' ? route.query.subscription_user_id : null);
 
         if (response.data) {
 
@@ -1119,7 +1119,8 @@ export default {
 
           } else {
 
-            const firstValidPriceType = Object.keys(availablePrices.value)[0];
+            const firstValidPriceType = Object.hasOwn(availablePrices.value, plan.value.billing_period)
+              ? plan.value.billing_period : Object.keys(availablePrices.value)[0];
 
             selectedPriceType.value = firstValidPriceType || '';
 

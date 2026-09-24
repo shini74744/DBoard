@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/shini74744/DBoard/node/internal/connstats"
+	"github.com/shini74744/DBoard/node/internal/limiter"
 	"os"
 	"strings"
 	"sync"
@@ -54,6 +55,7 @@ const (
 //   - instance.Start() and instance.Close() run OUTSIDE the lock.
 //   - running (atomic) gates fast-path checks in IsRunning / GetConnections.
 type Xray struct {
+	connectionGate  *limiter.ConnectionGate
 	connections     *connstats.Store
 	cfg             config.KernelConfig
 	outboundTraffic kernel.OutboundTrafficStore
@@ -84,9 +86,10 @@ func New(cfg config.KernelConfig) *Xray {
 		cfg.Type = "xray"
 	}
 	return &Xray{
-		connections: connstats.New(),
-		cfg:         cfg,
-		cumTraffic:  make(map[int][2]int64),
+		connections:    connstats.New(),
+		connectionGate: limiter.NewConnectionGate(),
+		cfg:            cfg,
+		cumTraffic:     make(map[int][2]int64),
 	}
 }
 
@@ -124,6 +127,12 @@ func (x *Xray) Protocols() []string {
 //	Phase 4 – Swap:       store new, extract old     (brief kernel lock)
 //	Phase 5 – RecycleOld: close old in background    (non-blocking)
 func (x *Xray) Start(nodeConfig *model.NodeSpec, users []model.UserSpec, tls kernel.TLSCert) error {
+	x.mu.Lock()
+	gateChanged := model.FrontGateChanged(x.nodeConfig, nodeConfig)
+	x.mu.Unlock()
+	if gateChanged {
+		x.stopFrontGateImmediately()
+	}
 	if err := model.ValidateNodeSpec(nodeConfig, x.cfg); err != nil {
 		return fmt.Errorf("validate candidate: %w", err)
 	}
@@ -160,6 +169,9 @@ func (x *Xray) Start(nodeConfig *model.NodeSpec, users []model.UserSpec, tls ker
 
 	if ld != nil {
 		ld.connections = x.connections
+		ld.connectionGate = x.connectionGate
+		x.connectionGate.Update(users)
+		configureDispatcherLimits(ld, users)
 	}
 
 	// ── Phase 3: Start new (no lock, potentially slow) ──────────────────
@@ -179,7 +191,7 @@ func (x *Xray) Start(nodeConfig *model.NodeSpec, users []model.UserSpec, tls ker
 	x.nodeConfig = nodeConfig
 	x.tls = tls
 	x.protocol = nodeConfig.Protocol
-	x.inboundTag = nodeConfig.Protocol + "-in"
+	x.inboundTag = nodeConfig.InboundTag()
 	x.cumTraffic = make(map[int][2]int64)
 	x.lastKernelHash = kernel.ComputeHash(nodeConfig, users)
 	x.lastPreparedRouteHash = preparedRouteHash(prepared)
@@ -204,6 +216,12 @@ func (x *Xray) Start(nodeConfig *model.NodeSpec, users []model.UserSpec, tls ker
 // instance restart for most transport/TLS settings, it triggers a full restart
 // if any kernel-affecting fields (hash mismatch) have changed.
 func (x *Xray) Reload(nodeConfig *model.NodeSpec, users []model.UserSpec, tls kernel.TLSCert) error {
+	x.mu.Lock()
+	gateChanged := model.FrontGateChanged(x.nodeConfig, nodeConfig)
+	x.mu.Unlock()
+	if gateChanged {
+		x.stopFrontGateImmediately()
+	}
 	if err := model.ValidateNodeSpec(nodeConfig, x.cfg); err != nil {
 		return fmt.Errorf("validate candidate: %w", err)
 	}
@@ -818,6 +836,7 @@ func (x *Xray) updateBandwidthLimits(users []model.UserSpec) {
 // device-limit admission metadata only. Speed limits are enforced by the
 // patched xray-core bandwidth feature.
 func (x *Xray) updateDispatcherLimits(users []model.UserSpec) {
+	x.connectionGate.Update(users)
 	x.mu.Lock()
 	ld := x.limitDispatcher
 	x.mu.Unlock()
@@ -825,6 +844,10 @@ func (x *Xray) updateDispatcherLimits(users []model.UserSpec) {
 		return
 	}
 
+	configureDispatcherLimits(ld, users)
+}
+
+func configureDispatcherLimits(ld *LimitDispatcher, users []model.UserSpec) {
 	emailToUID := make(map[string]int, len(users)*2)
 	deviceLimits := make(map[string]int)
 
@@ -861,3 +884,21 @@ func (x *Xray) ConnectionStats() connstats.Snapshot {
 	return snapshot
 }
 func (x *Xray) RestoreConnectionStats(path string) error { return x.connections.Restore(path) }
+
+// Security policy updates cannot use graceful draining: that would retain revoked access.
+func (x *Xray) stopFrontGateImmediately() {
+	x.running.Store(false)
+	x.mu.Lock()
+	inst, ld := x.instance, x.limitDispatcher
+	x.instance, x.limitDispatcher = nil, nil
+	x.mu.Unlock()
+	if inst != nil {
+		_ = inst.Close()
+		x.finishOutboundStats(inst)
+	}
+	if ld != nil {
+		ld.ResetConns()
+	}
+}
+
+func (x *Xray) RejectFrontGate() { x.stopFrontGateImmediately() }

@@ -45,16 +45,29 @@ class PlanController extends Controller
             
             DB::beginTransaction();
             try {
+                $affectedGroups = [];
                 if ($request->input('force_update')) {
+                    $affectedGroups = User::where('plan_id', $plan->id)->whereNotNull('group_id')->distinct()->pluck('group_id')->all();
                     User::where('plan_id', $plan->id)->update([
                         'group_id' => $params['group_id'],
                         'transfer_enable' => $params['transfer_enable'] * 1073741824,
                         'speed_limit' => $params['speed_limit'],
                         'device_limit' => $params['device_limit'],
+                        'connection_limit' => array_key_exists('connection_limit', $params) ? $params['connection_limit'] : $plan->connection_limit,
                     ]);
                 }
                 $plan->update($params);
                 DB::commit();
+                if ($request->boolean('force_update')) {
+                    try {
+                        $affectedGroups[] = $plan->group_id;
+                        foreach (array_unique(array_filter($affectedGroups)) as $groupId) {
+                            \App\Services\NodeSyncService::notifyUsersUpdatedByGroup((int)$groupId);
+                        }
+                    } catch (\Throwable $syncError) {
+                        Log::error('Plan saved; immediate node sync failed', ['plan_id'=>$plan->id,'error'=>$syncError->getMessage()]);
+                    }
+                }
                 return $this->success(true);
             } catch (\Exception $e) {
                 DB::rollBack();

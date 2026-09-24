@@ -97,10 +97,11 @@ type StandaloneBrutalConfig struct {
 }
 
 type StandaloneUser struct {
-	ID          int    `yaml:"id"`
-	UUID        string `yaml:"uuid"`
-	SpeedLimit  int    `yaml:"speed_limit,omitempty"`
-	DeviceLimit int    `yaml:"device_limit,omitempty"`
+	ID              int    `yaml:"id"`
+	UUID            string `yaml:"uuid"`
+	SpeedLimit      int    `yaml:"speed_limit,omitempty"`
+	ConnectionLimit int    `yaml:"connection_limit,omitempty"`
+	DeviceLimit     int    `yaml:"device_limit,omitempty"`
 }
 
 func (c *Config) IsStandalone() bool {

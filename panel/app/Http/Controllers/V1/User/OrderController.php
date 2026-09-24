@@ -25,7 +25,7 @@ class OrderController extends Controller
         $request->validate([
             'status' => 'nullable|integer|in:0,1,2,3',
         ]);
-        $orders = Order::with('plan')
+        $orders = \App\Services\SubscriptionActivityService::feed()->with('plan')
             ->where('user_id', $request->user()->id)
             ->when($request->input('status') !== null, function ($query) use ($request) {
                 $query->where('status', $request->input('status'));
@@ -33,6 +33,7 @@ class OrderController extends Controller
             ->orderBy('created_at', 'DESC')
             ->get();
 
+        $orders=$orders->map(fn($order)=>\App\Services\SubscriptionActivityService::forCustomer(\App\Services\SubscriptionActivityService::decorate($order)))->filter()->values();
         return $this->success(OrderResource::collection($orders));
     }
 

@@ -33,6 +33,7 @@ class PlanSave extends FormRequest
             'group_id' => 'integer|nullable',
             'speed_limit' => 'integer|nullable|min:0',
             'device_limit' => 'integer|nullable|min:0',
+            'connection_limit' => 'nullable|integer|min:0|max:2147483647',
             'capacity_limit' => 'integer|nullable|min:0',
             'tags' => 'array|nullable',
         ];

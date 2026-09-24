@@ -86,4 +86,8 @@ message Config {
   SocketConfig ech_socket_settings = 21;
 
   repeated bytes pinned_peer_cert_sha256 = 22;
+  // DBoard managed front identity. Empty authorities with require=true deny all clients.
+  bool require_client_certificate = 23;
+  repeated bytes client_certificate_authorities = 24;
+  bool send_client_certificate = 25;
 }

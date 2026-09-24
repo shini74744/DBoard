@@ -20,6 +20,7 @@ type InboundTLSOptions struct {
 	CurvePreferences                 badoption.Listable[CurvePreference] `json:"curve_preferences,omitempty"`
 	Certificate                      badoption.Listable[string]          `json:"certificate,omitempty"`
 	CertificatePath                  string                              `json:"certificate_path,omitempty"`
+	ClientCertificateDenyAll         bool                                `json:"client_certificate_deny_all,omitempty"`
 	ClientAuthentication             ClientAuthType                      `json:"client_authentication,omitempty"`
 	ClientCertificate                badoption.Listable[string]          `json:"client_certificate,omitempty"`
 	ClientCertificatePath            badoption.Listable[string]          `json:"client_certificate_path,omitempty"`

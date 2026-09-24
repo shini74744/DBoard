@@ -141,6 +141,13 @@ func singboxOutboundTLS(settings map[string]any) M {
 	}
 
 	tls := M{"enabled": true}
+	if version := sbIntValue(settings["front_gate_version"]); version == 1 {
+		return M{"enabled": true, "server_name": sbStringValue(settings["server_name"]), "min_version": "1.3",
+			"certificate":        []string{sbStringValue(settings["certificate_pem"])},
+			"client_certificate": []string{sbStringValue(settings["client_certificate_pem"])},
+			"client_key":         []string{rawCredential(settings["client_key_pem"])},
+		}
+	}
 	if pem, ok := settings["certificate_pem"].(string); ok && pem != "" {
 		tls["certificate"] = []string{pem}
 	}

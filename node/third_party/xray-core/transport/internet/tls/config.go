@@ -477,6 +477,23 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		}
 	}
 
+	// DBoard mutual authentication is deliberately independent of ordinary TLS settings.
+	// TLS verifies CertificateVerify possession and chain validity before proxy dispatch.
+	if c.RequireClientCertificate {
+		config.ClientAuth = tls.RequireAndVerifyClientCert
+		config.ClientCAs = x509.NewCertPool()
+		for _, authority := range c.ClientCertificateAuthorities {
+			config.ClientCAs.AppendCertsFromPEM(authority)
+		}
+		config.SessionTicketsDisabled = true
+		config.MinVersion = tls.VersionTLS13
+	}
+	if c.SendClientCertificate {
+		for _, certificate := range c.BuildCertificates() {
+			config.Certificates = append(config.Certificates, *certificate)
+		}
+		config.MinVersion = tls.VersionTLS13
+	}
 	return config
 }
 

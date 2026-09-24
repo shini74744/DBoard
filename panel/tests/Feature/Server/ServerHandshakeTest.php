@@ -11,6 +11,13 @@ use Tests\TestCase;
 class ServerHandshakeTest extends TestCase
 {
     use RefreshDatabase;
+ public function createApplication() {
+  $app=parent::createApplication();$app->detectEnvironment(fn()=>'testing');
+  $app['config']->set('app.env','testing');$app['config']->set('app.key','base64:'.base64_encode(str_repeat('T',32)));$app['config']->set('database.default','sqlite');
+  $app['config']->set('database.connections.sqlite',['driver'=>'sqlite','database'=>':memory:','prefix'=>'','foreign_key_constraints'=>true]);
+  \Illuminate\Support\Facades\DB::purge('sqlite');\Illuminate\Support\Facades\Cache::setDefaultDriver('array');return $app;
+ }
+
 
     protected function setUp(): void
     {

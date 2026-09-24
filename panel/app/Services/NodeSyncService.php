@@ -73,6 +73,7 @@ class NodeSyncService
                             'uuid' => $user->uuid,
                             'speed_limit' => $user->speed_limit,
                             'device_limit' => $user->device_limit,
+                            'connection_limit' => $user->connection_limit,
                         ]
                     ],
                 ]);

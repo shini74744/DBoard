@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/shini74744/DBoard/node/internal/connstats"
+	"github.com/shini74744/DBoard/node/internal/limiter"
 	"reflect"
 	"sync"
 	"time"
@@ -36,6 +37,7 @@ const drainTimeout = 5 * time.Second
 // UpdatableInbound interface, which hot-swaps user credentials without
 // restarting listeners — zero connection disruption.
 type SingBox struct {
+	connectionGate  *limiter.ConnectionGate
 	connections     *connstats.Store
 	cfg             config.KernelConfig
 	outboundTraffic kernel.OutboundTrafficStore
@@ -71,7 +73,7 @@ func New(cfg config.KernelConfig) *SingBox {
 	if cfg.Type == "" {
 		cfg.Type = "singbox"
 	}
-	return &SingBox{cfg: cfg, connections: connstats.New()}
+	return &SingBox{cfg: cfg, connections: connstats.New(), connectionGate: limiter.NewConnectionGate()}
 }
 
 var _ kernel.Kernel = (*SingBox)(nil)
@@ -97,6 +99,11 @@ func (s *SingBox) Protocols() []string {
 }
 
 func (s *SingBox) Start(nodeConfig *model.NodeSpec, users []model.UserSpec, tls kernel.TLSCert) error {
+	s.mu.Lock()
+	if model.FrontGateChanged(s.nodeConfig, nodeConfig) {
+		s.stopFrontGateImmediately()
+	}
+	s.mu.Unlock()
 	if err := model.ValidateNodeSpec(nodeConfig, s.cfg); err != nil {
 		return fmt.Errorf("validate candidate: %w", err)
 	}
@@ -149,6 +156,24 @@ func (s *SingBox) Start(nodeConfig *model.NodeSpec, users []model.UserSpec, tls 
 		return fmt.Errorf("create sing-box instance: %w", err)
 	}
 
+	// Fresh tracker on full restart.
+	newTracker := NewConnTracker(0)
+	newTracker.connections = s.connections
+	newTracker.SetUserMap(buildUserMap(users))
+	if s.speedLimitFunc != nil {
+		newTracker.SetSpeedLimitFunc(s.speedLimitFunc)
+	}
+	if s.deviceLimitFunc != nil {
+		newTracker.SetDeviceLimitFunc(s.deviceLimitFunc)
+	}
+
+	newTracker.connectionGate = s.connectionGate
+	s.connectionGate.Update(users)
+	router := service.FromContext[adapter.Router](ctx)
+	if router != nil {
+		router.AppendTracker(newTracker)
+	}
+
 	if err := instance.Start(); err != nil {
 		instance.Close()
 		cancel()
@@ -163,19 +188,9 @@ func (s *SingBox) Start(nodeConfig *model.NodeSpec, users []model.UserSpec, tls 
 	s.nodeConfig = nodeConfig
 	s.tls = tls
 
-	// Fresh tracker on full restart.
-	s.connTracker = NewConnTracker(0)
-	s.connTracker.connections = s.connections
-	s.connTracker.SetUserMap(buildUserMap(users))
-	if s.speedLimitFunc != nil {
-		s.connTracker.SetSpeedLimitFunc(s.speedLimitFunc)
-	}
-	if s.deviceLimitFunc != nil {
-		s.connTracker.SetDeviceLimitFunc(s.deviceLimitFunc)
-	}
-
-	s.trackerRegistered = false
-	s.registerTracker(ctx)
+	// The tracker was installed before the new listeners started.
+	s.connTracker = newTracker
+	s.trackerRegistered = router != nil
 
 	// Recycle old instance in background — drain then close.
 	if oldBox != nil {
@@ -218,6 +233,12 @@ func recycleOldBox(oldBox *box.Box, oldCancel context.CancelFunc, oldCtx context
 // Routes, outbounds, and the connTracker stay alive so in-flight connections
 // continue to be tracked correctly.
 func (s *SingBox) Reload(nodeConfig *model.NodeSpec, users []model.UserSpec, tls kernel.TLSCert) error {
+	s.mu.Lock()
+	gateChanged := model.FrontGateChanged(s.nodeConfig, nodeConfig)
+	s.mu.Unlock()
+	if gateChanged {
+		return s.Start(nodeConfig, users, tls)
+	}
 	if err := model.ValidateNodeSpec(nodeConfig, s.cfg); err != nil {
 		return fmt.Errorf("validate candidate: %w", err)
 	}
@@ -348,6 +369,7 @@ func (s *SingBox) Reload(nodeConfig *model.NodeSpec, users []model.UserSpec, tls
 	// Trackers remain registered on the Router (which survives ReloadUsers).
 	// Only update the user map — do NOT re-register or traffic is double-counted.
 	if s.connTracker != nil {
+		s.connectionGate.Update(users)
 		s.connTracker.SetUserMap(buildUserMap(users))
 	}
 
@@ -550,6 +572,7 @@ func (s *SingBox) UpdateUsers(users []model.UserSpec) (added, removed int, err e
 	if added == 0 && removed == 0 {
 		// Only limits may have changed — update tracker map.
 		if s.connTracker != nil {
+			s.connectionGate.Update(users)
 			s.connTracker.SetUserMap(buildUserMap(users))
 		}
 		s.users = users
@@ -660,6 +683,7 @@ func (s *SingBox) reloadInboundsLocked(users []model.UserSpec) error {
 	}
 
 	if s.connTracker != nil {
+		s.connectionGate.Update(users)
 		s.connTracker.SetUserMap(buildUserMap(users))
 	}
 
@@ -718,3 +742,21 @@ func (s *SingBox) ConnectionStats() connstats.Snapshot {
 	return snapshot
 }
 func (s *SingBox) RestoreConnectionStats(path string) error { return s.connections.Restore(path) }
+
+// Caller holds s.mu. Stop sessions synchronously when changing front authorization.
+func (s *SingBox) stopFrontGateImmediately() {
+	if s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
+	}
+	if s.box != nil {
+		_ = s.box.Close()
+		s.box = nil
+	}
+	if s.connTracker != nil {
+		s.connTracker.CloseAll()
+	}
+	s.ctx = nil
+}
+
+func (s *SingBox) RejectFrontGate() { s.mu.Lock(); defer s.mu.Unlock(); s.stopFrontGateImmediately() }

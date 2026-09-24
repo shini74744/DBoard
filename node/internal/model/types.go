@@ -1,8 +1,12 @@
 package model
 
-import "github.com/shini74744/DBoard/node/internal/config"
+import (
+	"github.com/shini74744/DBoard/node/internal/config"
+	"github.com/shini74744/DBoard/node/internal/panel"
+)
 
 type NodeSpec struct {
+	FrontGate       *panel.FrontGateConfig
 	Protocol        string
 	ListenIP        string
 	ServerPort      int
@@ -90,10 +94,11 @@ type BrutalConfig struct {
 }
 
 type UserSpec struct {
-	ID          int
-	UUID        string
-	SpeedLimit  int
-	DeviceLimit int
+	ID              int
+	UUID            string
+	SpeedLimit      int
+	ConnectionLimit int
+	DeviceLimit     int
 }
 
 func (n *NodeSpec) GetProxyProtocol() bool {

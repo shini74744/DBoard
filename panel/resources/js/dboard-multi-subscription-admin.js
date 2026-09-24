@@ -7,6 +7,16 @@
     const response=await fetch(base()+path,{method:body===undefined?'GET':'POST',headers:{Authorization:token()||'','Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
     const data=await response.json();if(!response.ok||(data.code&&data.code!==0))throw Error(data.message||'操作失败');return data.data;
   }
+  const billingPeriods=['monthly','quarterly','half_yearly','yearly','two_yearly','three_yearly','onetime'];
+  const money=cents=>(Number(cents)/100).toFixed(2);
+  const toCents=value=>{
+    const raw=String(value).trim();
+    if(!/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(raw))throw Error('价格须为非负金额，最多两位小数');
+    const [whole,decimal='']=raw.split('.');
+    const cents=Number(whole)*100+Number(decimal.padEnd(2,'0'));
+    if(!Number.isSafeInteger(cents)||cents>2147483647)throw Error('价格超出允许范围');
+    return cents;
+  };
   let overlay;
   const close=()=>{overlay?.remove();overlay=null};
   function input(label,type='text'){
@@ -58,7 +68,7 @@
         const user=matches?.find(item=>String(item.email).toLowerCase()===email.value.trim().toLowerCase());
         if(!user)throw Error('没有找到该用户');
         host.className='dboard-multi-inline-host';
-        await mountForUser(host,user,[],()=>window.location.reload(),()=>false);
+        await mountForUser(host,user,[],()=>{},()=>false);
         status.textContent='账号：'+user.email;
       }catch(error){status.textContent=error.message}finally{search.disabled=false}
     };
@@ -81,43 +91,52 @@
       const current=await api('user/getUserInfoById?id='+encodeURIComponent(userId));
       if(!panel.isConnected)return;
       content.replaceChildren(el('p',current.email));
-      const packages=(current.subscriptions||[]).filter(item=>item.plan_id);
-      if(!packages.length)content.append(el('p','当前没有套餐'));
-      for(const item of packages){
-        const card=el('article');card.className='dboard-package-card';
-        card.append(el('strong',packageName(item)));
-        const metrics=el('div');metrics.className='dboard-package-metrics';
-        addMetric(metrics,'已用流量',bytesText(Number(item.u)+Number(item.d)));
-        addMetric(metrics,'总流量',bytesText(item.transfer_enable));
-        addMetric(metrics,'剩余流量',bytesText(item.remaining));
-        addMetric(metrics,'到期时间',expiryText(item.expired_at));
-        addMetric(metrics,'限速',item.speed_limit?item.speed_limit+' Mbps':'不限速');
-        addMetric(metrics,'设备限制',item.device_limit?item.device_limit+' 台':'不限制');
-        card.append(metrics);content.append(card);
-      }
+      const host=el('div');host.className='dboard-multi-inline-host';content.append(host);
+      await mountForUser(host,current,[],()=>{},()=>false);
     }catch(error){content.textContent=error.message}
     dismiss.focus();
   }
-  async function mountSettings(host,user,onSaved){
+  async function mountSettings(host,user,onSaved,currentData){
     if(!host||!user||host.dataset.packageSettingsUserId===String(user.id))return;
     host.dataset.packageSettingsUserId=String(user.id);host.textContent='正在读取各套餐用量与限制…';
     try{
-      const current=await api('user/getUserInfoById?id='+encodeURIComponent(user.id));
+      const current=currentData||await api('user/getUserInfoById?id='+encodeURIComponent(user.id));
       if(!host.isConnected)return;
-      host.replaceChildren(el('strong','各套餐用量与限制'));
-      host.append(el('p','点击套餐名称展开设置；每份套餐独立保存。'));
+      host.replaceChildren(el('strong','已持有套餐'));
+      host.append(el('p','点击套餐查看详情，可修改、重置流量或取消订阅。'));
       const packages=(current.subscriptions||[]).filter(item=>item.plan_id);
-      if(!packages.length){host.append(el('p','当前没有套餐，请在下方勾选新增套餐。'));return}
+      if(!packages.length){host.append(el('p','当前没有套餐，可在下方新增。'));return}
       for(const item of packages){
-        const card=el('details');card.className='dboard-package-card';card.open=packages.length===1;
+        const card=el('details');card.className='dboard-package-card';card.open=false;
         const summary=el('summary'),title=el('strong',packageName(item)),usage=el('span');
-        const refreshSummary=()=>{usage.textContent='已用 '+bytesText(Number(item.u)+Number(item.d))+' / 总流量 '+bytesText(item.transfer_enable)};
+        const refreshSummary=()=>{usage.textContent='已用 '+bytesText(Number(item.u)+Number(item.d))+' / '+bytesText(item.transfer_enable)+' · '+expiryText(item.expired_at)+' · 连接 '+(item.connection_limit||'不限')+' · '+(periodNames[item.billing_period]||'周期未识别')+(item.billing_price==null?'':' ¥'+money(item.billing_price))};
         refreshSummary();summary.append(title,usage);card.append(summary);
         const fields=el('div');fields.className='dboard-package-fields';const controls=[];
-        for(const [key,label,unit] of [['u','已用上行','GB'],['d','已用下行','GB'],['transfer_enable','总流量','GB'],['speed_limit','限速','Mbps'],['device_limit','设备限制','台']]){
+        const billingWrap=el('label'),billingPeriod=el('select');
+        billingPeriod.setAttribute('aria-label',packageName(item)+' 付费周期');
+        const unknown=el('option','未识别，请选择周期');unknown.value='';unknown.disabled=true;billingPeriod.append(unknown);
+        for(const key of billingPeriods){const option=el('option',periodNames[key]);option.value=key;billingPeriod.append(option)}
+        billingPeriod.value=item.billing_period||'';
+        billingWrap.append(el('span','付费周期'),billingPeriod);
+        const priceWrap=el('label'),billingPrice=el('input'),standard=el('button','恢复标准价');
+        billingPrice.type='number';billingPrice.min='0';billingPrice.max='21474836.47';billingPrice.step='0.01';
+        billingPrice.setAttribute('aria-label',packageName(item)+' 周期价格');
+        standard.type='button';standard.className='dboard-package-standard';
+        const priceFor=key=>Object.hasOwn(item.billing_prices||{},key)?item.billing_prices[key]:(item.billing_plan_prices?.[key]==null?null:Math.round(Number(item.billing_plan_prices[key])*100));
+        const updatePrice=()=>{const value=priceFor(billingPeriod.value);billingPrice.value=value==null?'':money(value);billingPrice.placeholder=value==null?'请填写价格':'留空使用标准价'};
+        updatePrice();
+        let originalPeriod=billingPeriod.value,originalPrice=billingPrice.value,restoreStandard=false;
+        billingPeriod.onchange=()=>{restoreStandard=false;updatePrice()};
+        billingPrice.oninput=()=>{restoreStandard=false};
+        standard.onclick=()=>{billingPrice.value='';restoreStandard=true;billingPrice.placeholder='使用套餐标准价'};
+        priceWrap.append(el('span','周期价格（元）'),billingPrice,standard);
+        fields.append(billingWrap,priceWrap);
+        const billingNote=el('p','仅此份套餐同周期续费沿用该价格，其他优惠仍按现有规则计算。修改不改变当前到期时间或历史订单。');
+        billingNote.className='dboard-package-billing-note';fields.append(billingNote);
+        for(const [key,label,unit] of [['u','已用上行','GB'],['d','已用下行','GB'],['transfer_enable','总流量','GB'],['speed_limit','限速','Mbps'],['device_limit','设备限制','台'],['connection_limit','连接数限制','个']]){
           const wrap=el('label'),field=el('input');field.type='number';field.min='0';field.step=unit==='GB'?'any':'1';
           const traffic=unit==='GB';field.value=item[key]==null?'':traffic?String(Number(item[key])/1073741824):String(item[key]);
-          field.placeholder=key==='speed_limit'?'留空不限速':key==='device_limit'?'留空不限制':'0';
+          field.placeholder=key==='speed_limit'?'留空不限速':['device_limit','connection_limit'].includes(key)?'0 或留空不限':'0';
           field.setAttribute('aria-label',packageName(item)+' '+label);
           wrap.append(el('span',label+'（'+unit+'）'),field);fields.append(wrap);
           controls.push({key,field,traffic,original:field.value});
@@ -136,12 +155,19 @@
         save.onclick=async()=>{
           const changes={};
           try{
+            if(billingPeriod.value!==originalPeriod||billingPrice.value!==originalPrice||restoreStandard){
+              if(!billingPeriod.value)throw Error('请先选择付费周期');
+              changes.billing_period=billingPeriod.value;
+              changes.billing_price=billingPrice.value.trim()===''?null:toCents(billingPrice.value);
+              if(changes.billing_price===null&&item.billing_plan_prices?.[billingPeriod.value]==null)throw Error('此周期没有标准价格，请填写价格');
+            }
             for(const control of controls){
               if(control.field.value===control.original)continue;
               const raw=control.field.value;
               if(raw===''){if(control.traffic)throw Error('流量不能为空');changes[control.key]=null;continue}
               const number=Number(raw),value=control.traffic?Math.round(number*1073741824):number;
-              if(!Number.isFinite(number)||number<0||!Number.isSafeInteger(value))throw Error('请填写有效的非负数，限速和设备数须为整数');
+              if(!Number.isFinite(number)||number<0||!Number.isSafeInteger(value))throw Error('请填写有效的非负数，限速、设备数和连接数须为整数');
+              if(control.key==='connection_limit'&&value>2147483647)throw Error('连接数超出允许范围');
               changes[control.key]=value;
             }
             if(timeField.value!==initialTime||permanent.checked!==initialPermanent){
@@ -150,14 +176,45 @@
               changes.expired_at=stamp;
             }
             if(!Object.keys(changes).length){status.textContent='设置没有变化';return}
-            save.disabled=true;status.textContent='正在保存…';
+            [save,reset,cancel].forEach(button=>button.disabled=true);status.textContent='正在保存…';
             await api('user/subscription/update',{user_id:current.id,subscription_user_id:item.id,...changes});
-            Object.assign(item,changes);controls.forEach(control=>{control.original=control.field.value});
+            Object.assign(item,changes);
+            if(Object.hasOwn(changes,'billing_price')){
+              item.billing_prices={...(item.billing_prices||{})};
+              if(changes.billing_price==null)delete item.billing_prices[changes.billing_period];
+              else item.billing_prices[changes.billing_period]=changes.billing_price;
+              item.billing_price=priceFor(changes.billing_period);
+              originalPeriod=billingPeriod.value;updatePrice();originalPrice=billingPrice.value;restoreStandard=false;
+            }
+            controls.forEach(control=>{control.original=control.field.value});
             initialTime=timeField.value;initialPermanent=permanent.checked;refreshSummary();
-            status.textContent='已保存 '+packageName(item);onSaved?.();
-          }catch(error){status.textContent=error.message}finally{save.disabled=false}
+            status.textContent='已保存 '+packageName(item);onSaved?.('update');
+          }catch(error){status.textContent=error.message}finally{[save,reset,cancel].forEach(button=>button.disabled=false)}
         };
-        card.append(fields,save,status);host.append(card);
+        const reset=el('button','重置流量'),cancel=el('button','取消套餐订阅');
+        reset.type=cancel.type='button';cancel.className='dboard-package-danger';
+        const action=async(path,message)=>{
+          if(!window.confirm(message))return;
+          [save,reset,cancel].forEach(button=>button.disabled=true);status.textContent='正在处理…';
+          try{
+            await api(path,{user_id:current.id,subscription_user_id:item.id});
+            if(path.endsWith('/remove')){card.remove();status.textContent='已取消订阅';onSaved?.('remove');}
+            else{
+              const fresh=await api('user/getUserInfoById?id='+encodeURIComponent(current.id));
+              const updated=fresh.subscriptions?.find(entry=>Number(entry.id)===Number(item.id));
+              if(!updated)throw Error('套餐已变更，请重新打开查看');
+              Object.assign(item,updated);
+              controls.forEach(control=>{control.field.value=item[control.key]==null?'':String(control.traffic?Number(item[control.key])/1073741824:item[control.key]);control.original=control.field.value});
+              billingPeriod.value=item.billing_period||'';updatePrice();originalPeriod=billingPeriod.value;originalPrice=billingPrice.value;restoreStandard=false;
+              refreshSummary();status.textContent='此套餐流量已重置';onSaved?.('reset');
+            }
+          }catch(error){status.textContent=error.message}
+          finally{[save,reset,cancel].forEach(button=>button.disabled=false)}
+        };
+        reset.onclick=()=>action('user/subscription/reset-traffic','确定重置 '+packageName(item)+' 的流量？仅清零此套餐已用流量，并按套餐规则开始新周期；本周期临时流量奖励会到期。');
+        cancel.onclick=()=>action('user/subscription/remove','确定取消 '+packageName(item)+'？该套餐订阅链接将立即失效，其他套餐不受影响。');
+        const actions=el('div');actions.className='dboard-package-actions';actions.append(save,reset,cancel);
+        card.append(fields,el('p','连接数按每个节点的 TCP 连接＋UDP 会话合计；0 或留空不限，需支持此功能的节点版本。'),actions,status);host.append(card);
       }
     }catch(error){host.textContent='读取套餐失败：'+error.message}
   }
@@ -175,16 +232,17 @@
     }catch(error){host.textContent='读取套餐失败：'+error.message;return}
     if(!host.isConnected)return;
     host.replaceChildren();
-    const title=el('strong','已持有套餐（取消勾选可移除）');
-    const currentList=el('div');currentList.className='dboard-multi-inline-list';
-    const existing=[];
-    for(const item of (current.subscriptions||[]).filter(item=>item.plan_id)){
-      const label=el('label'),check=el('input');check.type='checkbox';check.checked=true;
-      const text=el('span',(item.plan_name||'套餐')+' #'+item.id);
-      label.append(check,text);currentList.append(label);existing.push({item,check});
-    }
-    if(!existing.length)currentList.append(el('p','当前没有套餐'));
-    const newTitle=el('strong','新增套餐（勾选后保存）');
+    const currentList=el('div');currentList.className='dboard-owned-packages';
+    const existing=(current.subscriptions||[]).filter(item=>item.plan_id).map(item=>({item,check:{checked:true}}));
+    const refresh=async()=>{
+      delete host.dataset.subscriptionUserId;
+      await mountForUser(host,user,plans,onSaved,()=>false);
+      onSaved?.();
+    };
+    host.append(currentList);
+    await mountSettings(currentList,current,kind=>{if(kind==='remove')refresh();else onSaved?.()},current);
+    const addSection=el('details');addSection.className='dboard-package-add';
+    const newTitle=el('summary','＋ 新增套餐');
     const newList=el('div');newList.className='dboard-multi-inline-list';
     const available=[];
     for(const plan of availablePlans){
@@ -196,6 +254,11 @@
       const period=el('select');period.setAttribute('aria-label',plan.name+'的订阅周期');
       for(const [key,value] of periods){const option=el('option',(periodNames[key]||key)+' · ¥'+value);option.value=key;period.append(option)}
       const priceLabel=el('span','价格档位');
+      const priceRow=el('div');priceRow.className='dboard-package-price-row';
+      const customPrice=el('input');customPrice.type='number';customPrice.min='0';customPrice.max='21474836.47';customPrice.step='0.01';
+      customPrice.placeholder='自定义价格（元）';customPrice.setAttribute('aria-label',plan.name+'的自定义价格');
+      priceRow.append(period,customPrice);
+
       const expiry=expiryChoice(plan.name);
       priceLabel.className='dboard-multi-field-caption';
       const duplicate=existing.filter(entry=>Number(entry.item.plan_id)===Number(plan.id));
@@ -212,20 +275,20 @@
         action.onchange=()=>{target.hidden=note.hidden=action.value!=='extend'};
         target.hidden=true;note.hidden=true;operation.append(action,target,note);
       }else{action.value='add'}
-      period.hidden=priceLabel.hidden=expiry.wrap.hidden=operation.hidden=true;
-      check.onchange=()=>{period.hidden=priceLabel.hidden=expiry.wrap.hidden=!check.checked;operation.hidden=!check.checked||!duplicate.length};
-      row.append(label,operation,priceLabel,period,expiry.wrap);newList.append(row);available.push({plan,check,period,expiry,action,target,duplicate});
+      priceRow.hidden=priceLabel.hidden=expiry.wrap.hidden=operation.hidden=true;
+      check.onchange=()=>{priceRow.hidden=priceLabel.hidden=expiry.wrap.hidden=!check.checked;operation.hidden=!check.checked||!duplicate.length};
+      row.append(label,operation,priceLabel,priceRow,expiry.wrap);newList.append(row);available.push({plan,check,period,customPrice,expiry,action,target,duplicate});
     }
     if(!available.length)newList.append(el('p','暂无设置价格的可开通套餐'));
-    const hint=el('p','每个已持有套餐可单独取消；同款套餐可选择新开或叠加时长。有效期、流量与限制在对应套餐卡片内独立设置。');
+    const hint=el('p','自定义价格留空使用档位标准价，填写 0 为免费；自定义价格仅此份套餐同周期续费沿用。点击开通会按所选价格记录管理员已支付订单，不会自动扣款。');
     const status=el('p');status.setAttribute('role','status');
-    const save=el('button','保存套餐选择');save.type='button';save.className='dboard-multi-inline-save';
-    host.append(title,currentList,newTitle,newList,hint,save,status);
+    const save=el('button','开通所选套餐');save.type='button';save.className='dboard-multi-inline-save';
+    addSection.append(newTitle,newList,hint,save,status);host.append(addSection);
     save.onclick=async()=>{
       const additions=available.filter(row=>row.check.checked);
       const removals=existing.filter(row=>!row.check.checked);
       if(!additions.length&&!removals.length){status.textContent='套餐没有变化';return}
-      if(isDirty?.()&&!window.confirm('编辑窗口里还有其他未保存的修改。继续会丢弃这些修改，确定吗？'))return;
+
       let prepared;
       try{prepared=additions.map(row=>{
         const action=row.duplicate.length?row.action.value:'add';
@@ -236,15 +299,17 @@
           if(!entry||entry.item.expired_at==null)throw Error('请选择可叠加时长的现有套餐');
           if(!entry.check.checked)throw Error('不能同时移除并叠加同一份套餐');
         }
-        return {row,expiry:row.expiry.values(),action,target};
+        const custom=row.customPrice.value.trim();
+        const amount=toCents(custom===''?String(row.plan.prices[row.period.value]):custom);
+        return {row,expiry:row.expiry.values(),action,target,amount,custom:custom!==''};
       })}
       catch(error){status.textContent=error.message;return}
       if(removals.length&&!window.confirm('确定移除 '+removals.map(row=>(row.item.plan_name||'套餐')+' #'+row.item.id).join('、')+'？移除后原订阅链接立即失效。'))return;
       save.disabled=true;let changed=false;
       try{
-        for(const {row,expiry,action,target} of prepared){
+        for(const {row,expiry,action,target,amount,custom} of prepared){
           status.textContent=(action==='extend'?'正在叠加时长 ':'正在开通 ')+row.plan.name+'…';
-          const tradeNo=await api('order/assign',{email:current.email,plan_id:Number(row.plan.id),period:row.period.value,total_amount:0,subscription_action:action,subscription_user_id:target,...expiry});
+          const tradeNo=await api('order/assign',{email:current.email,plan_id:Number(row.plan.id),period:row.period.value,total_amount:amount,...(custom?{renewal_price:amount}:{}),subscription_action:action,subscription_user_id:target,...expiry});
           changed=true;
           try{await api('order/paid',{trade_no:tradeNo})}
           catch(error){throw Error('订单 '+tradeNo+' 已创建但未开通，请先处理该订单：'+error.message)}
@@ -258,10 +323,10 @@
           await api('user/subscription/remove',{user_id:current.id,subscription_user_id:row.item.id});
           changed=true;
         }
-        status.textContent='已保存';onSaved?.();
+        status.textContent='已保存';await refresh();
       }catch(error){
         status.textContent=error.message;
-        if(changed){window.alert('已完成部分操作，页面将刷新以免重复添加。'+error.message);onSaved?.()}
+        if(changed){window.alert('已完成部分操作，将重新读取套餐以免重复添加。'+error.message);await refresh()}
       }finally{save.disabled=false}
     };
   }

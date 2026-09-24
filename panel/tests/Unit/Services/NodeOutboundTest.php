@@ -9,6 +9,13 @@ use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 class NodeOutboundTest extends TestCase {
  use RefreshDatabase;
+ public function createApplication() {
+  $app=parent::createApplication();$app->detectEnvironment(fn()=>'testing');
+  $app['config']->set('app.env','testing');$app['config']->set('app.key','base64:'.base64_encode(str_repeat('T',32)));$app['config']->set('database.default','sqlite');
+  $app['config']->set('database.connections.sqlite',['driver'=>'sqlite','database'=>':memory:','prefix'=>'','foreign_key_constraints'=>true]);
+  \Illuminate\Support\Facades\DB::purge('sqlite');\Illuminate\Support\Facades\Cache::setDefaultDriver('array');return $app;
+ }
+
  private function node(string $name,int $port): Server {
   return Server::create(['name'=>$name,'type'=>'vless','host'=>'127.0.0.1','port'=>(string)$port,'server_port'=>$port,'enabled'=>true,'show'=>false,'group_ids'=>[],'rate'=>1,'protocol_settings'=>['network'=>'tcp','tls'=>0]]);
  }

@@ -11,6 +11,7 @@ class NodeOutboundService
     {
         if ($target->parent_id) return '请使用该节点的主节点作为出口';
         if ($target->enabled === false) return '节点已停用';
+        if ($target->front_gate_enabled) return (!filter_var($target->port,FILTER_VALIDATE_INT)||$target->port<1||$target->port>65535||!trim((string)$target->host)) ? '节点需要有效地址和固定连接端口' : null;
         if (!in_array($target->type, ['vmess','vless','trojan','shadowsocks','socks','http'], true)) return '当前出站内核暂不支持此协议';
         if (!filter_var($target->port, FILTER_VALIDATE_INT) || (int)$target->port < 1 || (int)$target->port > 65535 || !trim((string)$target->host)) return '节点需要有效地址和固定连接端口';
         $settings = $target->protocol_settings;
@@ -43,11 +44,12 @@ class NodeOutboundService
         ]);
     }
 
-    public static function config(ServerOutbound $outbound): array
+    public static function config(ServerOutbound $outbound, ?Server $source=null): array
     {
         $target = Server::find($outbound->target_server_id);
         // Keep the tag present and fail closed if an exit is removed or disabled.
         if (!$target || self::unavailableReason($target)) return ['tag'=>$outbound->tag,'protocol'=>'socks','settings'=>['server'=>'node-unavailable.invalid','server_port'=>1]];
+        if ($target->front_gate_enabled) return NodeFrontGateService::outbound($target,$source,$outbound->tag,$outbound->proxy_tag);
         $p = $target->protocol_settings;
         $uuid = self::uuid($target);
         $mode = (int)data_get($p,'tls',0);
@@ -78,7 +80,7 @@ class NodeOutboundService
         if (in_array($target->type,['socks','http'],true)) {
             $settings['username']=$uuid; $settings['password']=$uuid;
         }
-        return ['tag'=>$outbound->tag,'protocol'=>$target->type,'settings'=>$settings];
+        return ['tag'=>$outbound->tag,'protocol'=>$target->type,'settings'=>$settings]+($outbound->proxy_tag?['proxy_tag'=>$outbound->proxy_tag]:[]);
     }
 
     /** Resolve node exits including ordinary outbounds that use them as a proxy. */
@@ -104,7 +106,7 @@ class NodeOutboundService
         $outbounds=ServerOutbound::all();
         foreach (Server::where('enabled',true)->get(['id','outbound_ids']) as $source) {
             if (in_array((int)$target->id,self::targets($source->outbound_ids ?? [],$outbounds),true)) {
-                return collect([(object)['id'=>-(int)$target->id,'uuid'=>self::uuid($target),'speed_limit'=>0,'device_limit'=>0]]);
+                return collect([(object)['id'=>-(int)$target->id,'uuid'=>self::uuid($target),'speed_limit'=>0,'device_limit'=>0,'connection_limit'=>0]]);
             }
         }
         return collect();

@@ -82,9 +82,15 @@ class OrderService
             if ((int) $target->plan_id !== (int) $plan->id) {
                 throw new ApiException('续费套餐与所选套餐不一致');
             }
+            $plan=PackageBillingService::forPackage($plan,$target);
+            $planService=new PlanService($plan);
             $planService->validatePurchase($target, $period);
         } else {
             $purchaseUser = $subscriptionAction === 'add' ? new User(['plan_id' => null]) : $user;
+            if ($subscriptionAction !== 'add') {
+                $plan=PackageBillingService::forPackage($plan,$user);
+                $planService=new PlanService($plan);
+            }
             $planService->validatePurchase($purchaseUser, $period);
         }
         HookManager::call('order.create.before', [$user, $plan, $period, $couponCode]);
@@ -99,6 +105,18 @@ class OrderService
                 throw new ApiException(__('You have an unpaid or pending order, please try again later or cancel it'));
             }
 
+            // Resolve the quote again under the account/package locks. An admin
+            // may have changed a negotiated price while checkout was opening.
+            $plan=Plan::findOrFail($plan->id);
+            $pricingUser=$subscriptionAction==='add' ? new User(['plan_id'=>null]) : $user;
+            if ($subscriptionAction==='renew') {
+                $pricingUser=User::lockForUpdate()->findOrFail($subscriptionUserId);
+                if (($pricingUser->id!==$user->id && (int)$pricingUser->parent_id!==(int)$user->id)
+                    || (int)$pricingUser->plan_id!==(int)$plan->id)
+                    throw new ApiException('续费套餐已变更，请重新选择');
+            }
+            if ($subscriptionAction!=='add') $plan=PackageBillingService::forPackage($plan,$pricingUser);
+            (new PlanService($plan))->validatePurchase($pricingUser,$period);
             $newPeriod = PlanService::getPeriodKey($period);
 
             $order = new Order([
@@ -106,7 +124,7 @@ class OrderService
                 'plan_id' => $plan->id,
                 'period' => $newPeriod,
                 'trade_no' => Helper::generateOrderNo(),
-                'total_amount' => (int) (optional($plan->prices)[$newPeriod] * 100),
+                'total_amount' => (int) round(optional($plan->prices)[$newPeriod] * 100),
                 'subscription_action' => $subscriptionAction,
                 'subscription_user_id' => $subscriptionAction === 'renew' ? $subscriptionUserId : null,
             ]);
@@ -171,6 +189,8 @@ class OrderService
                 $order->subscription_user_id = $account->id;
             }
 
+            $previousPlanId = $this->user->plan_id;
+            $activityBefore = SubscriptionActivityService::snapshot($this->user);
             if ($order->surplus_credit) {
                 $account->balance += $order->surplus_credit;
                 $account->save();
@@ -211,8 +231,18 @@ class OrderService
 
                 $this->setSpeedLimit($plan->speed_limit);
                 $this->setDeviceLimit($plan->device_limit);
+                $this->user->connection_limit = $plan->connection_limit;
             }
 
+            if ($order->period !== Plan::PERIOD_RESET_TRAFFIC) {
+                if ((int)$previousPlanId !== (int)$plan->id) $this->user->billing_prices = null;
+                $this->user->billing_period = $order->period;
+                if ($order->renewal_price !== null) {
+                    $prices=$this->user->billing_prices ?? [];
+                    $prices[$order->period]=(int)$order->renewal_price;
+                    $this->user->billing_prices=$prices;
+                }
+            }
             if (!$this->user->save()) {
                 throw new \RuntimeException('用户信息保存失败');
             }
@@ -222,6 +252,12 @@ class OrderService
                 throw new \RuntimeException('订单信息保存失败');
             }
 
+            if ($order->is_admin_created || $order->callback_no === 'manual_operation') {
+                $this->user->unsetRelation('plan');
+                $action=match($order->subscription_action){'extend'=>'extend','renew'=>'renew',default=>'open'};
+                if ($order->period===Plan::PERIOD_RESET_TRAFFIC) $action='reset';
+                SubscriptionActivityService::record($account,$this->user,$action,$activityBefore,$order->admin_actor_id,$order);
+            }
             return $order;
         });
 
@@ -417,6 +453,7 @@ class OrderService
                 $order->status = Order::STATUS_PROCESSING;
                 $order->paid_at = time();
                 $order->callback_no = $callbackNo;
+                if ($callbackNo === 'manual_operation') { $order->is_admin_created=true; $order->admin_actor_id=$order->admin_actor_id ?: auth()->id(); }
                 if (!$order->save()) {
                     throw new \RuntimeException('Failed to save order status.');
                 }

@@ -60,6 +60,8 @@ class UniProxyController extends Controller
         } else {
             Cache::forget('dboard_user_routes_capable:' . $node->id);
         }
+        if ($request->header('X-DBoard-Front-Gate')==='1') Cache::put('dboard_front_gate_capable:'.$node->id,true,600);
+        else Cache::forget('dboard_front_gate_capable:'.$node->id);
         $response = ServerService::buildNodeConfig($node);
 
         $response['base_config'] = [

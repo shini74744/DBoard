@@ -33,6 +33,7 @@ class UserUpdate extends FormRequest
             'commission_balance' => 'numeric',
             'remarks' => 'nullable',
             'speed_limit' => 'nullable|integer',
+            'connection_limit' => 'nullable|integer|min:0|max:2147483647',
             'device_limit' => 'nullable|integer'
         ];
 

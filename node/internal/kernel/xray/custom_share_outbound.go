@@ -169,6 +169,14 @@ func xrayOutboundStreamSettings(settings map[string]any) M {
 	switch tlsMode {
 	case "tls":
 		stream["security"] = "tls"
+		if version := intValue(settings["front_gate_version"]); version == 1 {
+			stream["tlsSettings"] = M{"serverName": serverName, "minVersion": "1.3", "disableSystemRoot": true, "sendClientCertificate": true,
+				"certificates": []M{
+					{"certificate": strings.Split(stringValue(settings["certificate_pem"]), "\n"), "usage": "verify"},
+					{"certificate": strings.Split(stringValue(settings["client_certificate_pem"]), "\n"), "key": strings.Split(rawCredential(settings["client_key_pem"]), "\n"), "usage": "encipherment"},
+				}}
+			return stream
+		}
 		tls := M{}
 		if pem, ok := settings["certificate_pem"].(string); ok && pem != "" {
 			tls["certificates"] = []M{{"certificate": strings.Split(pem, "\n"), "usage": "verify"}}

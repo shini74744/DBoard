@@ -121,6 +121,8 @@ class MultiSubscriptionService
                 'remaining' => $item->getRemainingTraffic(),
                 'speed_limit' => $item->speed_limit,
                 'device_limit' => $item->device_limit,
+                'connection_limit' => $item->connection_limit,
+                ...PackageBillingService::info($item),
                 'traffic_breakdown' => TrafficQuotaBreakdown::forUser($item),
                 'active' => !$account->banned && $item->isAvailable(),
                 'subscribe_url' => Helper::getSubscribeUrl($item->id === $account->id && $primaryToken

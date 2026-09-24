@@ -73,7 +73,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				tlsConfig.NextProtos = []string{"h2", "http/1.1"}
 			}
 		}
-		if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil {
+		if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil && !config.SendClientCertificate {
 			conn = tls.UClient(conn, tlsConfig, fingerprint)
 			if len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "http/1.1" { // allow manually specify
 				err = conn.(*tls.UConn).WebsocketHandshakeContext(ctx)

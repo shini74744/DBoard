@@ -82,10 +82,12 @@
   <style>{!! file_get_contents(resource_path('css/dboard-node-connections.css')) !!}</style>
   <style>{!! file_get_contents(resource_path('css/dboard-admin-theme.css')) !!}</style>
   <style>{!! file_get_contents(resource_path('css/dboard-multi-subscription-admin.css')) !!}</style>
+  <style>{!! file_get_contents(resource_path('css/dboard-front-gate.css')) !!}</style>
 </head>
 
 <body>
   <div id="root"></div>
+  <script>{!! file_get_contents(resource_path('js/dboard-front-gate.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-telegram-settings.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-sort-drag.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-resource-sort.js')) !!}</script>

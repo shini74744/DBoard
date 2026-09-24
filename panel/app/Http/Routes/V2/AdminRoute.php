@@ -180,6 +180,7 @@ class AdminRoute
                 $router->post('/update', [UserController::class, 'update']);
                 $router->post('/subscription/remove', [UserController::class, 'removeSubscription']);
                 $router->post('/subscription/update', [UserController::class, 'updateSubscription']);
+                $router->post('/subscription/reset-traffic', [UserController::class, 'resetSubscriptionTraffic']);
                 $router->get('/getUserInfoById', [UserController::class, 'getUserInfoById']);
                 $router->get('/traffic-breakdown', [UserController::class, 'trafficBreakdown']);
                 $router->post('/generate', [UserController::class, 'generate']);

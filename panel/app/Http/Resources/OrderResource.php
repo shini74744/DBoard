@@ -19,10 +19,13 @@ class OrderResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        \App\Services\SubscriptionActivityService::forCustomer($this->resource);
+        $base=parent::toArray($request);
+        unset($base['admin_actor_id']);
         return [
-            ...parent::toArray($request),
-            'period' => PlanService::getLegacyPeriod((string)$this->period),
-            'plan' => $this->whenLoaded('plan', fn() => PlanResource::make($this->plan)),
+            ...$base,
+            'period' => $this->period ? PlanService::getLegacyPeriod((string)$this->period) : null,
+            'plan' => $this->whenLoaded('plan', fn() => $this->record_kind==='activity' ? ['id'=>$this->plan_id,'name'=>$this->activity_plan_name] : ($this->plan ? PlanResource::make($this->plan) : null)),
             'payment' => $this->whenLoaded('payment', fn() => $this->payment ? [
                 'id' => $this->payment->id,
                 'name' => $this->payment->name,

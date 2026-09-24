@@ -67,6 +67,11 @@ func buildConfig(kcfg config.KernelConfig, nc *model.NodeSpec, users []model.Use
 	}
 
 	inbound := buildInbound(nc, users, tc)
+	if inbound != nil && nc.FrontGate != nil {
+		gate := nc.FrontGate
+		inbound["tls"] = M{"enabled": true, "min_version": "1.3", "certificate": []string{gate.Certificate}, "key": []string{gate.PrivateKey}, "client_authentication": "require-and-verify", "client_certificate": gate.TrustedClients, "client_certificate_deny_all": len(gate.TrustedClients) == 0}
+		delete(inbound, "transport")
+	}
 	if inbound != nil {
 		cfg["inbounds"] = []M{inbound}
 	}
@@ -88,6 +93,9 @@ func buildConfig(kcfg config.KernelConfig, nc *model.NodeSpec, users []model.Use
 
 	mergeCustomSingbox(cfg, kcfg)
 	finishUniversalSingboxConfig(cfg, nc)
+	if nc.FrontGate != nil {
+		cfg["inbounds"] = []M{inbound}
+	}
 	return cfg
 }
 
@@ -499,7 +507,7 @@ func mergeCustomSingboxRoute(cfg M, customRoute map[string]any) {
 
 func buildInbound(nc *model.NodeSpec, users []model.UserSpec, tc kernel.TLSCert) M {
 	base := M{
-		"tag":         nc.Protocol + "-in",
+		"tag":         nc.InboundTag(),
 		"listen":      "::",
 		"listen_port": nc.ServerPort,
 	}

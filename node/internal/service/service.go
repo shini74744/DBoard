@@ -30,14 +30,15 @@ import (
 )
 
 type Service struct {
-	cfg          *config.Config
-	source       controlplane.Source
-	sink         controlplane.Sink
-	kernel       kernel.Kernel
-	tracker      *tracker.Tracker
-	limiter      *limiter.Limiter
-	speedTracker *limiter.SpeedTracker
-	cert         *cert.Manager
+	frontGateRevision atomic.Pointer[string]
+	cfg               *config.Config
+	source            controlplane.Source
+	sink              controlplane.Sink
+	kernel            kernel.Kernel
+	tracker           *tracker.Tracker
+	limiter           *limiter.Limiter
+	speedTracker      *limiter.SpeedTracker
+	cert              *cert.Manager
 
 	lastConfig *model.NodeSpec
 	lastUsers  []model.UserSpec
@@ -560,6 +561,7 @@ func (s *Service) handleWSEvent(ctx context.Context, event controlplane.Event) {
 			return
 		}
 		if err := validateNodeRuntime(s.cfg, s.kernel.Protocols(), event.Config, s.cert.TLSCert()); err != nil {
+			s.rejectInvalidFrontGate(event.Config)
 			nlog.Core().Warn("ws config validation failed, ignoring update", "error", err)
 			return
 		}
@@ -672,6 +674,7 @@ func (s *Service) applyPullResult(ctx context.Context, result pullResult) {
 
 	if result.config != nil {
 		if err := validateNodeRuntime(s.cfg, s.kernel.Protocols(), result.config, s.cert.TLSCert()); err != nil {
+			s.rejectInvalidFrontGate(result.config)
 			nlog.Core().Warn("runtime config validation failed", "error", err)
 			result.config = nil
 		} else {
@@ -755,6 +758,7 @@ func (s *Service) startKernel(nc *model.NodeSpec, users []model.UserSpec) bool {
 		return false
 	}
 
+	s.markFrontGateApplied(nc)
 	s.appliedState.Config = nc
 	s.appliedState.Users = users
 
@@ -958,6 +962,7 @@ func (s *Service) applyChanges(ctx context.Context, configChanged, usersChanged 
 			nlog.Core().Warn(fmt.Sprintf("reload failed, restarting: %v", err))
 			s.startKernel(s.lastConfig, s.lastUsers)
 		} else {
+			s.markFrontGateApplied(s.lastConfig)
 			s.appliedState.Config = s.lastConfig
 			s.appliedState.Users = s.lastUsers
 			if s.nodeLog != nil {
@@ -1122,11 +1127,25 @@ func (s *Service) buildMetrics(status monitor.Status) map[string]interface{} {
 	// Limiter metrics.
 	lm := s.limiter.SnapshotMetrics()
 	m["limits"] = map[string]interface{}{
-		"device_limit_events": lm.DeviceLimitEvents,
-		"speed_limited_users": s.speedTracker.LimitedUserCount(),
+		"connection_limit_supported": true,
+		"device_limit_events":        lm.DeviceLimitEvents,
+		"speed_limited_users":        s.speedTracker.LimitedUserCount(),
 	}
 
+	m["front_gate_version"] = 1
+	m["front_gate_revision"] = ""
+	if revision := s.frontGateRevision.Load(); revision != nil && s.kernel.IsRunning() {
+		m["front_gate_revision"] = *revision
+	}
 	return m
+}
+
+func (s *Service) markFrontGateApplied(n *model.NodeSpec) {
+	revision := ""
+	if n != nil && n.FrontGate != nil {
+		revision = n.FrontGate.Revision
+	}
+	s.frontGateRevision.Store(&revision)
 }
 
 // computeConfigHash returns a deterministic hash of the node config.
@@ -1158,6 +1177,8 @@ func computeUserHash(users []model.UserSpec) string {
 		h.Write(buf[:])
 		io.WriteString(h, u.UUID)
 		binary.LittleEndian.PutUint64(buf[:], uint64(u.SpeedLimit))
+		h.Write(buf[:])
+		binary.LittleEndian.PutUint64(buf[:], uint64(u.ConnectionLimit))
 		h.Write(buf[:])
 		binary.LittleEndian.PutUint64(buf[:], uint64(u.DeviceLimit))
 		h.Write(buf[:])
@@ -1308,4 +1329,23 @@ func stringValue(v any) string {
 	default:
 		return ""
 	}
+}
+
+// Never continue a public listener after receiving an invalid protected policy.
+func (s *Service) rejectInvalidFrontGate(n *model.NodeSpec) {
+	if n == nil || (n.FrontGate == nil && n.Protocol != "dboard-front-only") {
+		return
+	}
+	if k, ok := s.kernel.(interface{ RejectFrontGate() }); ok {
+		k.RejectFrontGate()
+	} else {
+		s.kernel.Stop()
+	}
+	s.metricsMu.Lock()
+	s.lastConfig = nil
+	s.metricsMu.Unlock()
+	s.lastConfigHash = ""
+	s.appliedState.Config = nil
+	empty := ""
+	s.frontGateRevision.Store(&empty)
 }

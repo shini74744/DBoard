@@ -12,6 +12,9 @@ func ValidateNodeSpec(n *NodeSpec, kcfg config.KernelConfig) error {
 		return nil
 	}
 
+	if err := n.validateFrontGate(); err != nil {
+		return err
+	}
 	effectiveKernelType := strings.TrimSpace(kcfg.Type)
 	if effectiveKernelType == "" {
 		effectiveKernelType = strings.TrimSpace(n.KernelType)

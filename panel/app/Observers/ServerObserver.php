@@ -12,6 +12,7 @@ class ServerObserver
 
     public function created(Server $server): void
     {
+        \App\Services\NodeFrontGateService::notifyChanged($server);
         \App\Services\NodeOutboundService::notifyChanged($server);
         $this->notifyMachineNodesChanged($server->machine_id);
         if ($server->show && $server->enabled) {
@@ -21,6 +22,8 @@ class ServerObserver
 
     public function updated(Server $server): void
     {
+        if ($server->wasChanged(array_merge(['group_ids','enabled','parent_id'],\App\Services\NodeFrontGateService::FIELDS)))
+            \App\Services\NodeFrontGateService::notifyChanged($server);
         if ($server->wasChanged(['host','port','protocol_settings','type','enabled','outbound_ids'])) {
             \App\Services\NodeOutboundService::notifyChanged($server);
         }
@@ -41,6 +44,7 @@ class ServerObserver
         if ($server->wasChanged('group_ids')) {
             NodeSyncService::notifyFullSync($server->id);
         } elseif ($server->wasChanged([
+            'front_gate_enabled','front_gate_node_ids','front_gate_group_ids',
             'server_port',
             'protocol_settings',
             'type',
@@ -65,6 +69,7 @@ class ServerObserver
 
     public function deleted(Server $server): void
     {
+        \App\Services\NodeFrontGateService::notifyChanged($server);
         \App\Services\NodeOutboundService::notifyChanged($server);
         $this->notifyMachineChange(null, $server->getOriginal('machine_id') ?: $server->machine_id);
     }

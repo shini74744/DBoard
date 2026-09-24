@@ -22,6 +22,9 @@
           <strong>{{ formatTraffic(item.transfer_enable) }}</strong>
         </div>
       </div>
+      <div class="package-usage" title="每个节点分别计算 TCP 连接与 UDP 会话合计">
+        <span>连接数限制 {{ Number(item.connection_limit) > 0 ? item.connection_limit + ' / 节点' : $t('dashboard.unlimited') }}</span>
+      </div>
       <div class="package-usage">
         <span>{{ $t('dashboard.usedTraffic') }} {{ formatTraffic(usedTraffic(item)) }}</span>
         <span>{{ $t('dashboard.remainingTraffic') }} {{ formatTraffic(Math.max(0, Number(item.remaining) || 0)) }}</span>

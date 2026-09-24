@@ -127,6 +127,11 @@ class ServerSave extends FormRequest
             'outbound_ids.*' => 'integer|exists:v2_server_outbound,id',
             'parent_id' => 'nullable|integer',
             'machine_id' => 'nullable|integer',
+            'front_gate_enabled'=>'sometimes|boolean',
+            'front_gate_node_ids'=>'nullable|array|max:500',
+            'front_gate_node_ids.*'=>'integer|distinct|exists:v2_server,id',
+            'front_gate_group_ids'=>'nullable|array|max:500',
+            'front_gate_group_ids.*'=>'integer|distinct|exists:v2_server_group,id',
             'enabled' => 'nullable|boolean',
             'host' => 'required',
             'port' => 'required',
@@ -265,6 +270,10 @@ class ServerSave extends FormRequest
     {
         $type = $this->input('type');
         $rules = $this->getBaseRules();
+        if ($this->has('front_gate_enabled') && !$this->boolean('front_gate_enabled')) {
+            $rules['front_gate_node_ids.*']='integer|distinct';
+            $rules['front_gate_group_ids.*']='integer|distinct';
+        }
         $protocolRules = $this->getProtocolRules((string) $type);
 
         foreach ($protocolRules as $field => $rule) {

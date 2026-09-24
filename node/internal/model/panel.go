@@ -103,7 +103,8 @@ func NodeSpecFromPanel(nc *panel.NodeConfig) *NodeSpec {
 		})
 	}
 
-	return &NodeSpec{
+	result := &NodeSpec{
+		FrontGate:           nc.FrontGate,
 		Protocol:            nc.Protocol,
 		ListenIP:            nc.ListenIP,
 		ServerPort:          nc.ServerPort,
@@ -141,6 +142,8 @@ func NodeSpecFromPanel(nc *panel.NodeConfig) *NodeSpec {
 		Multiplex:           multiplex,
 		AcceptProxyProtocol: nc.AcceptProxyProtocol,
 	}
+	result.normalizeFrontGate()
+	return result
 }
 
 func NodeSpecFromPanelValidated(nc *panel.NodeConfig, kcfg config.KernelConfig) (*NodeSpec, error) {
@@ -157,7 +160,7 @@ func UserSpecsFromPanel(users []panel.User) []UserSpec {
 	}
 	out := make([]UserSpec, 0, len(users))
 	for _, user := range users {
-		out = append(out, UserSpec{ID: user.ID, UUID: user.UUID, SpeedLimit: user.SpeedLimit, DeviceLimit: user.DeviceLimit})
+		out = append(out, UserSpec{ID: user.ID, UUID: user.UUID, SpeedLimit: user.SpeedLimit, DeviceLimit: user.DeviceLimit, ConnectionLimit: user.ConnectionLimit})
 	}
 	return out
 }
@@ -261,7 +264,8 @@ func (n *NodeSpec) ToPanel() *panel.NodeConfig {
 	}
 
 	return &panel.NodeConfig{
-		Protocol:            n.Protocol,
+		FrontGate:           n.FrontGate,
+		Protocol:            n.WireProtocol(),
 		ListenIP:            n.ListenIP,
 		ServerPort:          n.ServerPort,
 		Network:             n.Network,
@@ -306,7 +310,7 @@ func UserSpecsToPanel(users []UserSpec) []panel.User {
 	}
 	out := make([]panel.User, 0, len(users))
 	for _, user := range users {
-		out = append(out, panel.User{ID: user.ID, UUID: user.UUID, SpeedLimit: user.SpeedLimit, DeviceLimit: user.DeviceLimit})
+		out = append(out, panel.User{ID: user.ID, UUID: user.UUID, SpeedLimit: user.SpeedLimit, DeviceLimit: user.DeviceLimit, ConnectionLimit: user.ConnectionLimit})
 	}
 	return out
 }

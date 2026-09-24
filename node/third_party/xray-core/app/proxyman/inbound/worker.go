@@ -24,6 +24,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tcp"
+	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/internet/udp"
 	"github.com/xtls/xray-core/transport/pipe"
 )
@@ -36,6 +37,11 @@ type worker interface {
 }
 
 type tcpWorker struct {
+	// Protected listeners must revoke established TLS/mux sessions on policy reload.
+	frontMu       sync.Mutex
+	frontClosed   bool
+	frontSessions map[stat.Connection]context.CancelFunc
+
 	address         net.Address
 	port            net.Port
 	proxy           proxy.Inbound
@@ -61,6 +67,22 @@ func getTProxyType(s *internet.MemoryStreamConfig) internet.SocketConfig_TProxyM
 
 func (w *tcpWorker) callback(conn stat.Connection) {
 	ctx, cancel := context.WithCancel(w.ctx)
+	if config := tls.ConfigFromStreamSettings(w.stream); config != nil && config.RequireClientCertificate {
+		raw := conn
+		w.frontMu.Lock()
+		if w.frontClosed {
+			w.frontMu.Unlock()
+			cancel()
+			raw.Close()
+			return
+		}
+		if w.frontSessions == nil {
+			w.frontSessions = make(map[stat.Connection]context.CancelFunc)
+		}
+		w.frontSessions[raw] = cancel
+		w.frontMu.Unlock()
+		defer func() { w.frontMu.Lock(); delete(w.frontSessions, raw); w.frontMu.Unlock() }()
+	}
 	sid := session.NewID()
 	ctx = c.ContextWithID(ctx, sid)
 
@@ -158,6 +180,16 @@ func (w *tcpWorker) Start() error {
 }
 
 func (w *tcpWorker) Close() error {
+	w.frontMu.Lock()
+	w.frontClosed = true
+	sessions := w.frontSessions
+	w.frontSessions = nil
+	w.frontMu.Unlock()
+	for conn, cancel := range sessions {
+		cancel()
+		_ = conn.Close()
+	}
+
 	var errs []interface{}
 	if w.hub != nil {
 		if err := common.Close(w.hub); err != nil {

@@ -30,6 +30,8 @@ class PlanResource extends JsonResource
             'transfer_enable' => $this->resource['transfer_enable'],
             'speed_limit' => $this->resource['speed_limit'],
             'device_limit' => $this->resource['device_limit'],
+            'connection_limit' => $this->resource['connection_limit'] ?? null,
+            'billing_period' => !empty($this->resource['billing_period']) ? PlanService::getLegacyPeriod($this->resource['billing_period']) : null,
             'show' => (bool) $this->resource['show'],
             'sell' => (bool) $this->resource['sell'],
             'renew' => (bool) $this->resource['renew'],
@@ -87,6 +89,7 @@ class PlanResource extends JsonResource
         $replacements = [
             '{{transfer}}' => $this->resource['transfer_enable'],
             '{{speed}}' => $this->resource['speed_limit'] === NULL ? __('No Limit') : $this->resource['speed_limit'],
+            '{{connections}}' => ($this->resource['connection_limit'] ?? 0) > 0 ? $this->resource['connection_limit'] : __('No Limit'),
             '{{devices}}' => $this->resource['device_limit'] === NULL ? __('No Limit') : $this->resource['device_limit'],
             '{{reset_method}}' => $this->getResetMethodText(),
         ];

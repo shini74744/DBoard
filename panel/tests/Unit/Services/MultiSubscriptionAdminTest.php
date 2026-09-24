@@ -12,6 +12,13 @@ class MultiSubscriptionAdminTest extends TestCase
 {
     use RefreshDatabase;
 
+ public function createApplication() {
+  $app=parent::createApplication();$app->detectEnvironment(fn()=>'testing');
+  $app['config']->set('app.env','testing');$app['config']->set('database.default','sqlite');
+  $app['config']->set('database.connections.sqlite',['driver'=>'sqlite','database'=>':memory:','prefix'=>'','foreign_key_constraints'=>true]);
+  \Illuminate\Support\Facades\DB::purge('sqlite');\Illuminate\Support\Facades\Cache::setDefaultDriver('array');return $app;
+ }
+
     private function fixture(): array
     {
         $plans=[];
@@ -28,13 +35,13 @@ class MultiSubscriptionAdminTest extends TestCase
             'uuid'=>'00000000-0000-0000-0000-000000000111','token'=>str_repeat('1',32),
             'plan_id'=>$plans[0]->id,'group_id'=>1,'transfer_enable'=>100*1073741824,
             'u'=>1073741824,'d'=>2*1073741824,'expired_at'=>time()+30*86400,
-            'is_admin'=>true,'balance'=>0,'commission_balance'=>0,'speed_limit'=>50,'device_limit'=>3,
+            'is_admin'=>true,'balance'=>0,'commission_balance'=>0,'speed_limit'=>50,'device_limit'=>3,'connection_limit'=>20,
         ]);
         $child=MultiSubscriptionService::createPackage($account);
         $child->update([
             'plan_id'=>$plans[1]->id,'group_id'=>2,'transfer_enable'=>151*1073741824,
             'u'=>3*1073741824,'d'=>4*1073741824,'expired_at'=>time()+40*86400,
-            'speed_limit'=>17,'device_limit'=>2,
+            'speed_limit'=>17,'device_limit'=>2,'connection_limit'=>12,
         ]);
         return [$account,$child,$plans];
     }
@@ -43,7 +50,7 @@ class MultiSubscriptionAdminTest extends TestCase
     {
         [$account,$child,$plans]=$this->fixture();
         Sanctum::actingAs($account);
-        $before=$child->only(['u','d','transfer_enable','speed_limit','device_limit','expired_at']);
+        $before=$child->only(['u','d','transfer_enable','speed_limit','device_limit','connection_limit','expired_at']);
         $rootBefore=$account->fresh()->getAttributes();
         $tradeNo=$this->postJson('/api/v2/00000000/order/assign',[
             'email'=>$account->email,'plan_id'=>$plans[1]->id,'period'=>'monthly',
@@ -55,7 +62,7 @@ class MultiSubscriptionAdminTest extends TestCase
         (new OrderService($order))->open();
         $after=$child->fresh();
         $this->assertSame($before['expired_at']+7*86400,$after->expired_at);
-        foreach (['u','d','transfer_enable','speed_limit','device_limit'] as $key) $this->assertSame($before[$key],$after->$key);
+        foreach (['u','d','transfer_enable','speed_limit','device_limit','connection_limit'] as $key) $this->assertSame($before[$key],$after->$key);
         $this->assertSame($rootBefore,$account->fresh()->getAttributes());
         $this->assertSame(1,User::where('parent_id',$account->id)->count());
         (new OrderService($order))->open();

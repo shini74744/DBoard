@@ -205,6 +205,7 @@ class UserService
             'group_id',
             'speed_limit',
             'device_limit',
+            'connection_limit',
             'expired_at',
             'transfer_enable'
         ];
@@ -225,11 +226,13 @@ class UserService
         if (!$plan)
             return;
 
+        if ((int)$user->plan_id !== (int)$plan->id) { $user->billing_period=null; $user->billing_prices=null; }
         $user->plan_id = $plan->id;
         $user->group_id = $plan->group_id;
         $user->transfer_enable = $plan->transfer_enable * 1073741824;
         $user->speed_limit = $plan->speed_limit;
         $user->device_limit = $plan->device_limit;
+        $user->connection_limit = $plan->connection_limit;
 
         if ($expiredAt) {
             $user->expired_at = $expiredAt;
@@ -247,6 +250,7 @@ class UserService
     public function assignPlan(User $user, Plan $plan, int $validityDays): User
     {
         [$carryCycle, $permanent, $timed] = TelegramBindingRewardService::bonusesForPlanActivation($user);
+        if ((int)$user->plan_id !== (int)$plan->id) { $user->billing_period=null; $user->billing_prices=null; }
         $user->plan_id = $plan->id;
         $user->group_id = $plan->group_id;
         $user->telegram_bonus_cycle = $carryCycle;
@@ -255,6 +259,7 @@ class UserService
         $user->transfer_enable = $plan->transfer_enable * 1073741824 + $permanent + $carryCycle + $timed;
         $user->speed_limit = $plan->speed_limit;
         $user->device_limit = $plan->device_limit;
+        $user->connection_limit = $plan->connection_limit;
 
         if ($validityDays > 0) {
             $user = $this->extendSubscription($user, $validityDays);
@@ -292,10 +297,12 @@ class UserService
             return;
 
         $user->transfer_enable = $plan->transfer_enable * 1073741824;
+        if ((int)$user->plan_id !== (int)$plan->id) { $user->billing_period=null; $user->billing_prices=null; }
         $user->plan_id = $plan->id;
         $user->group_id = $plan->group_id;
         $user->expired_at = time() + (admin_setting('try_out_hour', 1) * 3600);
         $user->speed_limit = $plan->speed_limit;
         $user->device_limit = $plan->device_limit;
+        $user->connection_limit = $plan->connection_limit;
     }
 }

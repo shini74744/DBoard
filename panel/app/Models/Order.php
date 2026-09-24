@@ -52,6 +52,9 @@ class Order extends Model
         'surplus_order_ids' => 'array',
         'handling_amount' => 'integer',
         'custom_duration_days' => 'integer',
+        'renewal_price' => 'integer',
+        'is_admin_created' => 'boolean',
+        'activity_changes' => 'array',
         'custom_expired_at' => 'integer'
     ];
 

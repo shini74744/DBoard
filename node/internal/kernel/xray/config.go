@@ -76,6 +76,13 @@ func buildConfig(kcfg config.KernelConfig, nc *model.NodeSpec, users []model.Use
 	}
 
 	inbound := buildInbound(nc, users, tc)
+	if inbound != nil && nc.FrontGate != nil {
+		gate := nc.FrontGate
+		inbound["streamSettings"] = M{"network": "tcp", "security": "tls", "tlsSettings": M{
+			"minVersion": "1.3", "requireClientCertificate": true, "clientCertificateAuthorities": gate.TrustedClients,
+			"certificates": []M{{"certificate": strings.Split(gate.Certificate, "\n"), "key": strings.Split(gate.PrivateKey, "\n")}},
+		}}
+	}
 	if inbound != nil {
 		cfg["inbounds"] = []M{inbound}
 	} else {
@@ -95,6 +102,9 @@ func buildConfig(kcfg config.KernelConfig, nc *model.NodeSpec, users []model.Use
 	cfg["outbounds"] = outbounds
 
 	mergeCustomXray(cfg, kcfg)
+	if nc.FrontGate != nil {
+		cfg["inbounds"] = []M{inbound}
+	}
 	return cfg
 }
 
@@ -293,7 +303,7 @@ func buildInbound(nc *model.NodeSpec, users []model.UserSpec, tc kernel.TLSCert)
 		listenAddr = nc.ListenIP
 	}
 	base := M{
-		"tag":      nc.Protocol + "-in",
+		"tag":      nc.InboundTag(),
 		"listen":   listenAddr,
 		"port":     nc.ServerPort,
 		"protocol": nc.Protocol,

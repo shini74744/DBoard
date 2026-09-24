@@ -18,7 +18,8 @@ class OrderAssign extends FormRequest
         return [
             'plan_id' => 'required',
             'email' => 'required',
-            'total_amount' => 'required',
+            'total_amount' => 'required|integer|min:0|max:2147483647',
+            'renewal_price' => 'sometimes|nullable|integer|min:0|max:2147483647',
             'period' => ['required', Rule::in(array_merge(array_keys(Plan::LEGACY_PERIOD_MAPPING), array_values(Plan::LEGACY_PERIOD_MAPPING)))],
             'subscription_action' => 'nullable|in:auto,add,renew,extend',
             'subscription_user_id' => 'nullable|integer',

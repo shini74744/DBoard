@@ -319,7 +319,11 @@ func NewSTDServer(ctx context.Context, logger log.ContextLogger, options option.
 		}
 	}
 	if tlsConfig.ClientAuth == tls.VerifyClientCertIfGiven || tlsConfig.ClientAuth == tls.RequireAndVerifyClientCert {
-		if len(options.ClientCertificate) > 0 {
+		tlsConfig.SessionTicketsDisabled = true
+		if options.ClientCertificateDenyAll {
+			tlsConfig.ClientCAs = x509.NewCertPool()
+			tlsConfig.VerifyConnection = func(tls.ConnectionState) error { return E.New("no authorized fronts") }
+		} else if len(options.ClientCertificate) > 0 {
 			clientCertificateCA := x509.NewCertPool()
 			if !clientCertificateCA.AppendCertsFromPEM([]byte(strings.Join(options.ClientCertificate, "\n"))) {
 				return nil, E.New("invalid client certificate strings")

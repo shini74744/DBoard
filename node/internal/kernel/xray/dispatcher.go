@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/shini74744/DBoard/node/internal/connstats"
+	"github.com/shini74744/DBoard/node/internal/limiter"
 	"reflect"
 	"sort"
 	"sync"
@@ -81,8 +82,9 @@ type LimitDispatcher struct {
 	// Each entry is *ipCounter{ips sync.Map}.
 	unlimitedIPs sync.Map // email → *ipCounter
 
-	connections *connstats.Store
-	connCount   atomic.Int64 // total active connections tracked by dispatcher
+	connectionGate *limiter.ConnectionGate
+	connections    *connstats.Store
+	connCount      atomic.Int64 // total active connections tracked by dispatcher
 }
 
 // ipCounter tracks IPs for unlimited users without any lock.
@@ -110,8 +112,16 @@ func (d *LimitDispatcher) Dispatch(ctx context.Context, dest net.Destination) (*
 		return nil, err
 	}
 
+	release, allowed := d.reserveConnection(email)
+	if !allowed {
+		if email != "" && isTCP {
+			d.delConn(email, sourceIP)
+		}
+		return nil, errors.New("connection limit exceeded")
+	}
 	link, err := d.innerDisp.Dispatch(ctx, dest)
 	if err != nil {
+		release()
 		if email != "" && isTCP {
 			d.delConn(email, sourceIP)
 		}
@@ -119,7 +129,7 @@ func (d *LimitDispatcher) Dispatch(ctx context.Context, dest net.Destination) (*
 	}
 
 	if email != "" {
-		d.trackLink(link, email, sourceIP, isTCP, dest)
+		d.trackLink(link, email, sourceIP, isTCP, dest, release)
 	}
 	return link, nil
 }
@@ -130,10 +140,22 @@ func (d *LimitDispatcher) DispatchLink(ctx context.Context, dest net.Destination
 		return err
 	}
 
-	if email != "" {
-		d.trackLink(link, email, sourceIP, isTCP, dest)
+	release, allowed := d.reserveConnection(email)
+	if !allowed {
+		if email != "" && isTCP {
+			d.delConn(email, sourceIP)
+		}
+		return errors.New("connection limit exceeded")
 	}
-	return d.innerDisp.DispatchLink(ctx, dest, link)
+	done := release
+	if email != "" {
+		done = d.trackLink(link, email, sourceIP, isTCP, dest, release)
+	}
+	err = d.innerDisp.DispatchLink(ctx, dest, link)
+	if err != nil {
+		done()
+	}
+	return err
 }
 
 // identifyAndCheck extracts user identity from the session context, enforces
@@ -158,7 +180,13 @@ func (d *LimitDispatcher) identifyAndCheck(ctx context.Context, dest net.Destina
 // trackLink records connection lifecycle without mutating xray-core owned
 // transport primitives. This keeps mux/XUDP compatible while still allowing
 // the dispatcher to release device-limit state when the link closes.
-func (d *LimitDispatcher) trackLink(link *transport.Link, email, sourceIP string, isTCP bool, dest net.Destination) {
+func (d *LimitDispatcher) reserveConnection(email string) (func(), bool) {
+	d.mu.RLock()
+	uid := d.emailToUID[email]
+	d.mu.RUnlock()
+	return d.connectionGate.Acquire(uid)
+}
+func (d *LimitDispatcher) trackLink(link *transport.Link, email, sourceIP string, isTCP bool, dest net.Destination, release func()) func() {
 	d.connCount.Add(1)
 	network := "udp"
 	if isTCP {
@@ -173,18 +201,25 @@ func (d *LimitDispatcher) trackLink(link *transport.Link, email, sourceIP string
 	d.mu.RUnlock()
 	done := d.connections.BeginUser(uid, sourceIP, target, network)
 
+	var once sync.Once
 	onClose := func() {
-		done()
-		if isTCP {
-			d.delConn(email, sourceIP)
-		}
-		d.connCount.Add(-1)
+		once.Do(func() {
+			if release != nil {
+				release()
+			}
+			done()
+			if isTCP {
+				d.delConn(email, sourceIP)
+			}
+			d.connCount.Add(-1)
+		})
 	}
 
 	link.Writer = &closeTrackingWriter{
 		Writer:  link.Writer,
 		onClose: onClose,
 	}
+	return onClose
 }
 
 // ─── features.Feature (delegated) ───────────────────────────────────────────
@@ -235,7 +270,6 @@ func (d *LimitDispatcher) GetConnectionState() (aliveIPs map[int]map[string]bool
 	d.mu.RLock()
 	emailToUID := d.emailToUID
 	limitedIPs := d.limitedIPs
-	d.mu.RUnlock()
 
 	aliveIPs = make(map[int]map[string]bool)
 
@@ -254,6 +288,7 @@ func (d *LimitDispatcher) GetConnectionState() (aliveIPs map[int]map[string]bool
 		}
 	}
 
+	d.mu.RUnlock()
 	// Collect IPs from unlimited users (lock-free).
 	d.unlimitedIPs.Range(func(key, value interface{}) bool {
 		email := key.(string)

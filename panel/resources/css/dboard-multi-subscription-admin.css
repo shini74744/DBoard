@@ -63,3 +63,29 @@ html.dark .dboard-package-card{background:#172238;border-color:#385276;color:#ef
 html.dark .dboard-package-fields input,html.dark .dboard-package-operation{background:#263956;color:#eff5ff;border-color:#4b6485}
 html.dark .dboard-package-card>summary>span,html.dark .dboard-package-metrics span,html.dark .dboard-package-table-lines span,html.dark .dboard-package-operation p{color:#b7c9e2}
 @media(max-width:400px){.dboard-package-fields,.dboard-package-metrics{grid-template-columns:minmax(0,1fr)}}
+
+/* Package actions remain inside the selected identity card. */
+.dboard-owned-packages{display:grid;gap:8px}
+.dboard-owned-packages>p{margin:0;font-size:12px;color:#64748b}
+.dboard-package-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.dboard-package-actions button{padding:7px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px}
+.dboard-package-actions .dboard-package-danger{color:#b91c1c;border-color:#fecaca;background:#fff}
+.dboard-package-card summary{cursor:pointer}
+.dboard-package-card summary>span{display:block;font-size:12px;color:#64748b;line-height:1.6}
+.dboard-package-card>p{font-size:12px;color:#64748b;margin:8px 0}
+.dboard-package-add{border-top:1px solid #dbeafe;padding-top:10px}
+.dboard-package-add>summary{cursor:pointer;font-weight:600;color:#1d4ed8;padding:5px 0}
+.dboard-package-add[open]>summary{margin-bottom:8px}
+
+.dboard-package-fields select{width:100%;min-width:0;border:1px solid #cbd5e1;border-radius:6px;padding:8px;background:transparent;font:inherit;color:inherit}
+.dboard-package-standard{display:block;font-size:11px!important;color:#2563eb;border:0!important;background:none!important;padding:3px 0!important;text-align:left}
+.dboard-package-billing-note{grid-column:1/-1;font-size:12px;color:#64748b;margin:0}
+.dboard-package-price-row{display:flex;gap:8px;align-items:center}
+.dboard-package-price-row[hidden]{display:none}
+.dboard-package-price-row select{flex:1;min-width:0;width:0}
+.dboard-package-price-row input{flex:0 0 125px;min-width:0;width:125px}
+@media(max-width:400px){.dboard-package-price-row{flex-wrap:wrap}.dboard-package-price-row select{flex-basis:110px}.dboard-package-price-row input{flex:1 1 110px}}
+.dboard-package-fields>label{align-content:start}
+.dboard-package-fields select{height:36px;background:#fff;border-color:#c3d4ed;border-radius:8px}
+.dboard-package-price-row input{box-sizing:border-box;height:37px;padding:8px 10px;border:1px solid #c3d4ed;border-radius:8px;background:#fff;color:#18263a;font:inherit;font-size:13px}
+html.dark .dboard-package-price-row input,html.dark .dboard-package-fields select{background:#263956;color:#eff5ff;border-color:#4b6485}

@@ -113,7 +113,7 @@ class Server extends Model
     protected $table = 'v2_server';
 
     protected $guarded = ['id'];
-    protected $hidden = ['admin_group', 'admin_group_number'];
+    protected $hidden = ['admin_group', 'admin_group_number', 'front_gate_enabled', 'front_gate_node_ids', 'front_gate_group_ids'];
     protected static function booted(): void
     {
         static::creating(function (Server $server) {
@@ -128,6 +128,9 @@ class Server extends Model
     }
 
     protected $casts = [
+        'front_gate_enabled' => 'boolean',
+        'front_gate_node_ids' => 'array',
+        'front_gate_group_ids' => 'array',
         'admin_group_number' => 'integer',
         'group_ids' => 'array',
         'route_ids' => 'array',

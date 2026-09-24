@@ -36,9 +36,9 @@ class ServerOutbound extends Model
         });
     }
 
-    public function toNodeConfig(): array
+    public function toNodeConfig(?Server $source = null): array
     {
-        if ($this->target_server_id) return ['id'=>$this->id] + \App\Services\NodeOutboundService::config($this);
+        if ($this->target_server_id) return ['id'=>$this->id] + \App\Services\NodeOutboundService::config($this,$source);
         $config = [
             'id' => $this->id,
             'tag' => $this->tag,

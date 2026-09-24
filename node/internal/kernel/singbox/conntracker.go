@@ -3,6 +3,7 @@ package singbox
 import (
 	"context"
 	"github.com/shini74744/DBoard/node/internal/connstats"
+	"github.com/shini74744/DBoard/node/internal/limiter"
 	"io"
 	"net"
 	"sort"
@@ -123,11 +124,12 @@ func (u *userStats) aliveIPList() map[string]bool {
 //   - Close callback to decrement IP refcounts
 //   - Per-connection rate limit token accumulation (amortized WaitN)
 type ConnTracker struct {
-	connections *connstats.Store
-	usersMu     sync.RWMutex
-	users       map[int]*userStats  // userID → stats
-	uuidMap     map[string]int      // UUID → userID (for lookup in RoutedConnection)
-	connMap     map[string]net.Conn // connID → conn (only for force-close support)
+	connectionGate *limiter.ConnectionGate
+	connections    *connstats.Store
+	usersMu        sync.RWMutex
+	users          map[int]*userStats  // userID → stats
+	uuidMap        map[string]int      // UUID → userID (for lookup in RoutedConnection)
+	connMap        map[string]net.Conn // connID → conn (only for force-close support)
 
 	idCounter atomic.Int64
 
@@ -146,11 +148,12 @@ type ConnTracker struct {
 // NewConnTracker creates a tracker.
 func NewConnTracker(_ int) *ConnTracker {
 	return &ConnTracker{
-		connections:   connstats.New(),
-		users:         make(map[int]*userStats),
-		uuidMap:       make(map[string]int),
-		connMap:       make(map[string]net.Conn),
-		globalDevices: make(map[int]map[string]bool),
+		connections:    connstats.New(),
+		connectionGate: limiter.NewConnectionGate(),
+		users:          make(map[int]*userStats),
+		uuidMap:        make(map[string]int),
+		connMap:        make(map[string]net.Conn),
+		globalDevices:  make(map[int]map[string]bool),
 	}
 }
 
@@ -232,6 +235,11 @@ func (t *ConnTracker) RoutedConnection(
 		}
 	}
 
+	release, allowed := t.connectionGate.Acquire(uid)
+	if !allowed {
+		conn.Close()
+		return conn
+	}
 	// Register connection
 	if us != nil {
 		us.addConn(sourceIP)
@@ -251,6 +259,7 @@ func (t *ConnTracker) RoutedConnection(
 
 	return &trackedConn{
 		statsDone: t.connections.BeginUser(uid, sourceIP, metadata.Destination.String(), "tcp"),
+		limitDone: release,
 		Conn:      conn,
 		tracker:   t,
 		us:        us,
@@ -291,6 +300,11 @@ func (t *ConnTracker) RoutedPacketConnection(
 		}
 	}
 
+	release, allowed := t.connectionGate.Acquire(uid)
+	if !allowed {
+		conn.Close()
+		return conn
+	}
 	if us != nil {
 		us.addConn(sourceIP)
 	}
@@ -304,6 +318,7 @@ func (t *ConnTracker) RoutedPacketConnection(
 
 	return &trackedPacketConn{
 		statsDone:  t.connections.BeginUser(uid, sourceIP, metadata.Destination.String(), "udp"),
+		limitDone:  release,
 		PacketConn: conn,
 		tracker:    t,
 		us:         us,
@@ -563,6 +578,7 @@ func (r *RateLimitedReadCloser) Read(b []byte) (int, error) {
 }
 
 type trackedConn struct {
+	limitDone func()
 	statsDone func()
 	net.Conn
 	tracker  *ConnTracker
@@ -639,6 +655,9 @@ func (c *trackedConn) Write(b []byte) (int, error) {
 
 func (c *trackedConn) Close() error {
 	if c.closed.CompareAndSwap(false, true) {
+		if c.limitDone != nil {
+			c.limitDone()
+		}
 		if c.statsDone != nil {
 			c.statsDone()
 		}
@@ -696,6 +715,7 @@ func (c *trackedConn) WriterReplaceable() bool { return true }
 // ─── trackedPacketConn (UDP / QUIC) ─────────────────────────────────────────
 
 type trackedPacketConn struct {
+	limitDone func()
 	statsDone func()
 	N.PacketConn
 	tracker  *ConnTracker
@@ -766,6 +786,9 @@ func (c *trackedPacketConn) WritePacket(buffer *buf.Buffer, dest singM.Socksaddr
 
 func (c *trackedPacketConn) Close() error {
 	if c.closed.CompareAndSwap(false, true) {
+		if c.limitDone != nil {
+			c.limitDone()
+		}
 		if c.statsDone != nil {
 			c.statsDone()
 		}
@@ -817,3 +840,17 @@ func (c *trackedPacketConn) UnwrapPacketWriter() (N.PacketWriter, []N.CountFunc)
 func (c *trackedPacketConn) Upstream() any           { return c.PacketConn }
 func (c *trackedPacketConn) ReaderReplaceable() bool { return true }
 func (c *trackedPacketConn) WriterReplaceable() bool { return true }
+
+func (t *ConnTracker) CloseAll() {
+	t.usersMu.RLock()
+	closers := make([]io.Closer, 0, len(t.connMap))
+	for _, conn := range t.connMap {
+		if conn != nil {
+			closers = append(closers, conn)
+		}
+	}
+	t.usersMu.RUnlock()
+	for _, conn := range closers {
+		_ = conn.Close()
+	}
+}

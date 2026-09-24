@@ -187,7 +187,7 @@ class UserController extends Controller
 
         $userModel = User::query()
             ->whereNull('parent_id')
-            ->with(['plan:id,name', 'invite_user:id,email', 'group:id,name', 'subscriptions:id,parent_id,plan_id,transfer_enable,u,d,expired_at,banned,speed_limit,device_limit', 'subscriptions.plan:id,name'])
+            ->with(['plan:id,name', 'invite_user:id,email', 'group:id,name', 'subscriptions:id,parent_id,plan_id,transfer_enable,u,d,expired_at,banned,speed_limit,device_limit,connection_limit', 'subscriptions.plan:id,name'])
             ->select((new User())->getTable() . '.*')
             ->selectRaw('(u + d) as total_used');
 
@@ -222,7 +222,7 @@ class UserController extends Controller
             'u' => (int) $item->u, 'd' => (int) $item->d,
             'transfer_enable' => (int) $item->transfer_enable,
             'expired_at' => $item->expired_at,
-            'speed_limit' => $item->speed_limit, 'device_limit' => $item->device_limit,
+            'speed_limit' => $item->speed_limit, 'device_limit' => $item->device_limit, 'connection_limit' => $item->connection_limit,
         ])->values()->all();
         if ($user['subscriptions_count'] > 1) {
             $user['plan'] = ['id' => $model->plan_id, 'name' => '多套餐（' . $user['subscriptions_count'] . ' 份）'];
@@ -275,11 +275,13 @@ class UserController extends Controller
             if (($target->id !== $account->id && (int) $target->parent_id !== (int) $account->id) || !$target->plan_id) {
                 throw new \App\Exceptions\ApiException('所选套餐不属于该用户或已移除', 422);
             }
+            $activityBefore=\App\Services\SubscriptionActivityService::snapshot($target);
             $oldGroup = (int) $target->group_id;
             $oldToken = (string) $target->token;
             $target->forceFill([
                 'plan_id' => null, 'group_id' => null, 'transfer_enable' => 0, 'expired_at' => 0,
                 'next_reset_at' => null, 'telegram_bonus_cycle' => 0,
+                'billing_period' => null, 'billing_prices' => null,
                 'telegram_bonus_permanent' => 0, 'telegram_bonus_timed' => 0,
                 'token' => Helper::guid(), 'uuid' => Helper::guid(true),
                 'primary_package_token' => $target->id === $account->id
@@ -293,6 +295,7 @@ class UserController extends Controller
                 if (count($remaining) < 2) $combination->delete();
                 else $combination->update(['package_ids' => $remaining]);
             });
+            \App\Services\SubscriptionActivityService::record($account,$target,'cancel',$activityBefore,auth()->id());
             return [$target->id, $oldGroup, $oldToken, (string) $account->token];
         });
         if ($oldGroup) {
@@ -308,6 +311,29 @@ class UserController extends Controller
         return $this->success(true);
     }
 
+    public function resetSubscriptionTraffic(Request $request)
+    {
+        $data=$request->validate(['user_id'=>'required|integer|min:1','subscription_user_id'=>'required|integer|min:1']);
+        $target=DB::transaction(function()use($data){
+            $account=User::whereKey($data['user_id'])->whereNull('parent_id')->lockForUpdate()->firstOrFail();
+            $target=User::whereKey($data['subscription_user_id'])->lockForUpdate()->firstOrFail();
+            if(!$target->plan_id || ($target->id!==$account->id && (int)$target->parent_id!==(int)$account->id))
+                throw new \App\Exceptions\ApiException('所选套餐不属于该用户或已移除',422);
+            $activityBefore=\App\Services\SubscriptionActivityService::snapshot($target);
+            if(!app(\App\Services\TrafficResetService::class)->performReset($target))
+                throw new \App\Exceptions\ApiException('重置失败，请稍后重试',500);
+            $target=$target->fresh();
+            \App\Services\SubscriptionActivityService::record($account,$target,'reset',$activityBefore,auth()->id());
+            return $target;
+        });
+        try {
+            NodeSyncService::notifyUserChanged($target);
+        } catch (\Throwable $error) {
+            Log::warning('Traffic reset saved; immediate node sync failed', ['user_id'=>$target->id,'error'=>$error->getMessage()]);
+        }
+        return $this->success(true);
+    }
+
     public function updateSubscription(Request $request)
     {
         $data = $request->validate([
@@ -319,6 +345,9 @@ class UserController extends Controller
             'expired_at' => 'sometimes|nullable|integer|min:0',
             'speed_limit' => 'sometimes|nullable|integer|min:0',
             'device_limit' => 'sometimes|nullable|integer|min:0',
+            'connection_limit' => 'sometimes|nullable|integer|min:0|max:2147483647',
+            'billing_period' => 'sometimes|in:monthly,quarterly,half_yearly,yearly,two_yearly,three_yearly,onetime',
+            'billing_price' => 'sometimes|nullable|integer|min:0|max:2147483647',
         ]);
         $target = DB::transaction(function () use ($data) {
             $account = User::whereKey($data['user_id'])->whereNull('parent_id')->lockForUpdate()->firstOrFail();
@@ -326,9 +355,24 @@ class UserController extends Controller
             if (!$target->plan_id || ($target->id !== $account->id && (int) $target->parent_id !== $account->id)) {
                 throw new \App\Exceptions\ApiException('所选套餐不属于该用户或已移除', 422);
             }
-            $fields = array_intersect_key($data, array_flip(['u', 'd', 'transfer_enable', 'expired_at', 'speed_limit', 'device_limit']));
+            $fields = array_intersect_key($data, array_flip(['u', 'd', 'transfer_enable', 'expired_at', 'speed_limit', 'device_limit', 'connection_limit']));
+            if (array_key_exists('billing_period',$data) || array_key_exists('billing_price',$data)) {
+                $period=$data['billing_period'] ?? \App\Services\PackageBillingService::info($target)['billing_period'];
+                if (!$period) throw new \App\Exceptions\ApiException('请先选择付费周期',422);
+                $prices=$target->billing_prices ?? [];
+                if (array_key_exists('billing_price',$data)) {
+                    if ($data['billing_price']===null) unset($prices[$period]);
+                    else $prices[$period]=(int)$data['billing_price'];
+                }
+                if (!array_key_exists($period,$prices) && ($target->plan?->prices[$period] ?? null)===null)
+                    throw new \App\Exceptions\ApiException('该周期未设置标准价格，请填写自定义价格',422);
+                $fields['billing_period']=$period;
+                $fields['billing_prices']=$prices ?: null;
+            }
             if (!$fields) throw new \App\Exceptions\ApiException('没有需要保存的套餐设置', 422);
+            $activityBefore=\App\Services\SubscriptionActivityService::snapshot($target);
             $target->fill($fields)->saveOrFail();
+            \App\Services\SubscriptionActivityService::record($account,$target,'adjust',$activityBefore,auth()->id());
             return $target->fresh();
         });
         NodeSyncService::notifyUserChanged($target);
@@ -345,7 +389,7 @@ class UserController extends Controller
             return $this->fail([400202, '用户不存在']);
         }
         if ($user->subscriptions()->whereNotNull('plan_id')->exists()
-            && array_intersect(array_keys($params), ['u', 'd', 'transfer_enable', 'expired_at', 'speed_limit', 'device_limit', 'plan_id'])) {
+            && array_intersect(array_keys($params), ['u', 'd', 'transfer_enable', 'expired_at', 'speed_limit', 'device_limit', 'connection_limit', 'plan_id'])) {
             throw new \App\Exceptions\ApiException('多套餐用户请在对应套餐卡片中修改用量、有效期和限制', 422);
         }
         if (isset($params['email'])) {
@@ -395,7 +439,12 @@ class UserController extends Controller
         ]);
 
         try {
-            $user->update($params);
+            DB::transaction(function()use($user,$params){
+                $before=\App\Services\SubscriptionActivityService::snapshot($user);
+                $user->update($params);$user->unsetRelation('plan');
+                if ($before['plan_id'] || $user->plan_id)
+                    \App\Services\SubscriptionActivityService::record(\App\Services\MultiSubscriptionService::account($user),$user,$user->plan_id?($before['plan_id']?'adjust':'open'):'cancel',$before,auth()->id());
+            });
         } catch (\Exception $e) {
             Log::error($e);
             return $this->fail([500, '保存失败']);

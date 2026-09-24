@@ -75,12 +75,14 @@
                 </div>
                 <div class="status-wrapper">
                   <span class="status-badge" :class="getStatusClass(order.status)">
-                    {{ getStatusText(order.status) }}
+                    {{ order.record_kind === 'activity' ? '已记录' : getStatusText(order.status) }}
                   </span>
                 </div>
               </div>
 
               <div class="order-card-body">
+                <div class="order-activity-heading">{{ order.is_admin_created ? '管理员手动' : (order.type === 5 ? '新增套餐' : '订单') }} · {{ order.plan?.name || '套餐' }}</div>
+                <p v-if="order.activity_summary" class="order-activity-summary">{{ order.activity_summary }}</p>
                 <div class="info-row">
                   <span class="label">{{ headerTexts.createdAt }}:</span>
                   <span class="value">{{ formatDate(order.created_at) }}</span>
@@ -91,20 +93,21 @@
                 </div>
                 <div class="info-row">
                   <span class="label">{{ headerTexts.totalAmount }}:</span>
-                  <span class="value amount">{{ formatAmount(order.total_amount) }}</span>
+                  <span class="value amount">{{ order.record_kind === 'activity' ? '—' : formatAmount(order.total_amount) }}</span>
                 </div>
               </div>
 
               <div class="order-card-footer">
                 <button
                   class="action-button view-button"
-                  @click="viewOrderDetail(order.trade_no)"
+                  @click="order.record_kind === 'activity' ? selectedActivity = order : viewOrderDetail(order.trade_no)"
                 >
                   <IconEye :size="16" />
                   <span>{{ headerTexts.viewDetail }}</span>
                 </button>
                 <button
                   class="action-button cancel-button"
+                  v-if="order.record_kind !== 'activity' && order.status === 0"
                   @click="showCancelConfirm(order.trade_no)"
                   :disabled="order.status !== 0"
                   :class="{ 'disabled': order.status !== 0 }"
@@ -137,25 +140,30 @@
             <tbody>
               <transition-group :name="slideDirection === 'right' ? 'page-switch-right' : 'page-switch'">
                 <tr v-for="order in paginatedOrders" :key="order.trade_no">
-                  <td class="trade-no">{{ order.trade_no }}</td>
+                  <td class="trade-no">
+                    <div>{{ order.trade_no }}</div>
+                    <strong class="order-activity-heading">{{ order.is_admin_created ? '管理员手动' : (order.type === 5 ? '新增套餐' : '订单') }} · {{ order.plan?.name || '套餐' }}</strong>
+                    <p v-if="order.activity_summary" class="order-activity-summary">{{ order.activity_summary }}</p>
+                  </td>
                   <td>{{ formatDate(order.created_at) }}</td>
                   <td>{{ formatCycle(order.period) }}</td>
-                  <td class="amount">{{ formatAmount(order.total_amount) }}</td>
+                  <td class="amount">{{ order.record_kind === 'activity' ? '—' : formatAmount(order.total_amount) }}</td>
                   <td>
                     <span class="status-badge" :class="getStatusClass(order.status)">
-                      {{ getStatusText(order.status) }}
+                      {{ order.record_kind === 'activity' ? '已记录' : getStatusText(order.status) }}
                     </span>
                   </td>
                   <td class="actions">
                     <button
                       class="action-button view-button"
-                      @click="viewOrderDetail(order.trade_no)"
+                      @click="order.record_kind === 'activity' ? selectedActivity = order : viewOrderDetail(order.trade_no)"
                     >
                       <IconEye :size="16" />
                       <span>{{ headerTexts.viewDetail }}</span>
                     </button>
                     <button
                       class="action-button cancel-button"
+                  v-if="order.record_kind !== 'activity' && order.status === 0"
                       @click="showCancelConfirm(order.trade_no)"
                       :disabled="order.status !== 0"
                       :class="{ 'disabled': order.status !== 0 }"
@@ -181,6 +189,16 @@
         </button>
       </div>
 
+      <div v-if="selectedActivity" class="modal-overlay" @click="selectedActivity = null">
+        <section class="modal-content" role="dialog" aria-modal="true" aria-label="套餐操作记录" @click.stop>
+          <div class="modal-header"><h3>套餐操作记录</h3><button class="modal-close" @click="selectedActivity = null" aria-label="关闭"><IconX :size="20" /></button></div>
+          <div class="modal-body">
+            <strong>{{ selectedActivity.plan?.name }}</strong>
+            <p>{{ formatDate(selectedActivity.created_at) }} · 管理员手动</p>
+            <p class="order-activity-summary">{{ selectedActivity.activity_summary }}</p>
+          </div>
+        </section>
+      </div>
       <!-- 取消订单确认弹窗 -->
       <transition name="modal-fade">
         <div class="modal-overlay" v-if="showConfirmModal" @click="closeConfirmModal">
@@ -239,6 +257,7 @@ const $toast = inject('$toast');
 const loading = ref(true);
 const error = ref('');
 const orders = ref([]);
+const selectedActivity = ref(null);
 const showConfirmModal = ref(false);
 const currentTradeNo = ref('');
 const canceling = ref(false);
@@ -1199,4 +1218,11 @@ watch(locale, () => {
     }
   }
 }
+</style>
+
+<style scoped>
+.order-activity-heading{display:block;font-size:13px;line-height:1.6;margin-top:5px;font-weight:600;color:var(--text-color)}
+.order-activity-summary{margin:6px 0 0;font-size:13px;line-height:1.65;white-space:normal;overflow-wrap:anywhere;color:var(--secondary-text-color)}
+.order-table .trade-no{min-width:230px;max-width:450px;white-space:normal;overflow-wrap:anywhere}
+.order-card .order-activity-heading{margin-bottom:5px}
 </style>
