@@ -21,6 +21,14 @@ changes = [
     ('NGt({data:v,columns:h3t(f,e,b)',
      'NGt({data:window.DBoardAdminGroups?.filter("machine",v)??v,columns:h3t(f,e,b)'),
 ]
+changes.extend([
+    ('c(e??null),i(!0)},[]);return Q.jsx(d4t.Provider',
+     'c({machine_id:e?.machine_id??null,enabled:e?.enabled??null,...(window.DBoardAdminGroups?.newNodeGroup?.()||{})}),i(!0)},[]);return Q.jsx(d4t.Provider'),
+    ('qL({...s,type:l,transfer_enable:i})).data&&(D(),gE.success(e("form.success")),h())',
+     'qL({...s,type:l,transfer_enable:i,...(!o&&d?.admin_group_id?{admin_group_id:d.admin_group_id}:{})})).data&&(D(),gE.success(e("form.success")),h(),window.DBoardAdminGroups?.refresh?.())'),
+    ('Q.jsx(vtt,{className:"font-mono text-xs opacity-70",children:e("manage.description")})]}),Q.jsxs(zy,{...x',
+     'Q.jsx(vtt,{className:"font-mono text-xs opacity-70",children:!o&&d?.admin_group_name?"保存后自动归入管理分组："+d.admin_group_name:e("manage.description")})]}),Q.jsxs(zy,{...x'),
+])
 for old, new in changes:
     if source.count(new) == 1:
         continue

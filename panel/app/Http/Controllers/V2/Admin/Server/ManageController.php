@@ -17,12 +17,19 @@ class ManageController extends Controller
     public function getNodes(Request $request)
     {
         $servers = ServerService::getAllServers()->map(function ($item) {
-            $item->makeVisible('admin_group');
+            $item->makeVisible(['admin_group', 'admin_group_number']);
             $item['groups'] = ServerGroup::whereIn('id', $item['group_ids'] ?? [])->get(['name', 'id']);
             $item['parent'] = $item->parent;
+            $item['connection_stats'] = \App\Services\NodeConnectionService::summary($item);
             return $item;
         });
         return $this->success($servers);
+    }
+
+    public function connections(Request $request)
+    {
+        $params=$request->validate(['id'=>'required|integer|exists:v2_server,id']);
+        return $this->success(\App\Services\NodeConnectionService::details(Server::findOrFail($params['id'])));
     }
 
     /**
@@ -46,7 +53,7 @@ class ManageController extends Controller
                 'created_at' => time(), 'updated_at' => time(),
             ]);
         }
-        Server::whereKey($params['id'])->update(['admin_group' => $group ?: null]);
+        \App\Services\NodeAdminGroupService::move([(int) $params['id']], $group ?: null);
         return $this->success(true);
     }
 
@@ -78,6 +85,8 @@ class ManageController extends Controller
     public function save(ServerSave $request)
     {
         $params = $request->validated();
+        $adminGroupId = $params['admin_group_id'] ?? null;
+        unset($params['admin_group_id']);
         if ($request->input('id')) {
             $server = Server::find($request->input('id'));
             if (!$server) {
@@ -93,8 +102,18 @@ class ManageController extends Controller
         }
 
         try {
-            Server::create($params);
-            return $this->success(true);
+            return DB::transaction(function () use ($params, $adminGroupId) {
+                if ($adminGroupId !== null) {
+                    $group = DB::table('dboard_admin_groups')->where('id', $adminGroupId)
+                        ->where('kind', 'node')->lockForUpdate()->first();
+                    if (!$group) {
+                        return $this->fail([422, '所选管理分组已删除，请关闭窗口后重新选择分组']);
+                    }
+                    $params['admin_group'] = $group->name;
+                }
+                Server::create($params);
+                return $this->success(true);
+            });
         } catch (\Exception $e) {
             Log::error($e);
             return $this->fail([500, '创建失败']);

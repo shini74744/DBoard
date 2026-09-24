@@ -113,8 +113,22 @@ class Server extends Model
     protected $table = 'v2_server';
 
     protected $guarded = ['id'];
-    protected $hidden = ['admin_group'];
+    protected $hidden = ['admin_group', 'admin_group_number'];
+    protected static function booted(): void
+    {
+        static::creating(function (Server $server) {
+            // Every new instance, including a copy, receives a fresh group number.
+            $server->admin_group_number = \App\Services\NodeAdminGroupService::next($server->admin_group);
+        });
+        static::updating(function (Server $server) {
+            if ($server->isDirty('admin_group')) {
+                $server->admin_group_number = \App\Services\NodeAdminGroupService::next($server->admin_group);
+            }
+        });
+    }
+
     protected $casts = [
+        'admin_group_number' => 'integer',
         'group_ids' => 'array',
         'route_ids' => 'array',
         'outbound_ids' => 'array',

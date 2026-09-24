@@ -2,6 +2,7 @@ package singbox
 
 import (
 	"context"
+	"github.com/shini74744/DBoard/node/internal/connstats"
 	"io"
 	"net"
 	"sort"
@@ -122,10 +123,11 @@ func (u *userStats) aliveIPList() map[string]bool {
 //   - Close callback to decrement IP refcounts
 //   - Per-connection rate limit token accumulation (amortized WaitN)
 type ConnTracker struct {
-	usersMu sync.RWMutex
-	users   map[int]*userStats  // userID → stats
-	uuidMap map[string]int      // UUID → userID (for lookup in RoutedConnection)
-	connMap map[string]net.Conn // connID → conn (only for force-close support)
+	connections *connstats.Store
+	usersMu     sync.RWMutex
+	users       map[int]*userStats  // userID → stats
+	uuidMap     map[string]int      // UUID → userID (for lookup in RoutedConnection)
+	connMap     map[string]net.Conn // connID → conn (only for force-close support)
 
 	idCounter atomic.Int64
 
@@ -144,6 +146,7 @@ type ConnTracker struct {
 // NewConnTracker creates a tracker.
 func NewConnTracker(_ int) *ConnTracker {
 	return &ConnTracker{
+		connections:   connstats.New(),
 		users:         make(map[int]*userStats),
 		uuidMap:       make(map[string]int),
 		connMap:       make(map[string]net.Conn),
@@ -247,14 +250,15 @@ func (t *ConnTracker) RoutedConnection(
 	}
 
 	return &trackedConn{
-		Conn:     conn,
-		tracker:  t,
-		us:       us,
-		userID:   uid,
-		connID:   connID,
-		sourceIP: sourceIP,
-		limiter:  lim,
-		ctx:      ctx,
+		statsDone: t.connections.Begin(sourceIP, metadata.Destination.String(), "tcp"),
+		Conn:      conn,
+		tracker:   t,
+		us:        us,
+		userID:    uid,
+		connID:    connID,
+		sourceIP:  sourceIP,
+		limiter:   lim,
+		ctx:       ctx,
 	}
 }
 
@@ -299,6 +303,7 @@ func (t *ConnTracker) RoutedPacketConnection(
 	}
 
 	return &trackedPacketConn{
+		statsDone:  t.connections.Begin(sourceIP, metadata.Destination.String(), "udp"),
 		PacketConn: conn,
 		tracker:    t,
 		us:         us,
@@ -558,6 +563,7 @@ func (r *RateLimitedReadCloser) Read(b []byte) (int, error) {
 }
 
 type trackedConn struct {
+	statsDone func()
 	net.Conn
 	tracker  *ConnTracker
 	us       *userStats // per-user stats (upload/download atomics + IP tracking)
@@ -633,6 +639,9 @@ func (c *trackedConn) Write(b []byte) (int, error) {
 
 func (c *trackedConn) Close() error {
 	if c.closed.CompareAndSwap(false, true) {
+		if c.statsDone != nil {
+			c.statsDone()
+		}
 		if c.us != nil {
 			c.us.removeConn(c.sourceIP)
 		}
@@ -687,6 +696,7 @@ func (c *trackedConn) WriterReplaceable() bool { return true }
 // ─── trackedPacketConn (UDP / QUIC) ─────────────────────────────────────────
 
 type trackedPacketConn struct {
+	statsDone func()
 	N.PacketConn
 	tracker  *ConnTracker
 	us       *userStats
@@ -756,6 +766,9 @@ func (c *trackedPacketConn) WritePacket(buffer *buf.Buffer, dest singM.Socksaddr
 
 func (c *trackedPacketConn) Close() error {
 	if c.closed.CompareAndSwap(false, true) {
+		if c.statsDone != nil {
+			c.statsDone()
+		}
 		if c.us != nil {
 			c.us.removeConn(c.sourceIP)
 		}

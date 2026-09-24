@@ -1,0 +1,33 @@
+.dboard-connection-counts { display:flex; align-items:center; gap:4px; white-space:nowrap; }
+.dboard-connection-counts button { border:1px solid hsl(var(--border)); border-radius:4px; padding:3px 5px; font-size:11px; color:hsl(var(--foreground)); background:hsl(var(--background)); cursor:pointer; }
+.dboard-connection-counts button:hover { background:hsl(var(--accent)); }
+.dboard-connection-counts button:focus-visible { outline:2px solid hsl(var(--ring)); outline-offset:2px; }
+.dboard-connection-counts[data-stale=true] { opacity:.65; }
+.dboard-connections-overlay { position:fixed; inset:0; z-index:200; background:rgba(0,0,0,.42); padding:20px; display:flex; align-items:center; justify-content:center; }
+.dboard-connections-dialog { width:min(100%,1000px); max-height:90svh; padding:20px; border:1px solid hsl(var(--border)); border-radius:14px; background:hsl(var(--background)); color:hsl(var(--foreground)); display:flex; flex-direction:column; gap:12px; box-shadow:0 20px 60px #0003; }
+.dboard-connections-head,.dboard-connections-tools,.dboard-connections-footer { display:flex; gap:10px; align-items:center; flex:none; }
+.dboard-connections-head { justify-content:space-between; }
+.dboard-connections-head h2 { font-size:18px; font-weight:600; overflow-wrap:anywhere; }
+.dboard-connections-dialog button { border:1px solid hsl(var(--border)); border-radius:6px; padding:6px 10px; background:hsl(var(--background)); color:inherit; cursor:pointer; white-space:nowrap; font-size:13px; }
+.dboard-connections-dialog button:disabled { opacity:.45; cursor:default; }
+.dboard-connections-dialog button:focus-visible,.dboard-connections-dialog input:focus-visible { outline:2px solid hsl(var(--ring)); outline-offset:2px; }
+.dboard-connections-tabs { display:flex; gap:6px; flex:none; }
+.dboard-connections-tabs button.active { background:hsl(var(--primary)); color:hsl(var(--primary-foreground)); border-color:hsl(var(--primary)); }
+.dboard-connections-tools input { flex:1; min-width:0; padding:7px 10px; border:1px solid hsl(var(--border)); border-radius:6px; color:inherit; background:hsl(var(--background)); font-size:13px; }
+.dboard-connections-meta,.dboard-connections-note { font-size:12px; color:hsl(var(--muted-foreground)); margin:0; }
+.dboard-connections-status { font-size:12px; margin:0; color:hsl(var(--destructive)); }
+.dboard-connections-status:empty { display:none; }
+.dboard-connections-body { overflow:auto; min-height:80px; overscroll-behavior:contain; touch-action:pan-x pan-y; }
+.dboard-connections-body table { width:100%; border-collapse:collapse; font-size:13px; }
+.dboard-connections-body th,.dboard-connections-body td { text-align:left; padding:10px; border-bottom:1px solid hsl(var(--border)); }
+.dboard-connections-body th { position:sticky; top:0; background:hsl(var(--background)); white-space:nowrap; }
+.dboard-connections-address { font-family:monospace; overflow-wrap:anywhere; min-width:160px; max-width:330px; }
+.dboard-connections-empty { padding:20px; text-align:center; color:hsl(var(--muted-foreground)); }
+.dboard-connections-footer { justify-content:flex-end; font-size:12px; }
+@media(max-width:600px) {
+ .dboard-connections-overlay { padding:10px; }
+ .dboard-connections-dialog { padding:14px; max-height:94svh; gap:10px; }
+ .dboard-connections-body table { min-width:580px; }
+ .dboard-connections-head h2 { font-size:16px; }
+ .dboard-connections-note { font-size:11px; }
+}

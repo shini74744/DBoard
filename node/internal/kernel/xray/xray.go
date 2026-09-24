@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/shini74744/DBoard/node/internal/connstats"
 	"os"
 	"strings"
 	"sync"
@@ -53,6 +54,7 @@ const (
 //   - instance.Start() and instance.Close() run OUTSIDE the lock.
 //   - running (atomic) gates fast-path checks in IsRunning / GetConnections.
 type Xray struct {
+	connections     *connstats.Store
 	cfg             config.KernelConfig
 	outboundTraffic kernel.OutboundTrafficStore
 	outboundSources map[*xrayCore.Instance]outboundStatsSource
@@ -82,8 +84,9 @@ func New(cfg config.KernelConfig) *Xray {
 		cfg.Type = "xray"
 	}
 	return &Xray{
-		cfg:        cfg,
-		cumTraffic: make(map[int][2]int64),
+		connections: connstats.New(),
+		cfg:         cfg,
+		cumTraffic:  make(map[int][2]int64),
 	}
 }
 
@@ -153,6 +156,10 @@ func (x *Xray) Start(nodeConfig *model.NodeSpec, users []model.UserSpec, tls ker
 	if err := installUniversalBalancers(inst, nodeConfig.CustomBalancers); err != nil {
 		inst.Close()
 		return fmt.Errorf("install universal balancers: %w", err)
+	}
+
+	if ld != nil {
+		ld.connections = x.connections
 	}
 
 	// ── Phase 3: Start new (no lock, potentially slow) ──────────────────
@@ -845,3 +852,12 @@ func preparedRouteHash(n *model.NodeSpec) string {
 	}
 	return kernel.ComputeHash(&model.NodeSpec{CustomRouteRules: n.CustomRouteRules}, nil)
 }
+
+func (x *Xray) ConnectionStats() connstats.Snapshot {
+	snapshot := x.connections.Snapshot()
+	if err := x.connections.Save(); err != nil {
+		nlog.Core().Warn("connection history persistence failed", "error", err)
+	}
+	return snapshot
+}
+func (x *Xray) RestoreConnectionStats(path string) error { return x.connections.Restore(path) }

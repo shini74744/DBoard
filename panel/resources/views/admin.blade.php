@@ -79,6 +79,7 @@
   @endif
   <style>{!! file_get_contents(resource_path('css/dboard-admin-overrides.css')) !!}</style>
   <style>{!! file_get_contents(resource_path('css/dboard-admin-groups.css')) !!}</style>
+  <style>{!! file_get_contents(resource_path('css/dboard-node-connections.css')) !!}</style>
   <style>{!! file_get_contents(resource_path('css/dboard-admin-theme.css')) !!}</style>
   <style>{!! file_get_contents(resource_path('css/dboard-multi-subscription-admin.css')) !!}</style>
 </head>
@@ -94,6 +95,7 @@
   <script>{!! file_get_contents(resource_path('js/dboard-machine-sort.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-machine-upgrade.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-admin-groups.js')) !!}</script>
+  <script>{!! file_get_contents(resource_path('js/dboard-node-connections.js')) !!}</script>
   <script>{!! file_get_contents(resource_path('js/dboard-admin-theme.js')) !!}</script>
 </body>
 

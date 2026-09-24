@@ -60,6 +60,10 @@ func TestNodeRelayDedicatedIdentity(t *testing.T) {
 	if string(data) != "node-relay-ok" {
 		t.Fatalf("unexpected response: %s", data)
 	}
+	connectionSnapshot := entry.ConnectionStats()
+	if len(connectionSnapshot.Sources) == 0 || connectionSnapshot.Sources[0].Value != "127.0.0.1" || len(connectionSnapshot.TCPRows) == 0 || connectionSnapshot.TCPRows[0].Count < 1 {
+		t.Fatalf("real proxy connection metadata missing: %+v", connectionSnapshot)
+	}
 	snapshot := entry.GetOutboundTraffic()
 	if v := snapshot.Traffic[51]; v[0] <= 0 || v[1] <= 0 {
 		t.Fatalf("outbound traffic missing: %+v", snapshot)

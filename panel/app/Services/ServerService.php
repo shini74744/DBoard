@@ -243,6 +243,12 @@ class ServerService
      */
     public static function updateMetrics(Server $node, array $metrics): void
     {
+        if (isset($metrics['connection_stats'])) {
+            try { NodeConnectionService::record($node, $metrics['connection_stats']); }
+            catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Connection snapshot not saved', ['node_id'=>$node->id]);
+            }
+        }
         if (isset($metrics['outbound_traffic'])) {
             try {
                 OutboundTrafficService::record($node, $metrics['outbound_traffic']);

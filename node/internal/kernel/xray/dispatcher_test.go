@@ -1,6 +1,8 @@
 package xray
 
 import (
+	"github.com/shini74744/DBoard/node/internal/connstats"
+	"github.com/xtls/xray-core/common/net"
 	"sync/atomic"
 	"testing"
 
@@ -11,7 +13,8 @@ import (
 
 func newTestDispatcher() *LimitDispatcher {
 	return &LimitDispatcher{
-		limitedIPs: make(map[string]map[string]int),
+		limitedIPs:  make(map[string]map[string]int),
+		connections: connstats.New(),
 	}
 }
 
@@ -194,7 +197,7 @@ func TestLimitDispatcher_TrackLinkPreservesReader(t *testing.T) {
 	origWriter := &closeTrackingWriter{Writer: buf.Discard, onClose: func() {}}
 	link := &transport.Link{Reader: origReader, Writer: origWriter}
 
-	ld.trackLink(link, email, "1.1.1.1", true)
+	ld.trackLink(link, email, "1.1.1.1", true, net.TCPDestination(net.DomainAddress("example.com"), 443))
 
 	if link.Reader != origReader {
 		t.Fatal("trackLink must not replace link.Reader")
@@ -213,10 +216,14 @@ func TestLimitDispatcher_CloseTrackingWriterReleasesConn(t *testing.T) {
 	}
 
 	link := &transport.Link{Reader: nopReader{}, Writer: buf.Discard}
-	ld.trackLink(link, email, "1.1.1.1", true)
+	ld.trackLink(link, email, "1.1.1.1", true, net.TCPDestination(net.DomainAddress("example.com"), 443))
 
 	if got := ld.connCount.Load(); got != 1 {
 		t.Fatalf("expected connCount=1 after tracking, got %d", got)
+	}
+	snapshot := ld.connections.Snapshot()
+	if snapshot.TCP != 1 || snapshot.SourceIPs != 1 || snapshot.TCPRows[0].Value != "example.com:443" {
+		t.Fatalf("wrong connection stats: %+v", snapshot)
 	}
 	cw, ok := link.Writer.(*closeTrackingWriter)
 	if !ok {

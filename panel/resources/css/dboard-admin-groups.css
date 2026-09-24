@@ -24,13 +24,6 @@
 }
 .dboard-admin-group-chips::-webkit-scrollbar { display: none; }
 .dboard-admin-group-chip { flex: none; white-space: nowrap; }
-.dboard-admin-group-bar > .dboard-admin-group-status {
-  height: 1.2rem;
-  line-height: 1.2rem;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
 .dboard-admin-group-chip, .dboard-admin-group-manage,
 .dboard-admin-group-card button, .dboard-admin-group-dialog button {
   border: 1px solid hsl(var(--border));
@@ -234,3 +227,18 @@
 .dboard-machine-upgrade-count { margin: 0 0 .65rem !important; }
 .dboard-machine-upgrade-dialog .dboard-machine-sort-row input[type="checkbox"] { width: 1rem; height: 1rem; flex: none; accent-color: hsl(var(--primary)); }
 .dboard-machine-upgrade-dialog .dboard-machine-sort-label strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Compact, individually copyable identifiers. */
+.dboard-node-id-boxes { display: flex; align-items: center; gap: 4px; width: max-content; max-width: 100%; }
+.dboard-node-id-box { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 76px; height: 24px; padding: 0 5px; border: 1px solid hsl(var(--border)); border-radius: 4px; background: hsl(var(--background)); color: hsl(var(--foreground)); text-align: left; cursor: pointer; }
+.dboard-node-id-box:hover:not(:disabled) { background: hsl(var(--accent)); border-color: hsl(var(--primary) / .5); }
+.dboard-node-id-box:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+.dboard-node-id-box:disabled { cursor: default; }
+.dboard-node-id-label { flex: none; white-space: nowrap; color: hsl(var(--muted-foreground)); font-size: 10px; line-height: 1; }
+.dboard-node-id-content { display: flex; align-items: center; min-width: 0; }
+.dboard-node-id-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+@media (pointer: coarse) { .dboard-node-id-box { height: 28px; } }
+
+.dboard-admin-group-hide-grouped { display: inline-flex; align-items: center; gap: .35rem; min-height: 32px; font-size: .8rem; white-space: nowrap; cursor: pointer; }
+.dboard-admin-group-hide-grouped input { width: 14px; height: 14px; margin: 0; accent-color: hsl(var(--primary)); cursor: pointer; }
+.dboard-admin-group-hide-grouped input:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }

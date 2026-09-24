@@ -6,8 +6,10 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"github.com/shini74744/DBoard/node/internal/connstats"
 	"io"
 	"math"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -152,6 +154,15 @@ func newService(cfg *config.Config, cp controlplane.ControlPlane) *Service {
 
 	l := limiter.New()
 	st := limiter.NewSpeedTracker(l)
+
+	if cfg.Kernel.ConfigDir != "" && cfg.Panel.NodeID > 0 {
+		if provider, ok := k.(interface{ RestoreConnectionStats(string) error }); ok {
+			path := filepath.Join(cfg.Kernel.ConfigDir, fmt.Sprintf("connection-history-%d.json", cfg.Panel.NodeID))
+			if err := provider.RestoreConnectionStats(path); err != nil {
+				nlog.Core().Warn("connection history restore failed", "error", err)
+			}
+		}
+	}
 
 	return &Service{
 		cfg:          cfg,
@@ -1049,6 +1060,9 @@ func (s *Service) buildMetrics(status monitor.Status) map[string]interface{} {
 	s.metricsMu.RUnlock()
 
 	m := make(map[string]interface{})
+	if provider, ok := s.kernel.(interface{ ConnectionStats() connstats.Snapshot }); ok {
+		m["connection_stats"] = provider.ConnectionStats()
+	}
 	if provider, ok := s.kernel.(kernel.OutboundTrafficProvider); ok {
 		m["outbound_traffic"] = provider.GetOutboundTraffic()
 	}

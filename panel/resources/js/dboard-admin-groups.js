@@ -5,17 +5,30 @@
   };
   const root = document.getElementById('root');
   if (!root) return;
+  const hideGroupedKey = 'dboard.node.hideGroupedInAll';
+  let hideGroupedInAll = true;
+  try { hideGroupedInAll = localStorage.getItem(hideGroupedKey) !== 'false'; } catch {}
   const state = {
     kind: null, items: [], groups: [], selected: 'all', error: '', loading: false,
-    header: null, native: null, bar: null, results: null, modal: null, loadId: 0,
+    header: null, native: null, bar: null, results: null, modal: null, loadId: 0, refreshPending: false,
   };
   const bridge = window.DBoardAdminGroups = {
     version: 0,
     selected: { machine: 'all', node: 'all' },
     cache: { machine: null, node: null },
+    newNodeGroup() {
+      if (state.kind !== 'node' || !state.selected.startsWith('group:')) return {};
+      const group = state.groups.find(item => item.name === state.selected.slice(6));
+      return group ? { admin_group_id: Number(group.id), admin_group_name: group.name } : {};
+    },
+    refresh() {
+      if (state.loading) state.refreshPending = true;
+      else void load();
+    },
     filter(kind, rows) {
       const selected = this.selected[kind];
-      if (!selected || selected === 'all') return rows;
+      const hideGrouped = kind === 'node' && hideGroupedInAll && (!selected || selected === 'all');
+      if ((!selected || selected === 'all') && !hideGrouped) return rows;
       const cached = this.cache[kind];
       if (cached?.rows === rows && cached.selected === selected && cached.version === this.version) {
         return cached.result;
@@ -24,7 +37,7 @@
         .map(item => [String(item.id), groupName(item)]));
       const result = rows.filter(item => {
         const name = groups.get(String(item.id)) ?? groupName(item);
-        return selected === 'ungrouped' ? !name : name === selected.slice(6);
+        return hideGrouped || selected === 'ungrouped' ? !name : name === selected.slice(6);
       });
       this.cache[kind] = { rows, selected, version: this.version, result };
       return result;
@@ -88,6 +101,7 @@
     state.selected = 'all';
     state.error = '';
     state.loading = false;
+    state.refreshPending = false;
     state.header = state.native = state.bar = state.results = state.modal = null;
   }
   async function load() {
@@ -113,6 +127,7 @@
       if (state.kind === kind && state.loadId === loadId) {
         state.loading = false;
         render();
+        if (state.refreshPending) { state.refreshPending = false; void load(); }
       }
     }
   }
@@ -146,7 +161,7 @@
     const title = el('strong', '', '管理分组');
     const chips = el('div', 'dboard-admin-group-chips');
     const options = [
-      ['all', '全部', state.items.length],
+      ['all', '全部', state.kind === 'node' && hideGroupedInAll ? (counts.get('') || 0) : state.items.length],
       ['ungrouped', '未分组', counts.get('') || 0],
       ...[...names].sort((a, b) => a.localeCompare(b, 'zh-CN'))
         .map(name => ['group:' + name, name, counts.get(name) || 0]),
@@ -154,7 +169,9 @@
     for (const [key, label, count] of options) {
       const button = el('button', 'dboard-admin-group-chip' + (state.selected === key ? ' active' : ''), label);
       button.type = 'button';
-      button.title = label + '（' + count + '）';
+      button.title = key === 'all' && state.kind === 'node' && hideGroupedInAll
+        ? '显示 ' + count + ' 个未分组节点，已隐藏 ' + (state.items.length - count) + ' 个已分组节点'
+        : label + '（' + count + '）';
       button.setAttribute('aria-pressed', String(state.selected === key));
       button.append(el('span', 'dboard-admin-group-count', String(count)));
       button.addEventListener('click', () => selectGroup(key));
@@ -162,10 +179,28 @@
     }
     const manage = el('button', 'dboard-admin-group-manage', '管理分组');
     manage.type = 'button';
-    manage.disabled = state.loading;
+    manage.disabled = state.loading && !state.items.length && !state.groups.length;
     manage.addEventListener('click', () => openManager());
     const head = el('div', 'dboard-admin-group-head');
-    head.append(title, chips, manage);
+    head.append(title, chips);
+    if (state.kind === 'node') {
+      const label = el('label', 'dboard-admin-group-hide-grouped');
+      label.title = '仅影响“全部”列表；具体分组中仍正常显示节点。此选择保存在当前浏览器。';
+      const toggle = el('input');
+      toggle.type = 'checkbox';
+      toggle.checked = hideGroupedInAll;
+      toggle.setAttribute('aria-label', '全部中隐藏已分组节点');
+      toggle.addEventListener('change', () => {
+        hideGroupedInAll = toggle.checked;
+        try { localStorage.setItem(hideGroupedKey, String(hideGroupedInAll)); } catch {}
+        notifyGroup();
+        render();
+        state.bar?.querySelector('.dboard-admin-group-hide-grouped input')?.focus({ preventScroll: true });
+      });
+      label.append(toggle, el('span', '', '全部中隐藏已分组'));
+      head.append(label);
+    }
+    head.append(manage);
     if (state.kind === 'machine') {
       const sort = el('button', 'dboard-admin-group-manage', '拖动排序');
       sort.type = 'button';
@@ -173,23 +208,17 @@
       head.append(sort);
     }
     // Keep the same controls during polling so focus and horizontal scroll survive.
-    const renderKey = JSON.stringify([state.kind, state.selected, options]);
+    const renderKey = JSON.stringify([state.kind, state.selected, options, hideGroupedInAll]);
     if (state.bar.dataset.renderKey !== renderKey) {
       const scrollLeft = state.bar.querySelector('.dboard-admin-group-chips')?.scrollLeft || 0;
-      const status = el('p', 'dboard-admin-group-status');
-      status.setAttribute('role', 'status');
-      status.setAttribute('aria-live', 'polite');
-      state.bar.replaceChildren(head, status);
+      state.bar.replaceChildren(head);
       chips.scrollLeft = scrollLeft;
       state.bar.dataset.renderKey = renderKey;
     }
     state.bar.setAttribute('aria-busy', String(state.loading));
-    state.bar.querySelector('.dboard-admin-group-manage').disabled = state.loading;
-    const status = state.bar.querySelector('.dboard-admin-group-status');
-    const message = state.error || (state.loading && !state.items.length ? '正在读取分组…' : '');
-    if (status.textContent !== message) status.textContent = message;
-    status.title = message;
-    status.style.visibility = message ? 'visible' : 'hidden';
+    const manageButton = state.bar.querySelector('.dboard-admin-group-manage');
+    manageButton.disabled = state.loading && !state.items.length && !state.groups.length;
+    manageButton.title = state.error ? '分组读取失败，后台将自动重试：' + state.error : '管理分组';
   }
   function renderResults() {
     if (state.native) state.native.hidden = false;
@@ -207,7 +236,7 @@
     state.modal = null;
   }
   function openManager() {
-    if (!state.kind || state.loading) return;
+    if (!state.kind || (state.loading && !state.items.length && !state.groups.length)) return;
     closeManager();
     const kind = state.kind;
     const api = 'server/admin-group/';

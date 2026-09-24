@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/shini74744/DBoard/node/internal/connstats"
 	"reflect"
 	"sync"
 	"time"
@@ -35,6 +36,7 @@ const drainTimeout = 5 * time.Second
 // UpdatableInbound interface, which hot-swaps user credentials without
 // restarting listeners — zero connection disruption.
 type SingBox struct {
+	connections     *connstats.Store
 	cfg             config.KernelConfig
 	outboundTraffic kernel.OutboundTrafficStore
 
@@ -69,7 +71,7 @@ func New(cfg config.KernelConfig) *SingBox {
 	if cfg.Type == "" {
 		cfg.Type = "singbox"
 	}
-	return &SingBox{cfg: cfg}
+	return &SingBox{cfg: cfg, connections: connstats.New()}
 }
 
 var _ kernel.Kernel = (*SingBox)(nil)
@@ -163,6 +165,7 @@ func (s *SingBox) Start(nodeConfig *model.NodeSpec, users []model.UserSpec, tls 
 
 	// Fresh tracker on full restart.
 	s.connTracker = NewConnTracker(0)
+	s.connTracker.connections = s.connections
 	s.connTracker.SetUserMap(buildUserMap(users))
 	if s.speedLimitFunc != nil {
 		s.connTracker.SetSpeedLimitFunc(s.speedLimitFunc)
@@ -706,3 +709,12 @@ func buildUserMap(users []model.UserSpec) map[string]int {
 	}
 	return m
 }
+
+func (s *SingBox) ConnectionStats() connstats.Snapshot {
+	snapshot := s.connections.Snapshot()
+	if err := s.connections.Save(); err != nil {
+		nlog.Core().Warn("connection history persistence failed", "error", err)
+	}
+	return snapshot
+}
+func (s *SingBox) RestoreConnectionStats(path string) error { return s.connections.Restore(path) }

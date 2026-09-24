@@ -4,6 +4,7 @@
 namespace App\Http\Requests\Admin;
 
 use App\Models\Server;
+use Illuminate\Validation\Rule;
 use App\Models\ServerOutbound;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Foundation\Http\FormRequest;
@@ -120,6 +121,7 @@ class ServerSave extends FormRequest
             'show' => '',
             'name' => 'required|string',
             'group_ids' => 'nullable|array',
+            'admin_group_id' => ['nullable', 'integer', Rule::exists('dboard_admin_groups', 'id')->where('kind', 'node')],
             'route_ids' => 'nullable|array',
             'outbound_ids' => 'nullable|array',
             'outbound_ids.*' => 'integer|exists:v2_server_outbound,id',

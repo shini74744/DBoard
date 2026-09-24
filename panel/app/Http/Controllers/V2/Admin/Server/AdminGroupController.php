@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\V2\Admin\Server;
 
 use App\Http\Controllers\Controller;
+use App\Services\NodeAdminGroupService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -47,8 +48,10 @@ class AdminGroupController extends Controller
 
         if ($group) {
             DB::transaction(function () use ($group, $name, $kind) {
+                $group = $this->lockedGroup((int) $group->id);
                 DB::table('dboard_admin_groups')->where('id', $group->id)
                     ->update(['name' => $name, 'updated_at' => time()]);
+                if ($kind === 'node') NodeAdminGroupService::rename($group->name, $name);
                 DB::table(self::TABLES[$kind])->where('admin_group', $group->name)
                     ->update(['admin_group' => $name]);
             });
@@ -78,13 +81,17 @@ class AdminGroupController extends Controller
             return $this->fail([422, '选择的服务器或节点不存在']);
         }
         DB::transaction(function () use ($table, $group, $ids) {
+            $group = $this->lockedGroup((int) $group->id);
             $remove = DB::table($table)->where('admin_group', $group->name);
             if ($ids) {
                 $remove->whereNotIn('id', $ids);
             }
-            $remove->update(['admin_group' => null]);
-            if ($ids) {
-                DB::table($table)->whereIn('id', $ids)->update(['admin_group' => $group->name]);
+            if ($group->kind === 'node') {
+                NodeAdminGroupService::move($remove->pluck('id')->all(), null);
+                NodeAdminGroupService::move($ids, $group->name);
+            } else {
+                $remove->update(['admin_group' => null]);
+                if ($ids) DB::table($table)->whereIn('id', $ids)->update(['admin_group' => $group->name]);
             }
         });
         return $this->success(true);
@@ -95,10 +102,23 @@ class AdminGroupController extends Controller
         $params = $request->validate(['id' => 'required|integer|exists:dboard_admin_groups,id']);
         $group = DB::table('dboard_admin_groups')->where('id', $params['id'])->first();
         DB::transaction(function () use ($group) {
-            DB::table(self::TABLES[$group->kind])->where('admin_group', $group->name)
-                ->update(['admin_group' => null]);
+            $group = $this->lockedGroup((int) $group->id);
+            $members = DB::table(self::TABLES[$group->kind])->where('admin_group', $group->name);
+            if ($group->kind === 'node') {
+                NodeAdminGroupService::move($members->pluck('id')->all(), null);
+                DB::table('dboard_node_group_sequences')->where('group_name', $group->name)->delete();
+            } else $members->update(['admin_group' => null]);
             DB::table('dboard_admin_groups')->where('id', $group->id)->delete();
         });
         return $this->success(true);
     }
+    private function lockedGroup(int $id): object
+    {
+        $group = DB::table('dboard_admin_groups')->where('id', $id)->lockForUpdate()->first();
+        if (!$group) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['id' => '分组已删除，请刷新后重试']);
+        }
+        return $group;
+    }
+
 }

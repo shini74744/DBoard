@@ -3,6 +3,7 @@ package xray
 import (
 	"context"
 	"errors"
+	"github.com/shini74744/DBoard/node/internal/connstats"
 	"reflect"
 	"sort"
 	"sync"
@@ -80,7 +81,8 @@ type LimitDispatcher struct {
 	// Each entry is *ipCounter{ips sync.Map}.
 	unlimitedIPs sync.Map // email → *ipCounter
 
-	connCount atomic.Int64 // total active connections tracked by dispatcher
+	connections *connstats.Store
+	connCount   atomic.Int64 // total active connections tracked by dispatcher
 }
 
 // ipCounter tracks IPs for unlimited users without any lock.
@@ -117,7 +119,7 @@ func (d *LimitDispatcher) Dispatch(ctx context.Context, dest net.Destination) (*
 	}
 
 	if email != "" {
-		d.trackLink(link, email, sourceIP, isTCP)
+		d.trackLink(link, email, sourceIP, isTCP, dest)
 	}
 	return link, nil
 }
@@ -129,7 +131,7 @@ func (d *LimitDispatcher) DispatchLink(ctx context.Context, dest net.Destination
 	}
 
 	if email != "" {
-		d.trackLink(link, email, sourceIP, isTCP)
+		d.trackLink(link, email, sourceIP, isTCP, dest)
 	}
 	return d.innerDisp.DispatchLink(ctx, dest, link)
 }
@@ -156,10 +158,20 @@ func (d *LimitDispatcher) identifyAndCheck(ctx context.Context, dest net.Destina
 // trackLink records connection lifecycle without mutating xray-core owned
 // transport primitives. This keeps mux/XUDP compatible while still allowing
 // the dispatcher to release device-limit state when the link closes.
-func (d *LimitDispatcher) trackLink(link *transport.Link, email, sourceIP string, isTCP bool) {
+func (d *LimitDispatcher) trackLink(link *transport.Link, email, sourceIP string, isTCP bool, dest net.Destination) {
 	d.connCount.Add(1)
+	network := "udp"
+	if isTCP {
+		network = "tcp"
+	}
+	target := dest.Address.String() + ":" + dest.Port.String()
+	if dest.Address.Family().IsIPv6() {
+		target = "[" + dest.Address.String() + "]:" + dest.Port.String()
+	}
+	done := d.connections.Begin(sourceIP, target, network)
 
 	onClose := func() {
+		done()
 		if isTCP {
 			d.delConn(email, sourceIP)
 		}
