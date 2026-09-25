@@ -175,13 +175,7 @@ func main() {
 	controller.InitUpgrader()
 
 	muxHandler := newHTTPandGRPCMux(httpHandler, grpcHandler)
-	muxServerHTTP := &http.Server{
-		Handler:           muxHandler,
-		ReadHeaderTimeout: time.Second * 5,
-	}
-	muxServerHTTP.Protocols = new(http.Protocols)
-	muxServerHTTP.Protocols.SetHTTP1(true)
-	muxServerHTTP.Protocols.SetUnencryptedHTTP2(true)
+	muxServerHTTP := newDashboardHTTPServer(muxHandler)
 
 	var muxServerHTTPS *http.Server
 	if singleton.Conf.HTTPS.ListenPort != 0 {
