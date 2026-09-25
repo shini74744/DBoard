@@ -107,4 +107,16 @@ class ProbeIntegrationTest extends TestCase {
   \App\Services\ProbeRolloutService::result($m->id,['request_id'=>str_repeat('b',24),'state'=>'failed'],null);
   $this->assertSame('failed',$m->fresh()->probe_install['state']);$this->assertNull($m->fresh()->probe_endpoint);
  }
+
+ public function test_transition_upgrade_preserves_legacy_acknowledgement_protocol(){
+  $this->settings();Http::preventStrayRequests();Redis::shouldReceive('publish')->andReturn(1);
+  $m=ServerMachine::create(['name'=>'old','token'=>'internal','is_active'=>true,'last_seen_at'=>time()]);
+  Cache::put('dboard_machine_version:'.$m->id,'v0.1.5',600);
+  Cache::put('dboard_machine_upgrade_capable:'.$m->id,true,600);
+  Cache::put('dboard_machine_upgrade_protocol:'.$m->id,1,600);
+  \App\Services\ProbeRolloutService::queue($m);\App\Services\ProbeRolloutService::poll($m);
+  $this->assertSame('upgrading',$m->fresh()->probe_install['state']);
+  $this->assertSame(1,\App\Services\MachineUpgradeService::state($m->id)['protocol']);
+  Http::assertNothingSent();
+ }
 }

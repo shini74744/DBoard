@@ -40,7 +40,7 @@ class ProbeRolloutService
      $job['state']='failed';$job['message']='过渡版本升级未完成，请查看升级结果';$m->update(['probe_install'=>$job]);return;
     }
     $id=bin2hex(random_bytes(12));
-    MachineUpgradeService::start($m->id,['request_id'=>$id,'state'=>'queued','target_version'=>$s->agent_version,'from_version'=>$version,'protocol'=>2,'created_at'=>time(),'updated_at'=>time()]);
+    MachineUpgradeService::start($m->id,['request_id'=>$id,'state'=>'queued','target_version'=>$s->agent_version,'from_version'=>$version,'protocol'=>(int)Cache::get('dboard_machine_upgrade_protocol:'.$m->id,1),'created_at'=>time(),'updated_at'=>time()]);
     $job['state']='upgrading';$job['updated_at']=time();$m->update(['probe_install'=>$job]);
     NodeSyncService::pushMachine($m->id,'node.upgrade',['request_id'=>$id,'version'=>$s->agent_version]);
     return;
