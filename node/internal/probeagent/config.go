@@ -46,7 +46,7 @@ func (c *Config) Validate() error {
 		}
 	}
 	if c.DataDir == "" {
-		c.DataDir = "/var/lib/nezha-agent"
+		c.DataDir = "/var/lib/nezha-integrated-agent"
 	}
 	if c.Kernel == "" {
 		c.Kernel = "singbox"

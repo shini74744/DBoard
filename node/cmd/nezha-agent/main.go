@@ -26,7 +26,7 @@ import (
 var version = "v0.2.0-dev"
 
 func main() {
-	path := flag.String("c", "/etc/nezha-agent/config.json", "agent configuration")
+	path := flag.String("c", "/etc/nezha-integrated-agent/config.json", "agent configuration")
 	show := flag.Bool("v", false, "version")
 	worker := flag.Bool("upgrade-worker", false, "run authenticated update worker")
 	target := flag.String("version", "", "target version")

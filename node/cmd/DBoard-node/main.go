@@ -18,6 +18,7 @@ import (
 	"github.com/shini74744/DBoard/node/internal/machine"
 	"github.com/shini74744/DBoard/node/internal/nlog"
 	"github.com/shini74744/DBoard/node/internal/panel"
+	"github.com/shini74744/DBoard/node/internal/probemigrate"
 	"github.com/shini74744/DBoard/node/internal/service"
 )
 
@@ -30,7 +31,15 @@ func main() {
 	panel.NodeVersion = version
 	configPath := flag.String("c", "config.yml", "config file path")
 	showVersion := flag.Bool("v", false, "show version")
+	worker := flag.Bool("probe-install-worker", false, "install integrated probe from an authenticated job")
 	flag.Parse()
+	if *worker {
+		if err := probemigrate.Worker(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if *showVersion {
 		fmt.Printf("DBoard-node %s (built %s)\n", version, buildTime)

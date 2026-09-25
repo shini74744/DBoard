@@ -73,7 +73,7 @@ class ProbeIntegrationTest extends TestCase {
  }
  public function test_probe_upgrade_uses_integrated_release_without_github(){
   $this->settings();$this->admin();
-  $m=ServerMachine::create(['name'=>'p','token'=>'internal','probe_uuid'=>'c9a2215c-a675-448e-b6ac-c96dd420a79b','is_active'=>true]);
+  $m=ServerMachine::create(['name'=>'p','token'=>'internal','probe_endpoint'=>'https://probe.example.test','probe_uuid'=>'c9a2215c-a675-448e-b6ac-c96dd420a79b','is_active'=>true]);
   Cache::put('dboard_machine_version:'.$m->id,'v0.1.0',600);
   Cache::put('dboard_machine_upgrade_capable:'.$m->id,true,600);
   Cache::put('dboard_machine_upgrade_protocol:'.$m->id,2,600);
@@ -81,5 +81,30 @@ class ProbeIntegrationTest extends TestCase {
   $this->getJson($this->prefix().'/server/machine/latestRelease')->assertOk()->assertJsonPath('data.probe_version','v0.2.0');
   $this->postJson($this->prefix().'/server/machine/upgrade',['ids'=>[$m->id]])->assertOk()->assertJsonPath('data.target_version','v0.2.0');
   Http::assertNothingSent();
+ }
+
+ public function test_rollout_waits_for_offline_machine_and_only_locks_direct_access_after_verified_success(){
+  $this->settings();Http::preventStrayRequests();
+  $m=ServerMachine::create(['name'=>'offline','token'=>'internal','is_active'=>true,'last_seen_at'=>time()-500]);
+  \App\Services\ProbeRolloutService::queue($m); \App\Services\ProbeRolloutService::poll($m);
+  $this->assertSame('queued',$m->fresh()->probe_install['state']);$this->assertNull($m->fresh()->probe_endpoint);
+  Http::assertNothingSent();
+  $job=['state'=>'installing','request_id'=>str_repeat('a',24),'endpoint'=>'https://probe.example.test','updated_at'=>time()];
+  $m->update(['probe_install'=>$job]);
+  $result=['request_id'=>$job['request_id'],'state'=>'success'];
+  \App\Services\ProbeRolloutService::result($m->id,$result,null);
+  $this->assertNull($m->fresh()->probe_endpoint);
+  \App\Services\ProbeRolloutService::result($m->id,$result,'https://other.example.test');
+  $this->assertSame('installing',$m->fresh()->probe_install['state']);
+  \App\Services\ProbeRolloutService::result($m->id,$result,'https://probe.example.test');
+  $this->assertSame('completed',$m->fresh()->probe_install['state']);
+  $this->assertSame('https://probe.example.test',$m->fresh()->probe_endpoint);
+ }
+ public function test_failed_install_keeps_legacy_access_available(){
+  $m=ServerMachine::create(['name'=>'rollback','token'=>'internal','is_active'=>true,'probe_install'=>['state'=>'installing','request_id'=>str_repeat('b',24)]]);
+  \App\Services\ProbeRolloutService::result($m->id,['request_id'=>str_repeat('c',24),'state'=>'failed'],null);
+  $this->assertSame('installing',$m->fresh()->probe_install['state']);
+  \App\Services\ProbeRolloutService::result($m->id,['request_id'=>str_repeat('b',24),'state'=>'failed'],null);
+  $this->assertSame('failed',$m->fresh()->probe_install['state']);$this->assertNull($m->fresh()->probe_endpoint);
  }
 }

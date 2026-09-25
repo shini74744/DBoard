@@ -134,3 +134,26 @@ UPSTREAM.json records imported revisions. Upstream licenses/notices remain in ag
 and dashboard/. The original upstream Agent command remains for comparison. The embedded
 library in pkg/integrated is derived from that pinned command; upstream fixes must also
 be ported to the library and checked with integration tests.
+
+## Coexistence and staged fleet migration
+
+The integrated service is named nezha-integrated-agent.service, with binary
+/usr/local/bin/nezha-integrated-agent, config /etc/nezha-integrated-agent/config.json,
+and state /var/lib/nezha-integrated-agent. Stock nezha-agent.service and its files
+are never stopped, replaced, enrolled or upgraded by this installer.
+
+Migration 000025 adds a durable rollout queue. On the panel, explicitly queue a
+small batch with php artisan probe:rollout <machine-id> [...]. The scheduler
+continues these queued jobs once per minute; probe:rollout --status is read-only.
+Offline machines wait for a fresh heartbeat. Only a single legacy machine instance
+can be automatically taken over; multiple-instance configurations require review.
+The first stage installs the compatible legacy binary from the same GitHub release.
+The second stage uses an installer embedded in that binary and downloads the
+integrated Agent from the probe. There is no general remote shell command payload.
+Stock Nezha remains independent throughout both stages.
+
+Direct panel access is retired only after the new Agent reports successful
+monitoring and node-channel checks over the probe. Failed installation restores
+the previous service files and restarts the legacy service. Failed jobs are not
+retried automatically. Queued offline jobs survive a panel restart. Legacy config
+files are retained for recovery; this does not hide historical files from root.

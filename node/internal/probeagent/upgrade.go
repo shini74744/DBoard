@@ -27,7 +27,7 @@ func LaunchUpgrade(configPath, id, version string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return exec.CommandContext(ctx, "systemd-run", "--unit=nezha-agent-update", "--collect", "--no-block", exe, "--upgrade-worker", "-c", configPath, "--version", version, "--request-id", id).Run()
+	return exec.CommandContext(ctx, "systemd-run", "--unit=nezha-integrated-agent-update", "--collect", "--no-block", exe, "--upgrade-worker", "-c", configPath, "--version", version, "--request-id", id).Run()
 }
 func UpgradeWorker(c Config, configPath, version, id string) (err error) {
 	if !upgrade.ValidRequest(id, version) {
@@ -82,7 +82,7 @@ func UpgradeWorker(c Config, configPath, version, id string) (err error) {
 	if e != nil {
 		return e
 	}
-	f, e := os.CreateTemp(filepath.Dir(exe), ".nezha-agent-update-*")
+	f, e := os.CreateTemp(filepath.Dir(exe), ".nezha-integrated-agent-update-*")
 	if e != nil {
 		return e
 	}
@@ -119,7 +119,7 @@ func UpgradeWorker(c Config, configPath, version, id string) (err error) {
 	restart := func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		return exec.CommandContext(ctx, "systemctl", "restart", "nezha-agent.service").Run()
+		return exec.CommandContext(ctx, "systemctl", "restart", "nezha-integrated-agent.service").Run()
 	}
 	healthy := func(since int64) bool {
 		deadline := time.Now().Add(90 * time.Second)

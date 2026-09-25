@@ -235,7 +235,8 @@ class NodeWorker
             };
             return;
         }
-        if ($machine->probe_uuid && !empty($params['probe_endpoint'])) {
+        $conn->probeEndpoint = in_array($conn->getRemoteIp(),['127.0.0.1','::1'],true) ? ($params['probe_endpoint']??null) : null;
+        if ($machine->probe_uuid && $conn->probeEndpoint && ($machine->probe_install['state']??'')!=='installing') {
             $endpoint=(string)($params['probe_endpoint']??'');
             $migration=$machine->probe_migration;
             $changes=['probe_endpoint'=>$endpoint];
@@ -249,6 +250,7 @@ class NodeWorker
         $machine->forceFill(['last_seen_at' => now()->timestamp])->saveQuietly();
         NodeRegistry::addMachine($machineId, $conn);
         $this->recordMachineVersion($machineId, $conn, $params);
+        Cache::put("dboard_machine_probe_install:{$machineId}", ($params['probe_install']??'')==='1', 86400);
 
         // 把同一个连接注册到该机器下所有节点
         $nodeIds = [];
@@ -334,6 +336,7 @@ class NodeWorker
             }
             if ($event === 'upgrade.result'  && !empty($conn->machineId)) {
                 $this->recordUpgradeResult((int) $conn->machineId, $msg['data'] ?? []);
+                \App\Services\ProbeRolloutService::result((int)$conn->machineId,$msg['data']??[],$conn->probeEndpoint??null);
                 return;
             }
             if ($event === 'pong') {

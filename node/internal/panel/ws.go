@@ -13,6 +13,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/shini74744/DBoard/node/internal/nlog"
+	"github.com/shini74744/DBoard/node/internal/probemigrate"
 	"github.com/shini74744/DBoard/node/internal/upgrade"
 )
 
@@ -215,6 +216,9 @@ func (w *WSClient) connect(ctx context.Context) error {
 	if w.cfg.MachineID > 0 {
 		q.Set("remote_upgrade", "1")
 		q.Set("upgrade_protocol", "2")
+		if ProbeTransport == nil {
+			q.Set("probe_install", "1")
+		}
 	}
 	if w.cfg.MachineID > 0 {
 		q.Set("machine_id", strconv.Itoa(w.cfg.MachineID))
@@ -383,6 +387,21 @@ func (w *WSClient) handleMessage(msg wsMessage) {
 	case WSEventSyncNodes:
 		w.handleDataEvent(msg)
 
+	case "node.probe.install":
+		if w.cfg.MachineID > 0 && ProbeTransport == nil {
+			var j probemigrate.Job
+			if json.Unmarshal(msg.Data, &j) != nil || j.Validate() != nil {
+				return
+			}
+			go func() {
+				state, message := "accepted", ""
+				if err := probemigrate.Launch(j); err != nil {
+					state, message = "failed", err.Error()
+				}
+				data, _ := json.Marshal(map[string]string{"request_id": j.RequestID, "state": state, "message": message})
+				w.SendRaw("upgrade.result", data)
+			}()
+		}
 	case WSEventNodeUpgrade:
 		if w.cfg.MachineID > 0 {
 			w.handleUpgrade(msg)

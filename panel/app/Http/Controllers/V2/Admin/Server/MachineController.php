@@ -30,7 +30,8 @@ class MachineController extends Controller
                     'id' => $machine->id,
                     'probe_uuid' => $machine->probe_uuid,
                     'probe_server_id' => $machine->probe_server_id,
-                    'access_mode' => $machine->probe_uuid ? 'probe' : 'direct',
+                    'access_mode' => $machine->probe_endpoint ? 'probe' : 'direct',
+                    'probe_rollout' => $machine->probe_install['state'] ?? null,
                     'sort' => $machine->sort,
                     'name' => $machine->name,
                     'admin_group' => $machine->admin_group,
@@ -95,12 +96,12 @@ class MachineController extends Controller
     public function latestRelease()
     {
         try {
-            $hasLegacy=ServerMachine::whereNull('probe_uuid')->exists();
+            $hasLegacy=ServerMachine::whereNull('probe_endpoint')->exists();
             $version = $hasLegacy?$this->latestNodeRelease():(\App\Services\ProbeService::settings()?->agent_version??'');
             $probeVersion=\App\Services\ProbeService::settings()?->agent_version??'';
             $upgradeable = [];
-            foreach (ServerMachine::query()->get(['id', 'is_active','probe_uuid']) as $machine) {
-                $target=$machine->probe_uuid?$probeVersion:$version;
+            foreach (ServerMachine::query()->get(['id', 'is_active','probe_endpoint']) as $machine) {
+                $target=$machine->probe_endpoint?$probeVersion:$version;
                 $current = (string) Cache::get('dboard_machine_version:' . $machine->id, '');
                 if ($machine->is_active && Cache::get('dboard_machine_upgrade_capable:' . $machine->id)
                     && !MachineUpgradeService::busy(MachineUpgradeService::state($machine->id))
@@ -122,7 +123,7 @@ class MachineController extends Controller
         ]);
         $machines = ServerMachine::whereIn('id', $params['ids'])->get()->keyBy('id');
         try {
-            $legacyVersion = $machines->contains(fn($m)=>!$m->probe_uuid)?$this->latestNodeRelease():'';
+            $legacyVersion = $machines->contains(fn($m)=>!$m->probe_endpoint)?$this->latestNodeRelease():'';
             $probeVersion=\App\Services\ProbeService::settings()?->agent_version??'';
             $version=$probeVersion?:$legacyVersion;
         } catch (\Throwable $e) {
@@ -131,7 +132,7 @@ class MachineController extends Controller
         $results = [];
         foreach ($params['ids'] as $id) {
             $machine = $machines->get($id);
-            $version=$machine?->probe_uuid?$probeVersion:$legacyVersion;
+            $version=$machine?->probe_endpoint?$probeVersion:$legacyVersion;
             $current = (string) Cache::get('dboard_machine_version:' . $id, '');
             if (!$machine) {
                 $results[$id] = ['state' => 'failed', 'message' => '服务器不存在'];

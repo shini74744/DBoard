@@ -29,6 +29,7 @@ class ServerMachine extends Model
 
     protected $casts = [
         'probe_migration' => 'array',
+        'probe_install' => 'array',
         'is_active' => 'boolean',
         'last_seen_at' => 'integer',
         'load_status' => 'array',
