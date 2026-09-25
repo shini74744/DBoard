@@ -20,6 +20,11 @@ class ProbeService {
   $reply=static::api('device',['uuid'=>$m->probe_uuid,'name'=>$m->name,'enabled'=>(bool)$m->is_active,'code'=>$code??'']);
   $m->forceFill(['probe_server_id'=>$reply['server_id']??null])->save();
  }
+ public static function delete(ServerMachine $m): void {
+  if (!$m->probe_uuid) return;
+  $reply=static::api('device/delete',['uuid'=>$m->probe_uuid]);
+  if (($reply['deleted']??false)!==true) throw ValidationException::withMessages(['probe'=>'探针未确认删除，服务器记录已保留，请重试']);
+ }
  public static function installCommand(ServerMachine $m): string {
   if (!$m->probe_uuid) $m->forceFill(['probe_uuid'=>(string)Str::uuid()])->save();
   $code=bin2hex(random_bytes(24));static::sync($m,$code);$s=static::settings();

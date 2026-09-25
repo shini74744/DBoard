@@ -119,4 +119,35 @@ class ProbeIntegrationTest extends TestCase {
   $this->assertSame(1,\App\Services\MachineUpgradeService::state($m->id)['protocol']);
   Http::assertNothingSent();
  }
+
+ public function test_machine_deletion_removes_probe_and_detaches_nodes(){
+  $this->settings();$this->admin();
+  $m=ServerMachine::create(['name'=>'111','token'=>'internal','probe_uuid'=>'c9a2215c-a675-448e-b6ac-c96dd420a79b','is_active'=>true]);
+  $node=Server::create(['name'=>'node','type'=>'vless','host'=>'example.test','port'=>'443','server_port'=>443,'rate'=>1,'group_ids'=>['1'],'machine_id'=>$m->id]);
+  Http::fake(['probe.example.test/bridge/v1/control/device/delete'=>Http::response(['deleted'=>true])]);
+  Redis::shouldReceive('publish')->andReturn(1);
+  $this->postJson($this->prefix().'/server/machine/drop',['id'=>$m->id])->assertOk();
+  $this->assertNull($m->fresh());$this->assertNull($node->fresh()->machine_id);
+  Http::assertSent(fn($r)=>$r->url()==='https://probe.example.test/bridge/v1/control/device/delete' && $r['uuid']===$m->probe_uuid);
+  Http::assertSentCount(1);
+ }
+ public function test_failed_probe_deletion_keeps_machine_and_node_bindings_for_retry(){
+  $this->settings();$this->admin();
+  $m=ServerMachine::create(['name'=>'111','token'=>'internal','probe_uuid'=>'c9a2215c-a675-448e-b6ac-c96dd420a79b','is_active'=>true]);
+  $node=Server::create(['name'=>'node','type'=>'vless','host'=>'example.test','port'=>'443','server_port'=>443,'rate'=>1,'group_ids'=>['1'],'machine_id'=>$m->id]);
+  Http::fake(['probe.example.test/*'=>Http::sequence()->push([],503)->push(['deleted'=>true])]);
+  Redis::shouldReceive('publish')->once()->andReturn(1);
+  $this->postJson($this->prefix().'/server/machine/drop',['id'=>$m->id])->assertStatus(422);
+  $this->assertNotNull($m->fresh());$this->assertTrue((bool)$m->fresh()->is_active);$this->assertSame($m->id,$node->fresh()->machine_id);
+  $this->postJson($this->prefix().'/server/machine/drop',['id'=>$m->id])->assertOk();
+  $this->assertNull($m->fresh());$this->assertNull($node->fresh()->machine_id);
+ }
+
+ public function test_unconfirmed_probe_deletion_keeps_machine(){
+  $this->settings();$this->admin();
+  $m=ServerMachine::create(['name'=>'111','token'=>'internal','probe_uuid'=>'c9a2215c-a675-448e-b6ac-c96dd420a79b','is_active'=>true]);
+  Http::fake(['probe.example.test/*'=>Http::response([])]);
+  $this->postJson($this->prefix().'/server/machine/drop',['id'=>$m->id])->assertStatus(422);
+  $this->assertNotNull($m->fresh());
+ }
 }

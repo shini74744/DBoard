@@ -19,6 +19,7 @@ type Device struct {
 	UUID          string `json:"uuid"`
 	Name          string `json:"name"`
 	Enabled       bool   `json:"enabled"`
+	Deleted       bool   `json:"deleted,omitempty"`
 	SecretHash    string `json:"secret_hash,omitempty"`
 	EnrollHash    string `json:"enroll_hash,omitempty"`
 	EnrollExpires int64  `json:"enroll_expires,omitempty"`

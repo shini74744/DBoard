@@ -17,15 +17,16 @@ import (
 )
 
 type Gateway struct {
-	Registry   *Registry
-	Public     string
-	ControlKey string
-	Artifacts  string
-	Provision  func(Device) (uint64, error)
-	controlMu  sync.Mutex
-	mu         sync.Mutex
-	peer       *Peer
-	sessions   map[string]map[*websocket.Conn]bool
+	Registry    *Registry
+	Public      string
+	ControlKey  string
+	Artifacts   string
+	Provision   func(Device) (uint64, error)
+	Deprovision func(Device) error
+	controlMu   sync.Mutex
+	mu          sync.Mutex
+	peer        *Peer
+	sessions    map[string]map[*websocket.Conn]bool
 }
 
 var UUIDPattern = regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`)
@@ -63,6 +64,43 @@ func (g *Gateway) serve(w http.ResponseWriter, r *http.Request) {
 		case "/control/status":
 			writeJSON(w, 200, map[string]any{"connected": g.online() != nil, "public_url": g.Public, "gateway_id": digest(g.ControlKey)})
 			return
+		case "/control/device/delete":
+			g.controlMu.Lock()
+			defer g.controlMu.Unlock()
+			if r.Method != http.MethodPost {
+				http.Error(w, "method", http.StatusMethodNotAllowed)
+				return
+			}
+			var v struct {
+				UUID string `json:"uuid"`
+			}
+			if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&v) != nil || !UUIDPattern.MatchString(v.UUID) {
+				http.Error(w, "invalid device", http.StatusUnprocessableEntity)
+				return
+			}
+			if g.Deprovision == nil {
+				http.Error(w, "deletion unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			d, ok := g.Registry.Get(v.UUID)
+			if !ok {
+				d = Device{UUID: v.UUID}
+			}
+			// Retain a credential-free tombstone: deleted scoped identities must
+			// never fall back to the original Nezha global Agent credential.
+			d.Enabled, d.Deleted = false, true
+			d.SecretHash, d.EnrollHash, d.EnrollExpires = "", "", 0
+			if err := g.Registry.Put(d); err != nil {
+				http.Error(w, "storage unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			g.revoke(d.UUID)
+			if err := g.Deprovision(d); err != nil {
+				http.Error(w, "deletion failed; retry required", http.StatusServiceUnavailable)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
+			return
 		case "/control/device":
 			g.controlMu.Lock()
 			defer g.controlMu.Unlock()
@@ -83,6 +121,10 @@ func (g *Gateway) serve(w http.ResponseWriter, r *http.Request) {
 			d, ok := g.Registry.Get(v.UUID)
 			if !ok {
 				d = Device{UUID: v.UUID}
+			}
+			if d.Deleted {
+				http.Error(w, "device deleted", http.StatusGone)
+				return
 			}
 			d.Name = v.Name
 			d.Enabled = v.Enabled

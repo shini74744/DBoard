@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"gorm.io/gorm"
+
 	"github.com/nezhahq/nezha/model"
 	"github.com/nezhahq/nezha/service/singleton"
 	"github.com/shini74744/DBoard/probe/bridge"
@@ -78,6 +80,7 @@ func Wrap(next http.Handler) (http.Handler, error) {
 		singleton.ServerShared.Update(&s, d.UUID)
 		return s.ID, nil
 	}
+	g.Deprovision = func(d bridge.Device) error { return deleteServer(owner, d.UUID) }
 	return g.Handler(next), nil
 }
 
@@ -96,4 +99,19 @@ func Authenticate(uuid, secret string) (uint64, bool, bool) {
 	}
 	s, ok := singleton.ServerShared.Get(d.ServerID)
 	return d.ServerID, true, ok && s != nil && s.UUID == uuid
+}
+
+func deleteServer(owner uint64, uuid string) error {
+	var s model.Server
+	err := singleton.DB.Where("uuid = ?", uuid).First(&s).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if s.GetUserID() != owner {
+		return errors.New("probe identity belongs to another owner")
+	}
+	return singleton.DeleteServers([]uint64{s.ID})
 }

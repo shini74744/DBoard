@@ -325,11 +325,14 @@ class MachineController extends Controller
 
         $machine = ServerMachine::find($params['id']);
         $machineId = $machine->id;
-        if ($machine->probe_uuid) { $machine->is_active=false; \App\Services\ProbeService::sync($machine); }
+        \App\Services\ProbeService::delete($machine);
 
-        // Detach nodes first (sets machine_id = null), then delete and notify
-        Server::where('machine_id', $machineId)->update(['machine_id' => null]);
-        $machine->delete();
+        // Keep local bindings intact if remote deletion fails. Remote deletion
+        // is idempotent, so a failed local transaction can be retried.
+        DB::transaction(function () use ($machine, $machineId) {
+            Server::where('machine_id', $machineId)->update(['machine_id' => null]);
+            $machine->delete();
+        });
 
         // Notify with empty node list so WS process cleans up registry
         NodeSyncService::notifyMachineNodesChanged($machineId);
