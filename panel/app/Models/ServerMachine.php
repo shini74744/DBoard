@@ -28,6 +28,8 @@ class ServerMachine extends Model
     protected $guarded = ['id'];
 
     protected $casts = [
+        'display_id' => 'integer',
+        'sort' => 'integer',
         'probe_migration' => 'array',
         'probe_install' => 'array',
         'is_active' => 'boolean',
@@ -38,6 +40,18 @@ class ServerMachine extends Model
     ];
 
     protected $hidden = ['token', 'admin_group'];
+
+    protected static function booted(): void
+    {
+        static::creating(function (self $machine) {
+            $machine->display_id = \Illuminate\Support\Facades\DB::transaction(function () {
+                $sequence = \Illuminate\Support\Facades\DB::table('dboard_machine_sequence')->where('id', 1);
+                $next = (int) $sequence->lockForUpdate()->value('last_number') + 1;
+                $sequence->update(['last_number' => $next]);
+                return $next;
+            });
+        });
+    }
 
     public function servers(): HasMany
     {

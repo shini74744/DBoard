@@ -184,4 +184,32 @@ class ProbeIntegrationTest extends TestCase {
   Http::assertSent(fn($r)=>$r['sort']===9 && $r['name']==='renamed');
  }
 
+
+ public function test_machine_display_renumber_preserves_identity_and_bindings(){
+  $this->settings();$this->admin();Http::fake(['probe.example.test/*'=>Http::response(['sorted'=>true])]);
+  $a=ServerMachine::create(['name'=>'A','token'=>'secret-a','sort'=>1,'probe_uuid'=>'c9a2215c-a675-448e-b6ac-c96dd420a79b','probe_server_id'=>8]);
+  $b=ServerMachine::create(['name'=>'B','token'=>'secret-b','sort'=>2]);
+  $node=Server::create(['name'=>'node','type'=>'vless','host'=>'example.test','port'=>'443','server_port'=>443,'rate'=>1,'group_ids'=>['1'],'machine_id'=>$a->id]);
+  $this->postJson($this->prefix().'/server/machine/sort',['ids'=>[$b->id,$a->id],'renumber'=>true])->assertOk();
+  $this->assertSame(1,$b->fresh()->display_id);$this->assertSame(2,$a->fresh()->display_id);
+  $this->assertSame($a->id,$a->fresh()->id);$this->assertSame($a->id,$node->fresh()->machine_id);
+  $this->assertSame('secret-a',$a->fresh()->token);$this->assertSame($a->probe_uuid,$a->fresh()->probe_uuid);$this->assertSame(8,$a->fresh()->probe_server_id);
+  $rows=$this->getJson($this->prefix().'/server/machine/fetch')->assertOk()->json('data');
+  $this->assertSame([$b->id,$a->id],array_column($rows,'id'));$this->assertSame([1,2],array_column($rows,'display_id'));
+  $this->postJson($this->prefix().'/server/machine/sort',['ids'=>[$a->id,$b->id]])->assertOk();
+  $this->assertSame(2,$a->fresh()->display_id);$this->assertSame(1,$b->fresh()->display_id);
+  $next=ServerMachine::create(['name'=>'Next','token'=>'next']);$this->assertSame(3,$next->display_id);
+ }
+ public function test_machine_renumber_failure_rolls_back_numbers_and_sequence(){
+  $this->settings();$this->admin();
+  $a=ServerMachine::create(['name'=>'A','token'=>'a','sort'=>1,'probe_uuid'=>'c9a2215c-a675-448e-b6ac-c96dd420a79b','probe_server_id'=>8]);
+  $b=ServerMachine::create(['name'=>'B','token'=>'b','sort'=>2]);
+  Http::fake(['probe.example.test/*'=>Http::response([],503)]);
+  foreach([['ids'=>[$b->id,$a->id]],['ids'=>[$a->id]],['ids'=>[$a->id,$a->id]],['ids'=>[$a->id,$b->id],'renumber'=>'wrong']] as $body){
+   $r=$this->postJson($this->prefix().'/server/machine/sort',$body+['renumber'=>true]);$this->assertNotSame(200,$r->status());
+   $this->assertSame(1,$a->fresh()->display_id);$this->assertSame(2,$b->fresh()->display_id);
+   $this->assertSame(2,(int)DB::table('dboard_machine_sequence')->value('last_number'));
+  }
+ }
+
 }

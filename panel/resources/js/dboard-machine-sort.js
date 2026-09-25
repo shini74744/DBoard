@@ -45,6 +45,16 @@
     const cancel = el('button', '', '取消');
     const save = el('button', 'primary', '保存排序');
     save.disabled = true;
+    let saving = false;
+    const renumber = el('input'); renumber.type = 'checkbox';
+    const renumberLabel = el('label', 'dboard-machine-renumber');
+    const renumberText = el('span');
+    renumberText.append(el('strong', '', '按当前排序从 1 重新分配显示 ID'), el('small', '', '勾选后可预览新编号，保存时生效。'));
+    renumberLabel.append(renumber, renumberText);
+    const preview = () => [...list.children].forEach((row, index) => {
+      row.querySelector('small').textContent = '显示 ID: ' + (renumber.checked ? index + 1 : row.dataset.displayId) + (row.dataset.group ? ' · ' + row.dataset.group : '');
+    });
+    renumber.addEventListener('change', preview);
     const close = () => {
       if (save.disabled && save.textContent === '正在保存…') return;
       overlay?.remove();
@@ -52,7 +62,7 @@
     };
     cancel.addEventListener('click', close);
     actions.append(cancel, save);
-    dialog.append(heading, description, list, status, actions);
+    dialog.append(heading, description, renumberLabel, list, status, actions);
     overlay.append(dialog);
     overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
     overlay.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
@@ -68,13 +78,15 @@
       for (const machine of machines) {
         const row = el('li', 'dboard-machine-sort-row');
         row.dataset.machineId = String(machine.id);
+        row.dataset.displayId = String(machine.display_id ?? machine.id);
+        row.dataset.group = machine.admin_group || '';
         const handle = el('button', 'dboard-machine-sort-handle', '⠿');
         handle.type = 'button';
         handle.style.touchAction = "none";
         handle.title = '拖动排序';
         handle.setAttribute('aria-label', '拖动 ' + machine.name);
         const name = el('span', 'dboard-machine-sort-name', machine.name);
-        const meta = el('small', '', 'SID: ' + machine.id + (machine.admin_group ? ' · ' + machine.admin_group : ''));
+        const meta = el('small'); meta.title = '内部 SID: ' + machine.id;
         const label = el('span', 'dboard-machine-sort-label');
         label.append(name, meta);
         const controls = el('span', 'dboard-machine-sort-controls');
@@ -84,27 +96,29 @@
           button.title = text + machine.name;
           button.setAttribute('aria-label', text + machine.name);
           button.addEventListener('click', () => {
+            if (saving) return;
             const target = direction < 0 ? row.previousElementSibling : row.nextElementSibling;
-            if (target) list.insertBefore(row, direction < 0 ? target : target.nextSibling);
+            if (target) { list.insertBefore(row, direction < 0 ? target : target.nextSibling); preview(); }
           });
           controls.append(button);
         }
         row.append(handle, label, controls);
         list.append(row);
       }
-      window.DBoardSortDrag.bind(list,{rowSelector:'li[data-machine-id]',disabled:()=>save.textContent==='正在保存…'});
+      window.DBoardSortDrag.bind(list,{rowSelector:'li[data-machine-id]',disabled:()=>saving,onMove:preview});
+      preview();
       save.disabled = false;
       save.addEventListener('click', async () => {
-        save.disabled = true;
+        saving = true; renumber.disabled = cancel.disabled = save.disabled = true;
         save.textContent = '正在保存…';
         status.textContent = '';
         try {
           const ids = [...list.children].map(row => Number(row.dataset.machineId));
-          await request('sort', { ids });
+          await request('sort', { ids, renumber: renumber.checked });
           location.reload();
         } catch (error) {
           status.textContent = error.message || '保存失败';
-          save.disabled = false;
+          saving = false; renumber.disabled = cancel.disabled = save.disabled = false;
           save.textContent = '保存排序';
         }
       });

@@ -125,7 +125,7 @@
         });
         const label = el('span', 'dboard-machine-sort-label');
         label.append(el('strong', '', machine.name || `服务器 #${id}`),
-          el('small', '', `SID: ${id} · 当前 ${machine.node_version || '版本未知'}`));
+          el('small', '', `显示 ID: ${machine.display_id ?? id} · 当前 ${machine.node_version || '版本未知'}`));
         const state = el('span', 'dboard-machine-upgrade-state',
           !machine.upgrade_capable ? '离线或需先手动更新'
             : !latestVersion ? '版本检测失败' : eligibleIds.has(id) ? '可升级' : '已是最新版');
@@ -159,7 +159,7 @@
             if (machine) { machine.node_version = item.version || machine.node_version; machine.upgrade_status = item.status; }
             if (state) update(id, state, item.status.message, item.status.target_version || item.version);
             const currentLabel = statusNodes.get(Number(id))?.parentElement?.querySelector('small');
-            if (currentLabel) currentLabel.textContent = `SID: ${id} · 当前 ${item.version || '版本未知'}`;
+            if (currentLabel) currentLabel.textContent = `显示 ID: ${machine?.display_id ?? id} · 当前 ${item.version || '版本未知'}`;
             if (state === 'success') {
               eligibleIds.delete(Number(id)); selected.delete(Number(id));
               const checkbox = statusNodes.get(Number(id))?.parentElement?.querySelector('input');

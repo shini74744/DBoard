@@ -28,6 +28,7 @@ class MachineController extends Controller
             ->map(function (ServerMachine $machine) {
                 return [
                     'id' => $machine->id,
+                    'display_id' => $machine->display_id ?? $machine->id,
                     'probe_uuid' => $machine->probe_uuid,
                     'probe_server_id' => $machine->probe_server_id,
                     'access_mode' => $machine->probe_endpoint ? 'probe' : 'direct',
@@ -179,11 +180,14 @@ class MachineController extends Controller
     public function sort(Request $request)
     {
         $data = $request->validate([
+            'renumber' => 'sometimes|boolean',
             'ids' => 'required|array',
             'ids.*' => 'required|integer|distinct|min:1',
         ]);
         $ids = array_map('intval', $data['ids']);
-        DB::transaction(function () use ($ids) {
+        DB::transaction(function () use ($ids, $data) {
+            $sequence = DB::table('dboard_machine_sequence')->where('id', 1);
+            $sequence->lockForUpdate()->first();
             $current = ServerMachine::query()->lockForUpdate()->pluck('id')->map(fn($id) => (int) $id)->all();
             sort($current);
             $incoming = $ids;
@@ -191,9 +195,14 @@ class MachineController extends Controller
             if ($current !== $incoming) {
                 throw new ApiException('服务器列表已更新，请刷新后重新排序');
             }
+            $renumber = (bool) ($data['renumber'] ?? false);
+            if ($renumber) ServerMachine::query()->update(['display_id' => null]);
             foreach ($ids as $position => $id) {
-                ServerMachine::whereKey($id)->update(['sort' => $position + 1]);
+                $values = ['sort' => $position + 1];
+                if ($renumber) $values['display_id'] = $position + 1;
+                ServerMachine::whereKey($id)->update($values);
             }
+            if ($renumber) $sequence->update(['last_number' => count($ids)]);
             \App\Services\ProbeService::syncOrder();
         });
         return $this->success(true);
