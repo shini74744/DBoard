@@ -33,6 +33,22 @@ class PlanController extends Controller
         return $this->success($plans);
     }
 
+    public function preview(Request $request)
+    {
+        $data = $request->validate([
+            'content' => 'nullable|string|max:100000',
+            'prices' => 'nullable|array',
+            'prices.*' => 'nullable|numeric|min:0',
+            'transfer_enable' => 'nullable|numeric|min:0',
+            'speed_limit' => 'nullable|numeric|min:0',
+            'device_limit' => 'nullable|integer|min:0',
+            'connection_limit' => 'nullable|integer|min:0',
+            'reset_traffic_method' => 'nullable|integer|between:0,4',
+        ]);
+        $plan = new Plan($data + ['transfer_enable' => 0, 'reset_traffic_method' => null]);
+        return $this->success(['content' => (new \App\Http\Resources\PlanResource($plan))->formatContent()]);
+    }
+
     public function save(PlanSave $request)
     {
         $params = $request->validated();

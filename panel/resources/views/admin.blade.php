@@ -77,6 +77,8 @@
     <script src="/assets/admin/locales/zh-CN.js"></script>
     <script src="/assets/admin/locales/ko-KR.js"></script>
   @endif
+  <script src="/assets/admin/vendor/purify.min.js?v={{ @filemtime(public_path('assets/admin/vendor/purify.min.js')) }}"></script>
+  <style>{!! file_get_contents(resource_path('css/dboard-plan-editor.css')) !!}</style>
   <style>{!! file_get_contents(resource_path('css/dboard-admin-overrides.css')) !!}</style>
   <style>{!! file_get_contents(resource_path('css/dboard-admin-groups.css')) !!}</style>
   <style>{!! file_get_contents(resource_path('css/dboard-node-connections.css')) !!}</style>

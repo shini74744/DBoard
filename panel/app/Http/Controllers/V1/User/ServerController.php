@@ -22,7 +22,7 @@ class ServerController extends Controller
         } elseif ($userService->isAvailable($user)) {
             $servers = ServerService::getAvailableServers($user);
         }
-        $eTag = sha1(json_encode(array_map(fn ($server) => [$server['cache_key'], $server['name'], $server['password']], $servers)));
+        $eTag = sha1(json_encode(array_map(fn ($server) => [$server['cache_key'], $server['name'], $server['password'], $server['rate']], $servers)));
         if (strpos($request->header('If-None-Match', ''), $eTag) !== false ) {
             return response(null,304);
         }

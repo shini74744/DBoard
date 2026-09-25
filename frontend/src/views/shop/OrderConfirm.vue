@@ -115,7 +115,7 @@
 
                 <!-- HTML格式内容 -->
 
-                <div v-else class="html-content" v-html="plan.content"></div>
+                <PlanDescription v-else :content="plan.content" />
 
               </div>
 
@@ -472,6 +472,7 @@ import SubscriptionPurchaseChoice from '@/components/shop/SubscriptionPurchaseCh
 import { isXboard, ORDER_CONFIG, SHOP_CONFIG } from '@/utils/baseConfig';
 
 import CommonDialog from '@/components/popup/CommonDialog.vue';
+import PlanDescription from '@/components/shop/PlanDescription.vue';
 import { isAvailablePlanPrice } from '@/utils/planPrices';
 import { getPlanStock } from '@/utils/planStock';
 
@@ -500,6 +501,7 @@ export default {
   name: 'OrderConfirm',
 
   components: {
+    PlanDescription,
     SubscriptionPurchaseChoice,
 
     IconCheck,

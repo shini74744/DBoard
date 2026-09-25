@@ -141,6 +141,7 @@ class ServerSave extends FormRequest
             'excludes' => 'nullable|array',
             'ips' => 'nullable|array',
             'rate' => 'required|numeric',
+            'display_rate' => 'sometimes|nullable|numeric|between:0,1000000|decimal:0,4',
             'rate_time_enable' => 'nullable|boolean',
             'rate_time_ranges' => 'nullable|array',
             'custom_outbounds' => 'nullable|array',

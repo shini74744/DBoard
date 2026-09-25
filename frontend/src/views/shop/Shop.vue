@@ -283,9 +283,9 @@
 
                 <span class="discount-value">&nbsp;{{ calculateDiscount(plan).discountPercentage }}%</span>
 
-                <span class="saving-text">，{{ $t('shop.plan.discount.savings') }} </span>
+                <span class="saving-summary"><span class="saving-text">，{{ $t('shop.plan.discount.savings') }} </span>
 
-                <span class="saving-amount">&nbsp;{{ currencySymbol }}{{ calculateDiscount(plan).savingsAmount }}</span>
+                <span class="saving-amount">&nbsp;{{ currencySymbol }}{{ calculateDiscount(plan).savingsAmount }}</span></span>
 
               </div>
 
@@ -331,7 +331,7 @@
 
               <!-- HTML格式内容 -->
 
-              <div v-else class="html-content" v-html="plan.content"></div>
+              <PlanDescription v-else :content="plan.content" />
 
             </div>
 
@@ -400,6 +400,7 @@ import { useI18n } from 'vue-i18n';
 import { useToast } from '@/composables/useToast';
 
 import { fetchPlans, getCommConfig } from '@/api/shop';
+import PlanDescription from '@/components/shop/PlanDescription.vue';
 import { isAvailablePlanPrice } from '@/utils/planPrices';
 import { getPlanStock } from '@/utils/planStock';
 
@@ -442,6 +443,7 @@ export default {
   name: 'ShopView',
 
   components: {
+    PlanDescription,
 
     IconRocket,
 
@@ -1120,71 +1122,22 @@ export default {
 
 
     const calculateDiscount = (plan) => {
-
-      if (!plan.month_price) {
-
-        return { showDiscount: false, periodName: '', discountPercentage: 0, savingsAmount: 0 };
-
+      const type = getDisplayPriceType(plan);
+      const months = { quarter_price: 3, half_year_price: 6, year_price: 12, two_year_price: 24, three_year_price: 36 }[type];
+      const monthly = Number(plan.month_price);
+      const selected = Number(plan[type]);
+      if (!months || !isAvailablePlanPrice(plan.month_price) || monthly <= 0 || !isAvailablePlanPrice(plan[type])) {
+        return { showDiscount: false };
       }
-
-
-
-      const monthlyPrice = plan.month_price / 100;
-
-
-      const availablePeriods = [
-
-        { type: 'three_year_price', price: plan.three_year_price ? plan.three_year_price / 100 : null, months: 36, name: t('shop.plan.price_options.three_year') },
-
-        { type: 'two_year_price', price: plan.two_year_price ? plan.two_year_price / 100 : null, months: 24, name: t('shop.plan.price_options.two_year') },
-
-        { type: 'year_price', price: plan.year_price ? plan.year_price / 100 : null, months: 12, name: t('shop.plan.price_options.year') },
-
-        { type: 'half_year_price', price: plan.half_year_price ? plan.half_year_price / 100 : null, months: 6, name: t('shop.plan.price_options.half_year') },
-
-        { type: 'quarter_price', price: plan.quarter_price ? plan.quarter_price / 100 : null, months: 3, name: t('shop.plan.price_options.quarter') }
-
-      ].filter(period => period.price !== null);
-
-
-
-      if (availablePeriods.length === 0) {
-
-        return { showDiscount: false, periodName: '', discountPercentage: 0, savingsAmount: 0 };
-
-      }
-
-
-
-      const selectedPeriod = availablePeriods[0];
-
-
-
-      const totalMonthlyPrice = monthlyPrice * selectedPeriod.months;
-
-
-
-      const discountPercentage = ((totalMonthlyPrice - selectedPeriod.price) / totalMonthlyPrice) * 100;
-
-
-
-      const savingsAmount = (totalMonthlyPrice - selectedPeriod.price).toFixed(2);
-
-
-
+      const baseline = monthly * months;
+      const percentage = (baseline - selected) / baseline * 100;
       return {
-
-        showDiscount: discountPercentage > 1,
-
-        periodName: selectedPeriod.name,
-
-        discountPercentage: discountPercentage.toFixed(0),
-        savingsAmount: savingsAmount
-
+        showDiscount: percentage > 1,
+        periodName: t(`shop.plan.price_options.${getPriceTypeKey(type)}`),
+        discountPercentage: percentage.toFixed(0),
+        savingsAmount: ((baseline - selected) / 100).toFixed(2)
       };
-
     };
-
 
 
     return {
@@ -1952,6 +1905,11 @@ export default {
 
 
       .price-display {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: center;
+        column-gap: 2px;
 
         text-align: center;
 
@@ -1973,7 +1931,7 @@ export default {
 
         .amount {
 
-          font-size: 48px;
+          font-size: clamp(32px, 10vw, 48px);
 
           font-weight: 700;
 
@@ -1984,6 +1942,8 @@ export default {
 
 
         .period {
+          white-space: nowrap;
+          margin-left: 4px;
 
           font-size: 16px;
 
@@ -2172,6 +2132,8 @@ export default {
         }
 
 
+
+        .saving-summary { display: inline-block; white-space: nowrap; }
 
         .saving-text {
 

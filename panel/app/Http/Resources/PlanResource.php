@@ -84,15 +84,28 @@ class PlanResource extends JsonResource
      *
      * @return string
      */
-    protected function formatContent(): string
+    public function formatContent(): string
     {
-        $content = $this->resource['content'] ?? '';
+        $content = $this->filterOptionalPriceContent($this->resource['content'] ?? '');
+        // Normalize units in the built-in template before substituting unlimited values.
+        if (($this->resource['speed_limit'] ?? 0) <= 0) {
+            $content = preg_replace('/\{\{speed\}\}[ \t]*Mbps/i', '{{speed}}', $content);
+        }
+        if (($this->resource['device_limit'] ?? 0) <= 0) {
+            $content = preg_replace('/\{\{devices\}\}[ \t]*台/u', '{{devices}}', $content);
+        }
+        $content = str_replace('流量{{reset_method}}重置', '流量重置：{{reset_method}}', $content);
+
         
         $replacements = [
+            '{{onetime_price}}' => $this->formatOptionalPrice('onetime'),
+            '{{reset_price}}' => $this->formatOptionalPrice('reset_traffic'),
+            '{{speed_text}}' => ($this->resource['speed_limit'] ?? 0) > 0 ? $this->resource['speed_limit'] . ' Mbps' : __('No Limit'),
+            '{{devices_text}}' => ($this->resource['device_limit'] ?? 0) > 0 ? $this->resource['device_limit'] . ' 台' : __('No Limit'),
             '{{transfer}}' => $this->resource['transfer_enable'],
-            '{{speed}}' => $this->resource['speed_limit'] === NULL ? __('No Limit') : $this->resource['speed_limit'],
+            '{{speed}}' => ($this->resource['speed_limit'] ?? 0) <= 0 ? __('No Limit') : $this->resource['speed_limit'],
             '{{connections}}' => ($this->resource['connection_limit'] ?? 0) > 0 ? $this->resource['connection_limit'] : __('No Limit'),
-            '{{devices}}' => $this->resource['device_limit'] === NULL ? __('No Limit') : $this->resource['device_limit'],
+            '{{devices}}' => ($this->resource['device_limit'] ?? 0) <= 0 ? __('No Limit') : $this->resource['device_limit'],
             '{{reset_method}}' => $this->getResetMethodText(),
         ];
 
@@ -101,6 +114,43 @@ class PlanResource extends JsonResource
             array_values($replacements),
             $content
         );
+    }
+
+    private function hasOptionalPrice(string $key): bool
+    {
+        $value = $this->resource['prices'][$key] ?? null;
+        return $value !== null && trim((string) $value) !== '' && is_numeric($value) && (float) $value >= 0;
+    }
+
+    private function formatOptionalPrice(string $key): string
+    {
+        return $this->hasOptionalPrice($key) ? number_format((float) $this->resource['prices'][$key], 2, '.', '') : '';
+    }
+
+    /** Conditional blocks remain in the saved template and are filtered only for display. */
+    private function filterOptionalPriceContent(string $content): string
+    {
+        if (!str_contains($content, 'data-plan-price')) return $content;
+        $dom = new \DOMDocument('1.0', 'UTF-8');
+        $previous = libxml_use_internal_errors(true);
+        try {
+            $dom->loadHTML('<?xml encoding="UTF-8"><div id="plan-description-root">' . $content . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+            $xpath = new \DOMXPath($dom);
+            $remove = [];
+            foreach ($xpath->query('//*[@data-plan-price]') as $node) {
+                $key = $node->getAttribute('data-plan-price');
+                if (in_array($key, ['onetime', 'reset_traffic'], true) && !$this->hasOptionalPrice($key)) $remove[] = $node;
+            }
+            foreach ($remove as $node) $node->parentNode?->removeChild($node);
+            $root = $dom->getElementById('plan-description-root');
+            if (!$root) return $content;
+            $result = '';
+            foreach ($root->childNodes as $node) $result .= $dom->saveHTML($node);
+            return $result;
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+        }
     }
 
     /**

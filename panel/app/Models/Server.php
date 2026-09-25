@@ -153,6 +153,7 @@ class Server extends Model
         'updated_at' => 'timestamp',
         'rate_time_ranges' => 'array',
         'rate_time_enable' => 'boolean',
+        'display_rate' => 'float',
         'transfer_enable' => 'integer',
         'u' => 'integer',
         'd' => 'integer',
@@ -580,6 +581,12 @@ class Server extends Model
                 return Cache::get(CacheKey::get("SERVER_{$type}_LOAD_STATUS", $serverId));
             }
         );
+    }
+
+    /** Presentation only. Billing continues to use getCurrentRate(). */
+    public function getDisplayRate(): float
+    {
+        return $this->display_rate !== null ? (float) $this->display_rate : $this->getCurrentRate();
     }
 
     public function getCurrentRate(): float
