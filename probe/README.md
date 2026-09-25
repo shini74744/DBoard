@@ -1,159 +1,92 @@
-# DBoard / Nezha integration
+# DBoard 与 Nezha 整合探针
 
-This tree contains pinned Nezha Dashboard and Agent source, the authenticated gateway,
-the panel connector, and the single integrated Agent in ../node/cmd/nezha-agent.
+本目录包含固定版本的 Nezha Dashboard/Agent 源码、认证桥接网关和面板 Connector。节点上的整合程序入口位于 [node/cmd/nezha-agent](../node/cmd/nezha-agent)。
 
-## Connections
+## 文档入口
 
-- Agent -> probe HTTPS origin: Nezha gRPC monitoring, scoped node HTTPS API and WebSocket.
-- Panel connector -> probe origin: an authenticated outbound WebSocket.
-- Connector -> panel: loopback HTTP and loopback node WebSocket only.
-- Customer proxy traffic uses the existing proxy engine and routes; it does not traverse the monitoring gateway.
-- The Agent has a per-server UUID and scoped key. It does not receive the panel origin, panel machine ID, or panel machine token.
-- Nezha's terminal, file manager, alerts and monitoring backend remain available. Integrated Agent updates and origin changes are managed by the panel; stock Agent self-updates and upstream config/ownership replacement are disabled.
+- [一步一步安装](../docs/installation.md)：从面板到用户端、DUI、监控后台、Connector、第一台 Agent。
+- [后台处理流程](../docs/admin-workflows.md)：创建/删除/排序、授权入口、节点配置、流量与订单。
+- [升级与运维](../docs/operations.md)：版本、接管、域名迁移、备份和故障恢复。
+- [实现与验收记录](IMPLEMENTATION.md)。
+- [用户端使用流程](../docs/user-guide.md)。
 
-A root or hypervisor administrator can still inspect the process, files, proxy ports,
-and memory. This design isolates the panel management origin; it is not process invisibility.
+## 当前版本边界（2026-09-25）
 
-## Build
+main 已包含服务器删除同步、排序同步、显示 ID，以及只能从 DBoard 管理员入口授权进入探针后台的修改，功能基线为 fe5079e。
 
-Prerequisites: Linux, Go 1.26.6 (or Go toolchain auto-download), Python 3, network access
-for pinned dependencies and frontend releases, and sufficient free build space.
+整合 Agent 已发布版本为 v0.2.1。该 Release 原有的 probe-dashboard 附件早于上述修改；需要最新后台功能时，从 main 构建 Dashboard。推送源码不会自动替换旧 Release 的二进制附件。
 
-Run from repository root:
+根安装器只处理面板及可选 DUI；整合探针后台和 Connector 仍需按安装指南部署。
 
-    python3 probe/prepare-dashboard.py
-    bash probe/build.sh v0.2.0
+## 三条独立链路
 
-Preparation verifies frontend SHA-256 digests in frontend-assets.lock.json.
-Updating pins requires an explicit --update-lock operation after upstream review.
-Builds generate OpenAPI documentation before embedding the real Nezha frontend.
+1. **用户网页 API**：浏览器 → 可选 DUI-Gateway → DBoard。
+2. **节点管理/监控**：Agent → 探针 HTTPS/gRPC/WebSocket；面板 Connector 主动连接探针，再访问面板回环 HTTP/WS。
+3. **客户代理业务**：代理客户端 → 节点内核 → 路由出口/落地 → 目标站点。
 
-Output: probe/build/<version>/ contains amd64 and arm64 Agents, SHA256SUMS,
-probe-dashboard, probe-connector, install.sh and release.json. The Agent is one
-binary with Nezha monitoring and the existing sing-box/Xray node implementation.
-Build output is ignored by Git. Building does not publish or install anything.
+Agent 只取得自己的探针 UUID 和专属密钥，不接收面板域名、内部机器 ID 或原机器 Token。客户代理流量不经过监控桥接网关。
 
-## Deployment sequence (not performed by this change)
+拥有节点 root 或虚拟化宿主权限的人仍能检查二进制、文件、端口、内存和代理行为；整合隔离了面板管理地址，不提供进程不可见性。历史旧节点配置为恢复可能保留。
 
-1. Back up the panel database and existing service configurations.
-2. Deploy panel code and run its normal migrations, including migration 000024.
-3. Prepare a probe host with a monitoring domain and valid HTTPS certificate.
-   Copy probe-dashboard there. Create its directories and a restricted nezha service
-   account; example configurations are in examples/.
-4. Initially start the dashboard on loopback without NEZHA_BRIDGE_KEY_FILE. Through a
-   local tunnel initialize the real backend, change its bootstrap admin/admin password
-   before publishing, and note the intended owner's numeric Nezha user ID.
-5. Generate a random control key of at least 32 characters in a mode-0600 file.
-   Configure bridge.env.example with the probe origin, key file, data directory and owner.
-   Back up the dashboard DB, bridge/devices.json and control key together.
-6. Publish through the example Nginx routes. gRPC HTTP/2 and WebSocket upgrades must
-   both work on the same HTTPS origin. The root and /dashboard are real Nezha pages.
-7. Place install.sh at <bridge-data>/artifacts/install.sh and Agent binaries plus
-   SHA256SUMS at <bridge-data>/artifacts/<version>/. Node installations and upgrades
-   retrieve these from the probe, not GitHub.
-8. In DBoard: 系统管理 -> 探针管理 -> 接入设置. Enter the probe origin, same control key,
-   and staged integrated Agent version. Download the connector configuration.
-   Confirm its loopback panel port (default 7001) and node WebSocket port (default 8076)
-   match the deployment. Store it mode 0600 owned by the connector service user.
-9. Start the connector on the panel host. It never gives the panel origin or machine
-   token to the probe. Confirm “检查连接” shows it connected.
-10. Add a server in server management. This provisions a real Nezha server and produces
-    a 15-minute enrollment command. Run it on the intended server. Each Agent identity
-    is scoped to that server and can be disabled centrally.
-11. Existing nodes are not automatically changed by enabling this feature. Generate
-    their probe command and append --takeover when deliberately migrating them.
-    The installer preserves the core selection from /etc/DBoard-node/config.yml,
-    stops the old service only after download and enrollment, and attempts to restore
-    it if monitoring + node-channel health checks fail.
+## 后台入口规则
 
-Adapt example users, paths and ports to the installation. The connector's internal
-API is loopback-only. The monitoring backend opens in its own browser window so its
-existing login and CSRF cookies work across different domains.
+- 公开监控首页没有登录/管理入口。
+- 从 DBoard「系统管理 → 探针管理 → 进入监控后台」申请 60 秒、单次授权。
+- 探针通过 POST 消费授权，签发 Secure/HttpOnly 的主机专属 Cookie；2 小时后或进程重启后失效。
+- 未授权访问后台页面、静态资源、登录 API 和管理 API 返回 404。
+- 既有 Nezha JWT/PAT 不能单独绕过入口层；原 Nezha 账号认证和权限仍继续执行。
+- 已授权浏览器在会话期间可继续访问，过期重新从 DBoard 进入。
+- 管理入口限制不会把访客隐藏机器自动公开，也不拦截 Agent 上报通道。
 
-## Change the probe connection address
+首次新装需先在回环/SSH 隧道内初始化账号并修改 admin/admin 初始密码，再启用桥接配置和公网入口。详细顺序见安装指南。
 
-1. Point the new domain and optional backups at the same gateway and install valid
-   HTTPS certificates. All aliases need both gRPC and WebSocket routes.
-2. Open 探针管理 -> 更新连接地址, enter the new origin, and select the servers.
-3. The panel authenticates the replacement gateway, stores a task per selected server,
-   and updates the connector's origin. An unavailable old origin does not prevent
-   validating a working replacement.
-4. An online Agent checks HTTPS authentication, monitoring gRPC and node WebSocket
-   authentication before atomically saving. It reconnects both transports; the UI
-   records the actual connected address.
-5. Offline servers retain their task in the panel database and receive it when they
-   reconnect. Configured backups are tried after repeated failures, even on idle nodes.
-   Fallback is shown separately from a successful migration.
-6. Keep the old origin until all intended servers have moved. A node with every known
-   origin unavailable cannot learn a previously unknown domain: restore a known origin
-   or update that node's local config/install command.
-7. A move to a different gateway host requires copying the Nezha database, scoped
-   identity registry and control key too. Updating an origin alone does not copy data.
+## 构建
 
-## Reporting and upgrades
+Linux 构建需要 Go 1.26.6（以 Dashboard go.mod 为准）、Python 3、C 编译环境和依赖下载能力：
 
-Reports are persisted locally before acknowledgement and retried with a stable batch ID.
-The panel commits incremental customer accounting and the receipt in one SQL transaction.
-Duplicate reports do not charge twice, and receipt IDs bind the node identity.
-Permanently rejected batches (for example a deleted node) are retained in the Agent data directory under quarantine so they do not block unrelated nodes. Telemetry-only reports do not grow the receipt ledger. Existing outbound cumulative
-cursors, global totals and per-node totals keep their independent accounting.
+~~~bash
+python3 probe/prepare-dashboard.py
+bash probe/build.sh v0.2.1
+~~~
 
-The disk queue is bounded at 10,000 reports. When full, submission fails and the existing
-tracker retains incremental traffic in memory. Provision adequate disk and restore long
-outages promptly. This queue does not replace panel backups.
+版本参数是输出版本示例；正式发布使用新的未占用版本号。prepare-dashboard.py 校验 frontend-assets.lock.json；只有明确审查上游变更后才更新锁。
 
-Integrated Agents use the version staged in probe settings, independently from stock
-DBoard GitHub releases. Downloads remain on the probe origin. The updater verifies
-SHA-256 and the integrated binary identity, keeps a previous binary, and requires
-monitoring plus the node channel to reconnect before success. Failed checks restore
-the previous executable. Real systemd takeover/upgrade is a deployment acceptance
-step and is not run against existing production services by development tests.
+输出 probe/build/<版本>/：
 
-## Tests
+- Linux amd64/arm64 整合 Agent。
+- 构建机架构的 probe-dashboard 和 probe-connector。
+- install.sh、release.json、SHA256SUMS。
 
-    cd probe/bridge && go test -race ./...
-    cd node && go test ./internal/probeagent ./internal/panel ./cmd/nezha-agent
-    cd panel && php vendor/bin/phpunit --bootstrap vendor/autoload.php tests/Feature/ProbeIntegrationTest.php
+构建不执行部署或发布。build.sh 的校验和仅覆盖 Agent；正式发布脚本 scripts/release-probe.sh 会生成包含其他发布文件的清单。服务端单独构建方式见安装指南。
 
-Built-binary smoke test, with loopback listeners and temporary keys/database only:
+## 生命周期与可靠性
 
-    cd probe/bridge
-    PROBE_TEST_AGENT=/absolute/path/nezha-agent-linux-amd64 \
-    PROBE_TEST_DASHBOARD=/absolute/path/probe-dashboard \
-    go test -run TestBuiltIntegratedStack -v -timeout 4m
+- 添加服务器创建实际 Nezha 身份，并生成约 15 分钟有效的注册命令。
+- 原厂 nezha-agent.service 与整合服务 nezha-integrated-agent.service 使用独立路径。
+- 删除先撤销探针身份、清理监控和运行时记录；保留无凭据注销标记，避免旧身份回流。
+- 面板排序同步到探针默认排序；显示 ID 重排不修改内部身份。
+- 更换域名先验证目标，再保存离线/在线迁移任务；未知新地址无法通知完全失联机器。
+- 流量报告先在 Agent 持久化，带稳定批次 ID 重试；面板计费与回执同事务去重。
+- 永久拒绝的报告隔离到 quarantine，避免阻塞其他节点。
+- 本地报告队列上限为 10,000；满时提交失败，既有 tracker 保留内存增量，应及时恢复连接与磁盘容量。
+- 更新器校验版本、哈希及整合身份，并等待监控/节点通道恢复；失败尝试回退。
+- 原厂 Agent 自更新、外部配置/归属替换不能覆盖整合 Agent 管理逻辑。
 
-It starts the real Nezha Dashboard and combined Agent, enrolls, receives monitoring,
-transfers through a real VLESS node, checks traffic forwarding, changes the origin,
-then restarts to check persistence. Its panel endpoint is a fixture; actual PHP handlers
-are tested independently by the feature tests.
+## 测试与边界
 
-## Upstream and licensing
+~~~bash
+cd probe/bridge
+go test -race ./...
+cd ../../node
+go test ./internal/probeagent ./internal/panel ./cmd/nezha-agent
+cd ../panel
+php vendor/bin/phpunit --bootstrap vendor/autoload.php tests/Feature/ProbeIntegrationTest.php
+~~~
 
-UPSTREAM.json records imported revisions. Upstream licenses/notices remain in agent/
-and dashboard/. The original upstream Agent command remains for comparison. The embedded
-library in pkg/integrated is derived from that pinned command; upstream fixes must also
-be ported to the library and checked with integration tests.
+Go 协议/身份测试与 PHP 接口测试不能代替实际 systemd、证书、反向代理、Cloudflare、跨域 Cookie 和节点业务验收。生产升级先做备份和单机试点。
 
-## Coexistence and staged fleet migration
+当前入口限制开启后，旧版直接 POST /api/v1/login 的外部巡检方式需要改成先取得合法入口授权；不能新增回环免鉴权等后门来恢复巡检。
 
-The integrated service is named nezha-integrated-agent.service, with binary
-/usr/local/bin/nezha-integrated-agent, config /etc/nezha-integrated-agent/config.json,
-and state /var/lib/nezha-integrated-agent. Stock nezha-agent.service and its files
-are never stopped, replaced, enrolled or upgraded by this installer.
+## 上游与许可
 
-Migration 000025 adds a durable rollout queue. On the panel, explicitly queue a
-small batch with php artisan probe:rollout <machine-id> [...]. The scheduler
-continues these queued jobs once per minute; probe:rollout --status is read-only.
-Offline machines wait for a fresh heartbeat. Only a single legacy machine instance
-can be automatically taken over; multiple-instance configurations require review.
-The first stage installs the compatible legacy binary from the same GitHub release.
-The second stage uses an installer embedded in that binary and downloads the
-integrated Agent from the probe. There is no general remote shell command payload.
-Stock Nezha remains independent throughout both stages.
-
-Direct panel access is retired only after the new Agent reports successful
-monitoring and node-channel checks over the probe. Failed installation restores
-the previous service files and restarts the legacy service. Failed jobs are not
-retried automatically. Queued offline jobs survive a panel restart. Legacy config
-files are retained for recovery; this does not hide historical files from root.
+[UPSTREAM.json](UPSTREAM.json) 记录导入版本。agent/、dashboard/ 保留上游许可证与声明。整合 Agent 库从固定上游派生，更新原上游程序时还需同步审核整合库，不应只替换官方哪吒二进制。

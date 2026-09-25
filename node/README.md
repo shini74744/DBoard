@@ -1,5 +1,7 @@
 # DBoard-node
 
+> 使用整合探针时，请先阅读[完整安装指南](../docs/installation.md)和[探针说明](../probe/README.md)，从服务器管理取得整合 Agent 命令。本文后续的传统节点直连安装会把面板地址配置到节点，不能与探针安装混用。
+
 DBoard node backend. Supports `sing-box` / `xray-core` dual kernels.
 
 > **Disclaimer**: This project is for educational and learning purposes only.

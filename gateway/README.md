@@ -2,6 +2,10 @@
 
 DUI-Gateway 是 DBoard 的独立 API 中间层，参考 JC 现有中间件的使用方式实现。
 
+完整系统的域名规划、用户端配置和探针区别见[安装指南](../docs/installation.md)与[后台流程](../docs/admin-workflows.md)。
+
+当前程序默认监听 **0.0.0.0:3939**，并非仅回环。部署时限制该上游端口的公网访问，通过 HTTPS 反向代理提供服务。
+
 ## 架构
 
 ```text

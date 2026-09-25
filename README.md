@@ -1,6 +1,6 @@
 # DBoard
 
-DBoard 是基于 XBoard 持续二次开发的面板项目，配套 **DBoard-node** 节点程序与可选的 **DUI-Gateway** API 加密中间层。
+DBoard 是基于 XBoard 持续二次开发的面板项目，配套用户端、**DBoard-node**、**整合 Nezha 探针/Agent** 与可选的 **DUI-Gateway** API 加密中间层。
 
 本仓库提供两种正式部署方式：
 
@@ -9,12 +9,27 @@ DBoard 是基于 XBoard 持续二次开发的面板项目，配套 **DBoard-node
 
 两种方式共用同一套持久数据结构，因此可以在独立版与 Docker 版之间迁移。
 
+## 文档导航（2026-09-25 更新）
+
+| 内容 | 阅读入口 |
+| --- | --- |
+| 用户注册、购买、新开/续费、订单与订阅 | [用户端使用指南](docs/user-guide.md) |
+| 管理后台操作、认证、配置下发、计费处理 | [后台处理流程](docs/admin-workflows.md) |
+| 面板、用户端、DUI、探针、Connector、Agent 逐步安装 | [完整安装指南](docs/installation.md) |
+| 升级、域名迁移、备份恢复与排错 | [运维指南](docs/operations.md) |
+| 全部文档与实现入口 | [文档索引](docs/README.md) |
+
+**版本提示：** main 已包含探针后台入口限制、删除/排序同步与显示 ID。整合 Agent 已发布 v0.2.1，但该 Release 原有 Dashboard 附件早于这些服务端修复；新安装请按安装指南构建当前 Dashboard。源码推送不会自动更新 Release 附件。
+
 ## 项目结构
 
 ```text
 DBoard/
 ├── panel/        # DBoard 面板、Dockerfile、Compose 示例
 ├── node/         # DBoard-node、xbctl、Xray / sing-box 双内核
+├── frontend/     # 用户商店、订单、套餐与订阅界面
+├── probe/        # Nezha Dashboard、桥接、Connector、整合 Agent 安装器
+├── docs/         # 用户、后台、安装与运维指南
 ├── gateway/      # DUI-Gateway 加密 API 中间层
 ├── deploy/       # 部署与持久数据说明
 ├── scripts/      # 构建、发布、数据目录初始化工具
@@ -22,6 +37,9 @@ DBoard/
 ```
 
 ## 推荐安装方式
+
+根安装器负责面板和可选 DUI；不会自动安装整套探针。需要服务器通过探针管理时，请继续完成[完整安装指南](docs/installation.md)中的探针与 Connector 步骤。
+
 新机器推荐直接执行交互式安装器：
 
 ```bash
@@ -56,7 +74,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/insta
 
 ---
 
-# 唯一持久数据目录
+# 面板持久数据目录
 
 无论使用哪种部署方式，DBoard 都把：
 
@@ -64,7 +82,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/insta
 /opt/dboard/shared
 ```
 
-定义为唯一持久数据目录。
+定义为面板唯一持久数据目录。探针、独立用户端和 DUI 还有各自配置与身份数据，整套系统的备份边界见[运维指南](docs/operations.md)。
 
 标准结构：
 
@@ -285,8 +303,10 @@ DBoard 后端
 默认监听：
 
 ```text
-127.0.0.1:3939
+0.0.0.0:3939
 ```
+
+网关当前监听所有 IPv4 接口；部署时应限制 3939 的公网访问，仅通过 HTTPS 反向代理提供服务。
 
 手动安装示例：
 
@@ -308,10 +328,13 @@ curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/gateway/inst
 
 ---
 
-# DBoard-node
-DBoard 的节点程序独立于面板部署。
+# DBoard-node 与整合 Agent
 
-Machine Mode 示例：
+启用探针接入后，应在服务器管理生成探针安装命令，由单个整合 Agent 运行监控与节点功能。节点的管理通信和安装下载使用探针域名，用户代理流量仍经过节点内核。详见[探针说明](probe/README.md)。
+
+## 传统直连模式（未使用探针对接）
+
+DBoard 的节点程序独立于面板部署。以下 Machine Mode 命令会直接连接面板，不是整合探针安装命令：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/node/install.sh | \
@@ -342,21 +365,24 @@ Node 支持 Xray / sing-box 双内核，并对结构化 Outbound、Route Rule �
 | 7001 | DBoard HTTP 上游 | 仅需要直连时 |
 | 8076 | WebSocket 内部端口 | 否，建议通过 `/ws` 反代 |
 | 6379 | Redis | **禁止公网开放** |
-| 3939 | DUI-Gateway 默认端口 | 否，建议反代 |
+| 3939 | DUI-Gateway 默认端口 | 否，限制公网访问并反代 |
+| 8008 | 探针 HTTP / gRPC 上游 | 否，通过 TLS 443 反代 |
 | 80/443 | Web / TLS | 是 |
-生产环境建议只公开 80/443，内部服务绑定 127.0.0.1。
+管理入口建议公开 80/443；面板和探针上游绑定回环，DUI 的 3939 另行限制。代理业务端口仍按节点配置开放，不能因这一建议全部关闭。
 
 ---
 
 # 备份、恢复与迁移
 
-DBoard 的迁移边界只有：
+DBoard 面板业务的数据边界为：
 
 ```text
 /opt/dboard/shared
 ```
 
-但**不要在 SQLite 和 Redis 正在写入时直接 tar 整个目录**。
+整合部署还须备份探针数据库、身份注册表、控制密钥、Connector、用户端运行配置、DUI 和证书/反代配置，见[完整备份清单](docs/operations.md)。
+
+**不要在 SQLite 和 Redis 正在写入时直接 tar 整个目录**。
 
 正确备份流程：
 
@@ -428,6 +454,9 @@ Docker 镜像由独立 GitHub Actions workflow 发布，不会改变 DBoard-node
 - Telegram 管理通知、套餐快照字段继承等面板定制。
 - DBoard-node Machine Mode 与 WebSocket 实时通信。
 - 可选 DUI-Gateway 加密 API 中间层。
+- 单个整合 Nezha Agent、探针管理通信、域名迁移和持久上报。
+- 服务器与探针的创建/删除/排序同步及独立显示 ID。
+- 管理员一次性授权进入探针后台，公开监控首页没有登录入口。
 
 ## 安全
 
