@@ -121,7 +121,7 @@ func (a *AdminGate) Handler(next http.Handler) http.Handler {
 		p := r.URL.Path
 		canonical := path.Clean(p) == strings.TrimSuffix(p, "/") || p == "/"
 		if (r.Method != http.MethodGet && r.Method != http.MethodHead) || !canonical ||
-			!(p == "/" || publicAPI.MatchString(p) || publicPage.MatchString(p)) {
+			!(p == "/" || p == "/manifest.json" || publicAPI.MatchString(p) || publicPage.MatchString(p)) {
 			http.NotFound(w, r)
 			return
 		}
