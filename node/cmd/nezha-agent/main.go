@@ -45,7 +45,7 @@ func main() {
 			os.Exit(1)
 		}
 		if *legacyConfig != "" {
-			old, e := config.Load(*legacyConfig)
+			kernel, e := probeagent.LegacyKernel(*legacyConfig)
 			if e != nil {
 				fmt.Fprintln(os.Stderr, "unable to read previous core settings")
 				os.Exit(1)
@@ -55,7 +55,7 @@ func main() {
 				fmt.Fprintln(os.Stderr, e)
 				os.Exit(1)
 			}
-			enrolled.Kernel = old.Kernel.Type
+			enrolled.Kernel = kernel
 			if e = enrolled.Save(*path); e != nil {
 				fmt.Fprintln(os.Stderr, e)
 				os.Exit(1)
