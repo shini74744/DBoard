@@ -27,3 +27,22 @@ func TestPreserveLegacyMachineCore(t *testing.T) {
 		}
 	}
 }
+
+func TestLegacyCoreDoesNotRequireServiceCredentialEnvironment(t *testing.T) {
+	t.Setenv("LEGACY_MACHINE_SECRET", "")
+	data := "kernel:\n  type: xray\ninstances:\n  - machine:\n      machine_id: 27\n      token_env: LEGACY_MACHINE_SECRET\n"
+	path := filepath.Join(t.TempDir(), "config.yml")
+	os.WriteFile(path, []byte(data), 0600)
+	core, err := LegacyKernel(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if core != "xray" {
+		t.Fatal(core)
+	}
+	data += "  - machine:\n      machine_id: 28\n      token_env: LEGACY_MACHINE_SECRET\n"
+	os.WriteFile(path, []byte(data), 0600)
+	if _, err = LegacyKernel(path); err == nil {
+		t.Fatal("accepted multiple instances")
+	}
+}
