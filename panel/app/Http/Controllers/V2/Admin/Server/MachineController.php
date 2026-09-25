@@ -194,6 +194,7 @@ class MachineController extends Controller
             foreach ($ids as $position => $id) {
                 ServerMachine::whereKey($id)->update(['sort' => $position + 1]);
             }
+            \App\Services\ProbeService::syncOrder();
         });
         return $this->success(true);
     }

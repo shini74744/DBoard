@@ -15,7 +15,12 @@ import (
 var ErrURL = errors.New("probe endpoint must be an HTTPS origin")
 var ErrUnauthorized = errors.New("invalid or expired probe credential")
 
+type SortItem struct {
+	UUID string `json:"uuid"`
+	Sort int    `json:"sort"`
+}
 type Device struct {
+	Sort          *int   `json:"sort,omitempty"`
 	UUID          string `json:"uuid"`
 	Name          string `json:"name"`
 	Enabled       bool   `json:"enabled"`

@@ -150,4 +150,38 @@ class ProbeIntegrationTest extends TestCase {
   $this->postJson($this->prefix().'/server/machine/drop',['id'=>$m->id])->assertStatus(422);
   $this->assertNotNull($m->fresh());
  }
+
+ public function test_server_order_sync_uses_probe_identity_and_ignores_unprovisioned_machines(){
+  $this->settings();$this->admin();
+  $a=ServerMachine::create(['name'=>'A','token'=>'a','sort'=>1,'probe_uuid'=>'c9a2215c-a675-448e-b6ac-c96dd420a79b','probe_server_id'=>8]);
+  $b=ServerMachine::create(['name'=>'B','token'=>'b','sort'=>2,'probe_uuid'=>'02c72ffc-d6c2-41c8-a761-fb0e4dbb4182','probe_server_id'=>2]);
+  $legacy=ServerMachine::create(['name'=>'legacy','token'=>'c','sort'=>3]);
+  $pending=ServerMachine::create(['name'=>'pending','token'=>'d','sort'=>4,'probe_uuid'=>'152ae93c-46b9-40b0-b1b4-2571269bda4b']);
+  Http::fake(['probe.example.test/bridge/v1/control/devices/sort'=>Http::response(['sorted'=>true])]);
+  $this->postJson($this->prefix().'/server/machine/sort',['ids'=>[$b->id,$legacy->id,$a->id,$pending->id]])->assertOk();
+  $this->assertSame(1,$b->fresh()->sort);$this->assertSame(3,$a->fresh()->sort);
+  Http::assertSent(fn($r)=>$r->url()==='https://probe.example.test/bridge/v1/control/devices/sort' && $r['items']===[['uuid'=>$b->probe_uuid,'sort'=>1],['uuid'=>$a->probe_uuid,'sort'=>3]]);
+  Http::assertSentCount(1);
+ }
+ public function test_failed_sort_keeps_saved_order_and_retry_succeeds(){
+  $this->settings();$this->admin();
+  $a=ServerMachine::create(['name'=>'A','token'=>'a','sort'=>1,'probe_uuid'=>'c9a2215c-a675-448e-b6ac-c96dd420a79b','probe_server_id'=>8]);
+  $b=ServerMachine::create(['name'=>'B','token'=>'b','sort'=>2,'probe_uuid'=>'02c72ffc-d6c2-41c8-a761-fb0e4dbb4182','probe_server_id'=>2]);
+  Http::fake(['probe.example.test/*'=>Http::sequence()->push([],503)->push([])->push(['sorted'=>true])]);
+  $body=['ids'=>[$b->id,$a->id]];
+  for($i=0;$i<2;$i++){
+   $this->postJson($this->prefix().'/server/machine/sort',$body)->assertStatus(422);
+   $this->assertSame(1,$a->fresh()->sort);$this->assertSame(2,$b->fresh()->sort);
+  }
+  $this->postJson($this->prefix().'/server/machine/sort',$body)->assertOk();
+  $this->assertSame(2,$a->fresh()->sort);$this->assertSame(1,$b->fresh()->sort);
+ }
+ public function test_device_sync_always_includes_saved_sort(){
+  $this->settings();
+  $m=ServerMachine::create(['name'=>'renamed','token'=>'a','sort'=>9,'probe_uuid'=>'c9a2215c-a675-448e-b6ac-c96dd420a79b','probe_server_id'=>8]);
+  Http::fake(['probe.example.test/*'=>Http::response(['server_id'=>8])]);
+  \App\Services\ProbeService::sync($m);
+  Http::assertSent(fn($r)=>$r['sort']===9 && $r['name']==='renamed');
+ }
+
 }

@@ -62,7 +62,12 @@ func Wrap(next http.Handler) (http.Handler, error) {
 			if s.GetUserID() != owner {
 				return 0, errors.New("probe identity belongs to another owner")
 			}
-			if err := singleton.DB.Model(&s).Update("name", d.Name).Error; err != nil {
+			changes := map[string]any{"name": d.Name}
+			if d.Sort != nil {
+				changes["display_index"] = -*d.Sort
+				s.DisplayIndex = -*d.Sort
+			}
+			if err := singleton.DB.Model(&s).Updates(changes).Error; err != nil {
 				return 0, err
 			}
 			if live, ok := singleton.ServerShared.Get(sid); ok {
@@ -73,6 +78,9 @@ func Wrap(next http.Handler) (http.Handler, error) {
 			return sid, nil
 		}
 		s = model.Server{UUID: d.UUID, Name: d.Name, HideForGuest: true, Common: model.Common{UserID: owner}}
+		if d.Sort != nil {
+			s.DisplayIndex = -*d.Sort
+		}
 		if err := singleton.DB.Create(&s).Error; err != nil {
 			return 0, err
 		}
@@ -81,6 +89,7 @@ func Wrap(next http.Handler) (http.Handler, error) {
 		return s.ID, nil
 	}
 	g.Deprovision = func(d bridge.Device) error { return deleteServer(owner, d.UUID) }
+	g.Sort = func(items []bridge.SortItem) error { return sortServers(owner, items) }
 	return g.Handler(next), nil
 }
 

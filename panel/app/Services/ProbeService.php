@@ -17,8 +17,14 @@ class ProbeService {
  }
  public static function sync(ServerMachine $m,?string $code=null): void {
   if (!$m->probe_uuid) return;
-  $reply=static::api('device',['uuid'=>$m->probe_uuid,'name'=>$m->name,'enabled'=>(bool)$m->is_active,'code'=>$code??'']);
+  $reply=static::api('device',['uuid'=>$m->probe_uuid,'name'=>$m->name,'enabled'=>(bool)$m->is_active,'sort'=>(int)$m->sort,'code'=>$code??'']);
   $m->forceFill(['probe_server_id'=>$reply['server_id']??null])->save();
+ }
+ public static function syncOrder(): void {
+  $items=ServerMachine::whereNotNull('probe_uuid')->whereNotNull('probe_server_id')->orderBy('sort')->orderBy('id')->get()->map(fn($m)=>['uuid'=>$m->probe_uuid,'sort'=>(int)$m->sort])->values()->all();
+  if (!$items) return;
+  $reply=static::api('devices/sort',['items'=>$items]);
+  if (($reply['sorted']??false)!==true) throw ValidationException::withMessages(['probe'=>'探针未确认排序，请重试保存']);
  }
  public static function delete(ServerMachine $m): void {
   if (!$m->probe_uuid) return;

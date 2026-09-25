@@ -23,6 +23,7 @@ type Gateway struct {
 	Artifacts   string
 	Provision   func(Device) (uint64, error)
 	Deprovision func(Device) error
+	Sort        func([]SortItem) error
 	controlMu   sync.Mutex
 	mu          sync.Mutex
 	peer        *Peer
@@ -63,6 +64,43 @@ func (g *Gateway) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		case "/control/status":
 			writeJSON(w, 200, map[string]any{"connected": g.online() != nil, "public_url": g.Public, "gateway_id": digest(g.ControlKey)})
+			return
+		case "/control/devices/sort":
+			g.controlMu.Lock()
+			defer g.controlMu.Unlock()
+			if r.Method != http.MethodPost {
+				http.Error(w, "method", 405)
+				return
+			}
+			var v struct {
+				Items []SortItem `json:"items"`
+			}
+			if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024*1024)).Decode(&v) != nil || len(v.Items) == 0 || len(v.Items) > 10000 {
+				http.Error(w, "invalid order", 422)
+				return
+			}
+			seen := make(map[string]bool, len(v.Items))
+			for _, item := range v.Items {
+				if !UUIDPattern.MatchString(item.UUID) || item.Sort < 0 || item.Sort > 1000000000 || seen[item.UUID] {
+					http.Error(w, "invalid order", 422)
+					return
+				}
+				d, ok := g.Registry.Get(item.UUID)
+				if !ok || d.Deleted {
+					http.Error(w, "unknown device", 422)
+					return
+				}
+				seen[item.UUID] = true
+			}
+			if g.Sort == nil {
+				http.Error(w, "sorting unavailable", 503)
+				return
+			}
+			if err := g.Sort(v.Items); err != nil {
+				http.Error(w, "sorting failed; retry required", 503)
+				return
+			}
+			writeJSON(w, 200, map[string]any{"sorted": true})
 			return
 		case "/control/device/delete":
 			g.controlMu.Lock()
@@ -113,6 +151,7 @@ func (g *Gateway) serve(w http.ResponseWriter, r *http.Request) {
 				Name    string `json:"name"`
 				Enabled bool   `json:"enabled"`
 				Code    string `json:"code"`
+				Sort    *int   `json:"sort"`
 			}
 			if json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&v) != nil || !UUIDPattern.MatchString(v.UUID) || len(v.Name) > 255 {
 				http.Error(w, "invalid device", 422)
@@ -126,6 +165,11 @@ func (g *Gateway) serve(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "device deleted", http.StatusGone)
 				return
 			}
+			if v.Sort != nil && (*v.Sort < 0 || *v.Sort > 1000000000) {
+				http.Error(w, "invalid order", 422)
+				return
+			}
+			d.Sort = v.Sort
 			d.Name = v.Name
 			d.Enabled = v.Enabled
 			if v.Code != "" {
