@@ -227,7 +227,13 @@ class NodeWorker
             $conn->close(json_encode(['event'=>'error','data'=>['message'=>'probe connector required']]));return;
         }
         if ($machine->probe_uuid && ($params['probe_preflight']??'')==='1') {
-            $conn->close(json_encode(['event'=>'auth.success','data'=>['preflight'=>true]]));return;
+            // The HTTP upgrade is not complete in onWebSocketConnect. Reply only
+            // after it completes, without registering or replacing the active machine.
+            $conn->onWebSocketConnected = static function (TcpConnection $probe): void {
+                $probe->send(json_encode(['event'=>'auth.success','data'=>['preflight'=>true]]));
+                Timer::add(5, static function () use ($probe): void { $probe->close(); }, [], false);
+            };
+            return;
         }
         if ($machine->probe_uuid && !empty($params['probe_endpoint'])) {
             $endpoint=(string)($params['probe_endpoint']??'');
