@@ -13,10 +13,23 @@
     const card=el('div','dboard-probe-card');
     card.append(el('h2','','服务器监控'),el('p','',settings.enabled?'服务器负载、网络和在线状态由探针统一采集。':'先完成探针接入设置，即可进入监控后台。'));
     if(settings.enabled){
-     const link=el('a','dboard-marketing-primary','进入监控后台 ↗');link.href=settings.dashboard_url;link.target='_blank';link.rel='noopener noreferrer';
+     const link=button('进入监控后台 ↗',async()=>{
+      const name='probe-admin-'+Date.now();const popup=window.open('',name);
+      if(!popup){status.textContent='请允许本站打开新窗口后重试';return;}
+      popup.opener=null;popup.document.title='正在验证后台入口';popup.document.body.textContent='正在验证访问权限，请稍候…';
+      link.disabled=true;status.textContent='正在验证后台访问权限…';
+      try{
+       const entry=await request('probe/entry',{});
+       const action=new URL(entry.action);if(action.origin!==new URL(settings.endpoint).origin||action.pathname!=='/bridge/v1/admin/enter'||!/^[a-f0-9]{64}$/.test(entry.grant))throw new Error('后台入口授权无效，请重试');
+       const form=popup.document.createElement('form');form.method='POST';form.action=action.href;
+       const input=popup.document.createElement('input');input.type='hidden';input.name='grant';input.value=entry.grant;form.append(input);
+       const meta=popup.document.createElement('meta');meta.name='referrer';meta.content='no-referrer';popup.document.head.append(meta);
+       popup.document.body.replaceChildren(form);form.submit();status.textContent='监控后台已打开';
+      }catch(e){popup.close();status.textContent=e.message;}finally{link.disabled=false;}
+     },'dboard-marketing-primary');
      card.append(link,button('检查连接',feedback(async()=>{const s=await request('probe/status');status.textContent=s.connected?'探针与系统已连接':'探针可访问，系统连接尚未建立';})));
      card.append(el('p','dboard-probe-endpoint',settings.endpoint));
-     card.append(el('p','dboard-probe-endpoint','监控后台在新窗口打开，可查看服务器负载、网络流量、告警和终端。'));
+     card.append(el('p','dboard-probe-endpoint','仅通过此入口授权访问监控后台，授权有效期 2 小时。探针首页不提供登录入口。'));
     }else card.append(button('配置探针',()=>render('settings'),'dboard-marketing-primary'));
     body.append(card);
    };

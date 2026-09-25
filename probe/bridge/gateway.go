@@ -17,6 +17,7 @@ import (
 )
 
 type Gateway struct {
+	AdminGate   *AdminGate
 	Registry    *Registry
 	Public      string
 	ControlKey  string
@@ -34,6 +35,9 @@ var UUIDPattern = regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0
 var VersionPattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$`)
 
 func (g *Gateway) Handler(next http.Handler) http.Handler {
+	if g.AdminGate != nil {
+		next = g.AdminGate.Handler(next)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, Prefix+"/") {
 			next.ServeHTTP(w, r)
@@ -61,6 +65,13 @@ func (g *Gateway) serve(w http.ResponseWriter, r *http.Request) {
 		switch p {
 		case "/control/connect":
 			g.connect(w, r)
+			return
+		case "/control/admin-entry":
+			if g.AdminGate == nil {
+				http.NotFound(w, r)
+				return
+			}
+			g.AdminGate.Issue(w, r)
 			return
 		case "/control/status":
 			writeJSON(w, 200, map[string]any{"connected": g.online() != nil, "public_url": g.Public, "gateway_id": digest(g.ControlKey)})
@@ -200,6 +211,14 @@ func (g *Gateway) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.NotFound(w, r)
+		return
+	}
+	if p == "/admin/enter" {
+		if g.AdminGate == nil {
+			http.NotFound(w, r)
+			return
+		}
+		g.AdminGate.Enter(w, r)
 		return
 	}
 	if p == "/enroll" {

@@ -366,6 +366,15 @@ func fallbackToFrontend(frontendDist fs.FS) func(*gin.Context) {
 		if fileStat.IsDir() {
 			return false
 		}
+		if name == "index.html" && !strings.HasPrefix(c.Request.URL.Path, "/dashboard") && os.Getenv("NEZHA_BRIDGE_KEY_FILE") != "" {
+			body, err := io.ReadAll(io.LimitReader(file, 2<<20))
+			if err != nil {
+				return false
+			}
+			c.Header("Cache-Control", "private, no-store")
+			c.Data(customStatusCode, "text/html; charset=utf-8", []byte(strings.Replace(string(body), "</head>", publicEntryRemoval+"</head>", 1)))
+			return true
+		}
 		readSeeker, ok := file.(io.ReadSeeker)
 		if !ok {
 			return false

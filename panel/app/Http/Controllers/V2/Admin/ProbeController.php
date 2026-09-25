@@ -21,6 +21,11 @@ class ProbeController extends Controller {
   if (!$s->exists){$s->id=1;$s->connector_key=bin2hex(random_bytes(32));}
   $s->save();return $this->fetch();
  }
+ public function entry(){
+  $reply=ProbeService::api('admin-entry',[]);
+  abort_unless(isset($reply['grant']) && is_string($reply['grant']) && preg_match('/^[a-f0-9]{64}$/D',$reply['grant']),502,'探针未确认后台访问授权，请升级探针服务后重试');
+  return $this->success(['action'=>ProbeService::settings()->endpoint.'/bridge/v1/admin/enter','grant'=>$reply['grant']])->header('Cache-Control','no-store');
+ }
  public function status(){return $this->success(ProbeService::api('status'));}
  public function connector(){
   $s=ProbeService::settings();abort_unless($s,422,'请先保存探针设置');

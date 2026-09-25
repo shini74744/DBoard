@@ -14,6 +14,18 @@ class ProbeIntegrationTest extends TestCase {
  }
  private function settings(){return ProbeSetting::create(['id'=>1,'enabled'=>true,'endpoint'=>'https://probe.example.test','control_key'=>str_repeat('a',48),'connector_key'=>str_repeat('b',48),'agent_version'=>'v0.2.0']);}
  private function admin(){Sanctum::actingAs(User::create(['email'=>'admin@example.test','password'=>'unused','uuid'=>'fixture','token'=>'fixture','is_admin'=>true]));}
+ public function test_probe_entry_requires_admin_and_only_returns_short_lived_grant(){
+  $s=$this->settings();Http::fake(['probe.example.test/*'=>Http::sequence()->push(['grant'=>str_repeat('c',64),'expires_in'=>60])->push(['grant'=>'bad'])]);
+  $uri=$this->prefix().'/probe/entry';
+  $this->postJson($uri,[])->assertForbidden();Http::assertNothingSent();
+  Sanctum::actingAs(User::create(['email'=>'user@example.test','password'=>'unused','uuid'=>'normal','token'=>'normal','is_admin'=>false]));
+  $this->postJson($uri,[])->assertForbidden();Http::assertNothingSent();
+  $this->admin();$r=$this->postJson($uri,[])->assertOk()->assertJsonPath('data.action','https://probe.example.test/bridge/v1/admin/enter')->assertJsonPath('data.grant',str_repeat('c',64));
+  $this->assertStringContainsString('no-store',$r->headers->get('Cache-Control'));
+  $this->assertStringNotContainsString($s->control_key,$r->getContent());
+  Http::assertSent(fn($request)=>$request->url()==='https://probe.example.test/bridge/v1/control/admin-entry' && $request->method()==='POST');
+  $this->postJson($uri,[])->assertStatus(502);
+ }
  public function test_server_creation_provisions_probe_and_installation_contains_only_probe_address(){
   $this->settings();$this->admin();Http::fake(['probe.example.test/*'=>Http::response(['server_id'=>7])]);
   $uri=collect(app('router')->getRoutes())->first(fn($route)=>str_ends_with($route->uri(),'/server/machine/save'))->uri();$prefix='/'.substr($uri,0,-strlen('/server/machine/save'));

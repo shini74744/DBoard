@@ -52,7 +52,7 @@ func Wrap(next http.Handler) (http.Handler, error) {
 	if e = singleton.DB.First(&user, owner).Error; e != nil {
 		return nil, fmt.Errorf("bridge owner does not exist")
 	}
-	g := &bridge.Gateway{Registry: reg, Public: public.String(), ControlKey: key, Artifacts: filepath.Join(dir, "artifacts")}
+	g := &bridge.Gateway{AdminGate: bridge.NewAdminGate(), Registry: reg, Public: public.String(), ControlKey: key, Artifacts: filepath.Join(dir, "artifacts")}
 	g.Provision = func(d bridge.Device) (uint64, error) {
 		var s model.Server
 		if sid, ok := singleton.ServerShared.UUIDToID(d.UUID); ok {
