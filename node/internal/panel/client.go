@@ -45,7 +45,7 @@ type Client struct {
 
 // NewClient creates a new panel API client.
 func NewClient(cfg config.PanelConfig) *Client {
-	return &Client{
+	client := &Client{
 		baseURL:   strings.TrimRight(cfg.URL, "/"),
 		token:     cfg.Token,
 		nodeID:    cfg.NodeID,
@@ -60,6 +60,11 @@ func NewClient(cfg config.PanelConfig) *Client {
 			},
 		},
 	}
+	if ProbeTransport != nil {
+		client.httpClient.Transport = ProbeTransport
+		client.httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	}
+	return client
 }
 
 // ForNode returns a new client bound to a specific node_id, sharing the

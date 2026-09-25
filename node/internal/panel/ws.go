@@ -223,16 +223,24 @@ func (w *WSClient) connect(ctx context.Context) error {
 	}
 	u.RawQuery = q.Encode()
 
-	nlog.Core().Debug("ws connecting", "url", u.String())
+	nlog.Core().Debug("ws connecting", "host", u.Host)
 
 	dialer := websocket.Dialer{
 		HandshakeTimeout: w.cfg.HandshakeTimeout,
 	}
-	conn, _, err := dialer.DialContext(ctx, u.String(), nil)
+	var conn *websocket.Conn
+	if ProbeDial != nil {
+		conn, _, err = ProbeDial(ctx, u.String())
+	} else {
+		conn, _, err = dialer.DialContext(ctx, u.String(), nil)
+	}
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
 	defer conn.Close()
+	if ProbeForget != nil {
+		defer ProbeForget(conn)
+	}
 
 	conn.SetReadLimit(10 << 20) // 10MB max message size
 
@@ -264,6 +272,9 @@ func (w *WSClient) connect(ctx context.Context) error {
 		w.notifyStatus(true)
 	}
 
+	if ProbeHealthy != nil {
+		ProbeHealthy()
+	}
 	// Ping interval: send pong responses to server pings.
 	// We also use this timer to trigger periodic status pushes.
 	reportTicker := time.NewTicker(w.cfg.StatusInterval)
@@ -292,6 +303,9 @@ func (w *WSClient) connect(ctx context.Context) error {
 			}
 			nlog.Core().Debug("ws recv", "event", msg.Event, "data", string(msg.Data))
 			w.handleMessage(msg)
+			if msg.Event == "ping" && ProbeHealthy != nil {
+				ProbeHealthy()
+			}
 			if msg.Event == "ping" {
 				select {
 				case writeCh <- wsMessage{Event: "pong"}:
@@ -343,6 +357,9 @@ func (w *WSClient) connect(ctx context.Context) error {
 }
 
 func (w *WSClient) handleMessage(msg wsMessage) {
+	if ProbeEvent != nil && ProbeEvent(msg.Event, msg.Data, w.SendRaw) {
+		return
+	}
 	switch msg.Event {
 	case "ping":
 		// Server ping — handled by the pong timer reset above

@@ -132,6 +132,7 @@ class MachineController extends Controller
             abort(403, 'Machine not found or disabled');
         }
 
+        abort_if($machine->probe_endpoint && !$request->attributes->get('probe_sync'),403,'Probe connector required');
         $machine->forceFill(['last_seen_at' => now()->timestamp])->saveQuietly();
 
         return $machine;

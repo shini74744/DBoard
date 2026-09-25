@@ -1,0 +1,17 @@
+[Unit]
+Description=Nezha monitoring and node gateway
+After=network-online.target
+Wants=network-online.target
+[Service]
+User=nezha
+Group=nezha
+WorkingDirectory=/var/lib/nezha-dashboard
+EnvironmentFile=/etc/nezha-dashboard/bridge.env
+ExecStart=/opt/nezha/probe-dashboard -c /etc/nezha-dashboard/config.yaml -db /var/lib/nezha-dashboard/dashboard.db
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target

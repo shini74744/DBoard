@@ -4,6 +4,7 @@
     ['notice', '通知中心'],
     ['binding', '机器人绑定'],
     ['user-notice', '用户须知'],
+    ['probe', '探针管理'],
   ];
   const promoFields = [
     ['hero_title', '页面标题'], ['hero_description', '页面介绍'],
@@ -330,7 +331,8 @@
     window.DBoardTelegramBinding.open({ panel, shell, request, el, isCurrent: () => page === 'binding' });
   }
   function openPage(key) {
-    if (key === 'store') openStore();
+    if (key === 'probe') {page=key;window.DBoardProbe.open({panel,shell,request,el,isCurrent:()=>page===key});}
+    else if (key === 'store') openStore();
     else if (key === 'notice') openNotice();
     else if (key === 'binding') openBinding();
     else if (key === 'user-notice') {

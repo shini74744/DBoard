@@ -1,0 +1,10 @@
+{
+  "dashboard": {
+    "repository": "https://github.com/nezhahq/nezha",
+    "commit": "9dab6a5039b5043d5e5127aa08d9614d59cbbcc2"
+  },
+  "agent": {
+    "repository": "https://github.com/nezhahq/agent",
+    "commit": "5225d9b95ad67d7aba7369b0cd2b1f499c15feb3"
+  }
+}

@@ -123,16 +123,17 @@ class UserService
         // Compatible with legacy hook
         list($server, $protocol, $data) = HookManager::filter('traffic.before_process', [$server, $protocol, $data]);
 
+        $dispatch = request()->attributes->get('probe_sync') ? 'dispatchSync' : 'dispatch';
         $timestamp = strtotime(date('Y-m-d'));
-        collect($data)->chunk(1000)->each(function ($chunk) use ($timestamp, $server, $protocol) {
+        collect($data)->chunk(1000)->each(function ($chunk) use ($timestamp, $server, $protocol, $dispatch) {
             // Internal node relay identities use negative IDs. Count physical node
             // traffic, while charging real accounts only at their entry node.
             $accounts = $chunk->filter(fn($bytes, $id) => (int)$id > 0)->toArray();
             if ($accounts) {
-                TrafficFetchJob::dispatch($server, $accounts, $protocol, $timestamp);
-                StatUserJob::dispatch($server, $accounts, $protocol, 'd');
+                TrafficFetchJob::$dispatch($server, $accounts, $protocol, $timestamp);
+                StatUserJob::$dispatch($server, $accounts, $protocol, 'd');
             }
-            StatServerJob::dispatch($server, $chunk->toArray(), $protocol, 'd');
+            StatServerJob::$dispatch($server, $chunk->toArray(), $protocol, 'd');
         });
     }
 

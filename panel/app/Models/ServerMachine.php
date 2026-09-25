@@ -28,6 +28,7 @@ class ServerMachine extends Model
     protected $guarded = ['id'];
 
     protected $casts = [
+        'probe_migration' => 'array',
         'is_active' => 'boolean',
         'last_seen_at' => 'integer',
         'load_status' => 'array',

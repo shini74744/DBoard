@@ -28,6 +28,9 @@ class MachineController extends Controller
             ->map(function (ServerMachine $machine) {
                 return [
                     'id' => $machine->id,
+                    'probe_uuid' => $machine->probe_uuid,
+                    'probe_server_id' => $machine->probe_server_id,
+                    'access_mode' => $machine->probe_uuid ? 'probe' : 'direct',
                     'sort' => $machine->sort,
                     'name' => $machine->name,
                     'admin_group' => $machine->admin_group,
@@ -92,17 +95,20 @@ class MachineController extends Controller
     public function latestRelease()
     {
         try {
-            $version = $this->latestNodeRelease();
+            $hasLegacy=ServerMachine::whereNull('probe_uuid')->exists();
+            $version = $hasLegacy?$this->latestNodeRelease():(\App\Services\ProbeService::settings()?->agent_version??'');
+            $probeVersion=\App\Services\ProbeService::settings()?->agent_version??'';
             $upgradeable = [];
-            foreach (ServerMachine::query()->get(['id', 'is_active']) as $machine) {
+            foreach (ServerMachine::query()->get(['id', 'is_active','probe_uuid']) as $machine) {
+                $target=$machine->probe_uuid?$probeVersion:$version;
                 $current = (string) Cache::get('dboard_machine_version:' . $machine->id, '');
                 if ($machine->is_active && Cache::get('dboard_machine_upgrade_capable:' . $machine->id)
                     && !MachineUpgradeService::busy(MachineUpgradeService::state($machine->id))
-                    && $current !== '' && version_compare(ltrim($current, 'v'), ltrim($version, 'v'), '<')) {
+                    && $current !== '' && $target!=='' && version_compare(ltrim($current, 'v'), ltrim($target, 'v'), '<')) {
                     $upgradeable[] = $machine->id;
                 }
             }
-            return $this->success(['version' => $version, 'upgradeable_machine_ids' => $upgradeable]);
+            return $this->success(['version' => $version,'probe_version'=>$probeVersion, 'upgradeable_machine_ids' => $upgradeable]);
         } catch (\Throwable $e) {
             return $this->fail([502, '暂时无法读取 GitHub 最新版本：' . $e->getMessage()]);
         }
@@ -116,13 +122,16 @@ class MachineController extends Controller
         ]);
         $machines = ServerMachine::whereIn('id', $params['ids'])->get()->keyBy('id');
         try {
-            $version = $this->latestNodeRelease();
+            $legacyVersion = $machines->contains(fn($m)=>!$m->probe_uuid)?$this->latestNodeRelease():'';
+            $probeVersion=\App\Services\ProbeService::settings()?->agent_version??'';
+            $version=$probeVersion?:$legacyVersion;
         } catch (\Throwable $e) {
             return $this->fail([502, '暂时无法读取 GitHub 最新版本：' . $e->getMessage()]);
         }
         $results = [];
         foreach ($params['ids'] as $id) {
             $machine = $machines->get($id);
+            $version=$machine?->probe_uuid?$probeVersion:$legacyVersion;
             $current = (string) Cache::get('dboard_machine_version:' . $id, '');
             if (!$machine) {
                 $results[$id] = ['state' => 'failed', 'message' => '服务器不存在'];
@@ -132,6 +141,7 @@ class MachineController extends Controller
                 $results[$id] = ['state' => 'failed', 'message' => '服务器离线或节点程序不支持后台升级，请先手动升级一次'];
                 continue;
             }
+            if ($version === '') { $results[$id]=['state'=>'failed','message'=>'尚未配置整合 Agent 版本'];continue; }
             if ($current === '' || version_compare(ltrim($current, 'v'), ltrim($version, 'v'), '>=')) {
                 $results[$id] = ['state' => 'skipped', 'message' => $current === '' ? '节点版本未知' : '已是最新版本'];
                 continue;
@@ -208,11 +218,16 @@ class MachineController extends Controller
             if (array_key_exists('is_active', $params)) {
                 $update['is_active'] = $params['is_active'];
             }
+            if ($machine->probe_uuid) {
+                $machine->fill($update);
+                \App\Services\ProbeService::sync($machine);
+            }
             $machine->update($update);
             return $this->success(true);
         }
 
         $machine = ServerMachine::create([
+            'probe_uuid' => \App\Services\ProbeService::enabled() ? (string)\Illuminate\Support\Str::uuid() : null,
             'sort' => ((int) ServerMachine::max('sort')) + 1,
             'name' => $params['name'],
             'notes' => $params['notes'] ?? null,
@@ -309,6 +324,7 @@ class MachineController extends Controller
 
         $machine = ServerMachine::find($params['id']);
         $machineId = $machine->id;
+        if ($machine->probe_uuid) { $machine->is_active=false; \App\Services\ProbeService::sync($machine); }
 
         // Detach nodes first (sets machine_id = null), then delete and notify
         Server::where('machine_id', $machineId)->update(['machine_id' => null]);
@@ -377,6 +393,7 @@ class MachineController extends Controller
 
     private function buildInstallCommand(Request $request, ServerMachine $machine): string
     {
+        if ($machine->probe_uuid || \App\Services\ProbeService::enabled()) { return \App\Services\ProbeService::installCommand($machine); }
         $panelUrl = rtrim((string) (admin_setting('app_url') ?: $request->getSchemeAndHttpHost()), '/');
         $installerUrl = 'https://raw.githubusercontent.com/shini74744/DBoard/main/node/install.sh';
 

@@ -1,0 +1,15 @@
+[Unit]
+Description=Panel probe connector
+After=network-online.target
+Wants=network-online.target
+[Service]
+User=www-data
+Group=www-data
+ExecStart=/opt/nezha/probe-connector --config /etc/nezha-connector/config.json
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target

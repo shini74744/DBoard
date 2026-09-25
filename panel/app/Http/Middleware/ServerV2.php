@@ -72,6 +72,9 @@ class ServerV2
             throw new ApiException('Machine not found or invalid token', 401);
         }
 
+        if ($machine->probe_endpoint && !$request->attributes->get('probe_sync')) {
+            throw new ApiException('Probe connector required',403);
+        }
         if (!$machine->is_active) {
             throw new ApiException('Machine is disabled', 403);
         }

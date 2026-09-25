@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const StatusPath = "/etc/DBoard-node/upgrade-status.json"
+var StatusPath = "/etc/DBoard-node/upgrade-status.json"
 
 type Status struct {
 	RequestID string `json:"request_id"`

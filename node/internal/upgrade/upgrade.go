@@ -15,7 +15,12 @@ var versionPattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9
 
 // Run runs the fixed, local upgrader in a separate systemd unit. The node
 // service can restart without terminating the upgrade process.
+var ManagedRun func(string, string) error
+
 func Run(requestID, version string) error {
+	if ManagedRun != nil {
+		return ManagedRun(requestID, version)
+	}
 	if !requestPattern.MatchString(requestID) || !versionPattern.MatchString(version) {
 		return errors.New("invalid upgrade request")
 	}

@@ -223,6 +223,20 @@ class NodeWorker
             return;
         }
 
+        if ($machine->probe_endpoint && !in_array($conn->getRemoteIp(),['127.0.0.1','::1'],true)) {
+            $conn->close(json_encode(['event'=>'error','data'=>['message'=>'probe connector required']]));return;
+        }
+        if ($machine->probe_uuid && ($params['probe_preflight']??'')==='1') {
+            $conn->close(json_encode(['event'=>'auth.success','data'=>['preflight'=>true]]));return;
+        }
+        if ($machine->probe_uuid && !empty($params['probe_endpoint'])) {
+            $endpoint=(string)($params['probe_endpoint']??'');
+            $migration=$machine->probe_migration;
+            $changes=['probe_endpoint'=>$endpoint];
+            if ($migration && ($migration['endpoint']??'')===$endpoint) {$migration['state']='completed';$migration['message']='';$migration['updated_at']=time();$changes['probe_migration']=$migration;}
+            elseif ($migration && ($migration['state']??'')==='completed') {$migration['state']='fallback';$migration['message']='目标地址暂不可达，已连接备用地址';$changes['probe_migration']=$migration;}
+            $machine->update($changes);
+        }
         $nodes = ServerService::getMachineNodes($machine);
         $conn->userRoutesCapable = ($params['user_routes'] ?? '') === '1';
 
@@ -259,6 +273,9 @@ class NodeWorker
             ],
         ]));
 
+        if ($machine->probe_uuid && ($machine->probe_migration['state']??'')==='pending') {
+            $conn->send(json_encode(['event'=>'probe.endpoint','data'=>$machine->probe_migration]));
+        }
         // 为每个节点推送完整同步
         foreach ($nodes as $node) {
             NodeEventHandlers::pushFullSync($conn, $node);
@@ -304,7 +321,12 @@ class NodeWorker
 
         // 机器连接：从消息中读取 node_id 来分派到具体节点
         if (!empty($conn->machineId)) {
-            if ($event === 'upgrade.result' && !empty($conn->machineId)) {
+            if ($event === 'probe.endpoint.result') {
+                $m=ServerMachine::find($conn->machineId);$job=$m?->probe_migration;$result=$msg['data']??[];
+                if($job && ($result['request_id']??'')===($job['request_id']??'')) {$job['state']=($result['state']??'')==='completed'?'completed':'failed';$job['message']=substr((string)($result['message']??''),0,300);$job['updated_at']=time();$m->update(['probe_migration'=>$job]);}
+                return;
+            }
+            if ($event === 'upgrade.result'  && !empty($conn->machineId)) {
                 $this->recordUpgradeResult((int) $conn->machineId, $msg['data'] ?? []);
                 return;
             }

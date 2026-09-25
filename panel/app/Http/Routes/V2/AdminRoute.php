@@ -36,6 +36,12 @@ class AdminRoute
             'prefix' => admin_setting('secure_path', admin_setting('frontend_admin_path', hash('crc32b', config('app.key')))),
             'middleware' => ['admin', 'log'],
         ], function ($router) {
+            $router->get('/probe/fetch', [\App\Http\Controllers\V2\Admin\ProbeController::class, 'fetch']);
+            $router->post('/probe/save', [\App\Http\Controllers\V2\Admin\ProbeController::class, 'save']);
+            $router->get('/probe/status', [\App\Http\Controllers\V2\Admin\ProbeController::class, 'status']);
+            $router->post('/probe/connector', [\App\Http\Controllers\V2\Admin\ProbeController::class, 'connector']);
+            $router->get('/probe/machines', [\App\Http\Controllers\V2\Admin\ProbeController::class, 'machines']);
+            $router->post('/probe/migrate', [\App\Http\Controllers\V2\Admin\ProbeController::class, 'migrate']);
             // Config
             $router->group([
                 'prefix' => 'config'
