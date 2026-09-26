@@ -53,8 +53,8 @@ class CheckServer extends Command
                 continue;
             }
 
-            $queued = UserTelegramNotifier::broadcast(
-                'telegram_user_notify_node_offline',
+            $queued = UserTelegramNotifier::nodeOffline(
+                $server,
                 "⚠️ 节点暂时离线：{$server->name}。我们正在处理，请稍后重试。"
             );
             if ($queued > 0) {
