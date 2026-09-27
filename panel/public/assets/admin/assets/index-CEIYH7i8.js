@@ -1,4 +1,4 @@
-// Embedded in the admin bundle. Mobile forms use an opaque, full-screen surface.
+// Embedded in the admin bundle. Mobile forms fill the visual viewport without keyboard spacers.
 const dboardMobileFormViewports=new WeakMap();
 function DBoardResizeDrawerViewport(node,event){
   const viewport=window.visualViewport;
@@ -26,19 +26,21 @@ function DBoardResizeDrawerViewport(node,event){
   if(state.keyboard&&!keyboard)state.editing=false;
   state.keyboard=keyboard;
   node.toggleAttribute("data-dboard-form-editing",state.editing);
-  // Keep the background across the layout viewport, even during keyboard animation.
-  node.style.height=window.innerHeight+"px";
+  // Size the content itself; keyboard space must never become white form padding.
+  const resized=state.height!==height;
+  state.height=height;
+  node.style.top=top+"px";
+  node.style.height=height+"px";
   node.style.maxHeight="none";
-  node.style.bottom="0px";
-  node.style.paddingTop=top+"px";
-  node.style.paddingBottom=Math.max(0,window.innerHeight-height-top)+"px";
-  if(typing){
-    const scroller=node.querySelector("[data-dboard-form-scroll]");
-    if(scroller&&scroller.contains(active)){
-      const field=active.getBoundingClientRect(),area=scroller.getBoundingClientRect();
-      if(field.bottom>area.bottom-16)scroller.scrollTop+=field.bottom-area.bottom+16;
-      else if(field.top<area.top+16)scroller.scrollTop-=area.top-field.top+16;
-    }
+  node.style.bottom="auto";
+  node.style.paddingTop="0px";
+  node.style.paddingBottom="0px";
+  if(typing&&(resized||event?.type==="focusin")){
+    const field=active.getBoundingClientRect(),area=node.getBoundingClientRect();
+    const header=node.querySelector("[data-dboard-form-header]");
+    const visibleTop=Math.max(area.top,header?.getBoundingClientRect().bottom||area.top);
+    if(field.bottom>area.bottom-16)node.scrollTop+=field.bottom-area.bottom+16;
+    else if(field.top<visibleTop+16)node.scrollTop-=visibleTop-field.top+16;
   }
 }
 function DBoardFinishFormInput(){

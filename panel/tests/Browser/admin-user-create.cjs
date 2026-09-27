@@ -49,18 +49,21 @@ async function checkKeyboardViewport(page, dialog, translated) {
     if(height===500)await input.focus();
     await page.evaluate(({height,top,event})=>window.setTestViewport(height,top,event),{height,top,event});
     const box=await dialog.boundingBox();
-    assert.ok(Math.abs(box.y)<=1 && Math.abs(box.height-900)<=1,'Opaque form covers the whole layout viewport, including below keyboard');
+    assert.ok(Math.abs(box.y-top)<=1 && Math.abs(box.height-height)<=1,'Form fills the visible viewport directly');
+    assert.equal(await dialog.evaluate(n=>getComputedStyle(n).paddingBottom),'0px','No keyboard spacer remains in the form');
+    assert.equal(await dialog.evaluate(n=>getComputedStyle(n).paddingTop),'0px');
     const surface=await dialog.evaluate(node=>({color:getComputedStyle(node).backgroundColor,opacity:getComputedStyle(node).opacity}));
     assert.notEqual(surface.color,'rgba(0, 0, 0, 0)');
     assert.equal(surface.opacity,'1');
-    const body=dialog.locator('[data-dboard-form-scroll]');
+    const body=dialog;
     const area=await body.boundingBox();
     assert.ok(area.height>150,'Input keeps useful reading space');
     if(height===500){
       assert.equal(await confirm.isVisible(),false,'Action bar does not cover input while typing');
       assert.equal(await done.isVisible(),true);
       const field=await input.boundingBox();
-      assert.ok(field.y>=area.y && field.y+field.height<=area.y+area.height,'Focused input stays visible');
+      const header=await dialog.locator('[data-dboard-form-header]').boundingBox();
+      assert.ok(field.y>=header.y+header.height && field.y+field.height<=area.y+area.height,'Focused input stays below the header and above keyboard');
       assert.ok(Math.abs(area.y+area.height-height-top)<=2,'Form uses the space freed by hiding actions');
     }else{
       assert.equal(await confirm.isVisible(),true,'Actions return after keyboard dismissal even if the input retains focus');
@@ -76,6 +79,31 @@ async function checkKeyboardViewport(page, dialog, translated) {
   await done.click();
   await confirm.waitFor({state:'visible'});
   assert.equal(await done.isVisible(),false,'Explicit done restores actions without submitting');
+  await page.evaluate(()=>window.setTestViewport(null,null,'resize'));
+
+
+  // Exercise a native touch gesture, not just setting scrollTop or locator visibility.
+  await dialog.getByLabel('完整邮箱（自动识别）',{exact:true}).focus();
+  await page.evaluate(()=>window.setTestViewport(420,0,'resize'));
+  const scroller=dialog;
+  assert.equal(await dialog.locator('[data-dboard-form-scroll]').evaluate(n=>getComputedStyle(n).overflowY),'visible','Form contents are not clipped by a second scroll container');
+  const initialScroll=await scroller.evaluate(n=>n.scrollTop);
+  const client=await page.context().newCDPSession(page);
+  await client.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:345,y:390}]});
+  for(let y=370;y>=150;y-=20){
+    await client.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:345,y}]});
+    await page.waitForTimeout(20);
+  }
+  await client.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await page.waitForTimeout(300);
+  assert.ok(await scroller.evaluate(n=>n.scrollTop)>initialScroll,'Native upward swipe reaches lower fields');
+  const end=await scroller.boundingBox();
+  const plan=await dialog.getByRole('combobox').boundingBox();
+  assert.ok(plan.y>=end.y&&plan.y+plan.height<=end.y+end.height,'Last field is unobscured after touch scroll');
+  assert.ok(end.y+end.height-plan.y-plan.height<=20,'Only normal spacing follows the last field, without a white bottom block');
+  assert.equal(await confirm.isVisible(),false);
+  if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'mobile-form-scrolled-'+translated+'.png'),clip:{x:0,y:0,width:390,height:420}});
+  await client.detach();
   await page.evaluate(()=>window.setTestViewport(null,null,'resize'));
 
   // Android browsers may shrink the layout viewport as well as the visual viewport.

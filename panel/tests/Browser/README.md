@@ -23,3 +23,7 @@ NODE_PATH=/tmp/dboard-ui-deps/node_modules node panel/tests/Browser/admin-user-c
 移动端还模拟键盘开关和 visualViewport 平移（包括失焦后收起），校验弹窗贴合可见区域底部、按钮可见、表单可滚动和高度恢复。几何测试不等同于真实手机键盘验证。适配源码位于 resources/js/dboard-drawer-viewport.js，嵌入 bundle；更新后台包时同步保留适配、事件清理及 dboard-admin-overrides.css 中的抽屉样式。
 
 手机共享编辑表单采用实心全屏布局。输入期间隐藏操作栏，顶部“完成输入”收起键盘；操作栏恢复后两个按钮并排显示。新增回归检查完整布局视口的遮挡、输入项可见性、键盘关闭但仍保留焦点、完成输入按钮，以及 Android 同时缩小布局视口的行为。键盘阶段不再要求操作按钮保持可见。
+
+手机表单不再用 paddingBottom 给键盘占位，直接使用 visualViewport 的高度与位置；背景遮罩独立覆盖页面。测试检查内边距为零，并通过 Chromium 原生触摸事件向上滑到最后的套餐字段，验证没有固定白块遮挡或额外底部占位。16px 输入字号避免手机浏览器聚焦时自动缩放。
+
+表单只保留外层一个滚动容器，标题保持顶部可见，字段容器 overflow:visible，操作栏顺着内容排列。焦点滚动仅在聚焦或视口高度改变时执行，不在用户平移时强制拉回。
