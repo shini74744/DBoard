@@ -19,3 +19,5 @@ NODE_PATH=/tmp/dboard-ui-deps/node_modules node panel/tests/Browser/admin-user-c
 当前仓库存放编译后的后台资源。更新上游后台包时，应保留或在源码中重做上述容器处理，以及 i18next 语言变更同步 HTML `lang` 的处理，并重新运行此测试。
 
 完整邮箱识别框的组件源码位于 `panel/resources/js/dboard-email-autofill-component.js`，嵌入编译后台的创建用户表单。修改时保持源码与 bundle 同步。回归同时检查完整邮箱拆分、mailto 前缀、首尾空格、无效输入不覆盖原值，以及从批量切回单用户时清理批量参数。
+
+移动端还模拟键盘开关和 visualViewport 平移（包括失焦后收起），校验弹窗贴合可见区域底部、按钮可见、表单可滚动和高度恢复。几何测试不等同于真实手机键盘验证。适配源码位于 resources/js/dboard-drawer-viewport.js，嵌入 bundle；更新后台包时同步保留适配、事件清理及 dboard-admin-overrides.css 中的抽屉样式。

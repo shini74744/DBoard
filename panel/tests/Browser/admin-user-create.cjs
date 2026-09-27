@@ -39,6 +39,34 @@ async function translate(page) {
   });
 }
 
+
+async function checkKeyboardViewport(page, dialog, translated) {
+  await page.waitForTimeout(600); // Wait for Vaul's opening animation.
+  const original = await dialog.boundingBox();
+  await dialog.locator('input[name="email_prefix"]').focus();
+  for (const [height, top, event] of [[500, 0, 'resize'], [500, 60, 'scroll'], [900, 0, 'resize'], [820, 0, 'resize'], [500, 0, 'resize'], [900, 0, 'resize']]) {
+    // Keyboard dismissal may happen after the field has lost focus.
+    if (height === 900) await dialog.locator('input[name="email_prefix"]').blur();
+    await page.evaluate(({height, top, event}) => window.setTestViewport(height, top, event), {height, top, event});
+    const box = await dialog.boundingBox();
+    assert.ok(Math.abs(box.y + box.height - height - top) <= 2, 'Drawer follows visible viewport bottom without a blank gap');
+    assert.ok(box.y >= top, 'Header stays within visible viewport');
+    const footer = await dialog.getByRole('button', { name: '确认', exact: true }).boundingBox();
+    assert.ok(footer.y >= top && footer.y + footer.height <= height + top, 'Submit remains above keyboard');
+    const canScroll = await dialog.evaluate((node, constrained) => [...node.querySelectorAll('*')].some(child => {
+      return getComputedStyle(child).overflowY === 'auto' && child.clientHeight > 0 && (!constrained || child.scrollHeight > child.clientHeight);
+    }), height === 500);
+    assert.ok(canScroll, 'Form retains a usable scroll region');
+    assert.equal(await dialog.evaluate(node => getComputedStyle(node, '::after').content), 'none');
+    if (height === 900) assert.ok(Math.abs(box.height - original.height) <= 2, 'Keyboard dismissal restores natural height');
+    if (process.env.SCREENSHOT_DIR && top === 60) await page.screenshot({
+      path: path.join(process.env.SCREENSHOT_DIR, 'drawer-keyboard-' + translated + '.png'),
+      clip: {x: 0, y: top, width: 390, height},
+    });
+  }
+  await page.evaluate(() => window.setTestViewport(null, null, 'resize'));
+}
+
 (async () => {
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
   try {
@@ -52,6 +80,16 @@ async function translate(page) {
       await page.addInitScript(() => {
         localStorage.setItem('XBOARD_ACCESS_TOKEN', JSON.stringify({ value: 'fixture', expire: Date.now() + 3600000 }));
         localStorage.setItem('i18nextLng', 'zh-CN');
+        let viewportHeight = null, viewportTop = null;
+        const actualHeight = Object.getOwnPropertyDescriptor(VisualViewport.prototype, 'height').get;
+        const actualTop = Object.getOwnPropertyDescriptor(VisualViewport.prototype, 'offsetTop').get;
+        Object.defineProperty(window.visualViewport, 'height', { get: () => viewportHeight ?? actualHeight.call(window.visualViewport) });
+        Object.defineProperty(window.visualViewport, 'offsetTop', { get: () => viewportTop ?? actualTop.call(window.visualViewport) });
+        window.setTestViewport = (height, top, event) => {
+          viewportHeight = height; viewportTop = top;
+          window.visualViewport.dispatchEvent(new Event(event));
+        };
+
       });
       await page.route('**/*', async route => {
         const url = new URL(route.request().url());
@@ -104,6 +142,7 @@ async function translate(page) {
           }
           if (process.env.SCREENSHOT_DIR && round === 0) await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'email-autofill-' + width + '-' + translated + '.png') });
           if (translated) assert.ok(await translate(page) > 0);
+          if (width < 600 && round === 0) await checkKeyboardViewport(page, dialog, translated);
           // Replace the selected value after translation and submit a plan-bearing package.
           await dialog.getByRole('combobox').click();
           await page.getByRole('option', { name: '测试套餐', exact: true }).click();
