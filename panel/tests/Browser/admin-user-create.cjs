@@ -40,31 +40,57 @@ async function translate(page) {
 }
 
 
+
 async function checkKeyboardViewport(page, dialog, translated) {
-  await page.waitForTimeout(600); // Wait for Vaul's opening animation.
-  const original = await dialog.boundingBox();
-  await dialog.locator('input[name="email_prefix"]').focus();
-  for (const [height, top, event] of [[500, 0, 'resize'], [500, 60, 'scroll'], [900, 0, 'resize'], [820, 0, 'resize'], [500, 0, 'resize'], [900, 0, 'resize']]) {
-    // Keyboard dismissal may happen after the field has lost focus.
-    if (height === 900) await dialog.locator('input[name="email_prefix"]').blur();
-    await page.evaluate(({height, top, event}) => window.setTestViewport(height, top, event), {height, top, event});
-    const box = await dialog.boundingBox();
-    assert.ok(Math.abs(box.y + box.height - height - top) <= 2, 'Drawer follows visible viewport bottom without a blank gap');
-    assert.ok(box.y >= top, 'Header stays within visible viewport');
-    const footer = await dialog.getByRole('button', { name: '确认', exact: true }).boundingBox();
-    assert.ok(footer.y >= top && footer.y + footer.height <= height + top, 'Submit remains above keyboard');
-    const canScroll = await dialog.evaluate((node, constrained) => [...node.querySelectorAll('*')].some(child => {
-      return getComputedStyle(child).overflowY === 'auto' && child.clientHeight > 0 && (!constrained || child.scrollHeight > child.clientHeight);
-    }), height === 500);
-    assert.ok(canScroll, 'Form retains a usable scroll region');
-    assert.equal(await dialog.evaluate(node => getComputedStyle(node, '::after').content), 'none');
-    if (height === 900) assert.ok(Math.abs(box.height - original.height) <= 2, 'Keyboard dismissal restores natural height');
-    if (process.env.SCREENSHOT_DIR && top === 60) await page.screenshot({
-      path: path.join(process.env.SCREENSHOT_DIR, 'drawer-keyboard-' + translated + '.png'),
-      clip: {x: 0, y: top, width: 390, height},
-    });
+  const input=dialog.locator('input[name="email_prefix"]');
+  const confirm=dialog.getByRole('button', {name:'确认',exact:true});
+  const done=dialog.getByRole('button', {name:'完成输入',exact:true});
+  for (const [height,top,event] of [[500,0,'resize'],[500,60,'scroll'],[900,0,'resize'],[820,0,'resize'],[500,0,'resize'],[900,0,'resize']]) {
+    if(height===500)await input.focus();
+    await page.evaluate(({height,top,event})=>window.setTestViewport(height,top,event),{height,top,event});
+    const box=await dialog.boundingBox();
+    assert.ok(Math.abs(box.y)<=1 && Math.abs(box.height-900)<=1,'Opaque form covers the whole layout viewport, including below keyboard');
+    const surface=await dialog.evaluate(node=>({color:getComputedStyle(node).backgroundColor,opacity:getComputedStyle(node).opacity}));
+    assert.notEqual(surface.color,'rgba(0, 0, 0, 0)');
+    assert.equal(surface.opacity,'1');
+    const body=dialog.locator('[data-dboard-form-scroll]');
+    const area=await body.boundingBox();
+    assert.ok(area.height>150,'Input keeps useful reading space');
+    if(height===500){
+      assert.equal(await confirm.isVisible(),false,'Action bar does not cover input while typing');
+      assert.equal(await done.isVisible(),true);
+      const field=await input.boundingBox();
+      assert.ok(field.y>=area.y && field.y+field.height<=area.y+area.height,'Focused input stays visible');
+      assert.ok(Math.abs(area.y+area.height-height-top)<=2,'Form uses the space freed by hiding actions');
+    }else{
+      assert.equal(await confirm.isVisible(),true,'Actions return after keyboard dismissal even if the input retains focus');
+      const footer=await confirm.boundingBox();
+      assert.ok(footer.y+footer.height<=height+top,'Actions stay in the visible area');
+    }
+    if(process.env.SCREENSHOT_DIR&&top===60)await page.screenshot({
+      path:path.join(process.env.SCREENSHOT_DIR,'mobile-form-keyboard-'+translated+'.png')});
   }
-  await page.evaluate(() => window.setTestViewport(null, null, 'resize'));
+  await input.blur();
+  await input.focus();
+  assert.equal(await confirm.isVisible(),false);
+  await done.click();
+  await confirm.waitFor({state:'visible'});
+  assert.equal(await done.isVisible(),false,'Explicit done restores actions without submitting');
+  await page.evaluate(()=>window.setTestViewport(null,null,'resize'));
+
+  // Android browsers may shrink the layout viewport as well as the visual viewport.
+  await input.focus();
+  await page.setViewportSize({width:390,height:500});
+  await page.waitForFunction(()=>document.querySelector('[data-dboard-mobile-form]')?.style.height==='500px');
+  assert.equal(await confirm.isVisible(),false);
+  let layoutBox=await dialog.boundingBox();
+  assert.ok(Math.abs(layoutBox.height-500)<=1);
+  await page.setViewportSize({width:390,height:900});
+  await page.waitForFunction(()=>document.querySelector('[data-dboard-mobile-form]')?.style.height==='900px');
+  await confirm.waitFor({state:'visible'});
+  assert.ok(Math.abs((await dialog.boundingBox()).height-900)<=1);
+
+  if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'mobile-form-finished-'+translated+'.png')});
 }
 
 (async () => {

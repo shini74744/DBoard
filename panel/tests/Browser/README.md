@@ -21,3 +21,5 @@ NODE_PATH=/tmp/dboard-ui-deps/node_modules node panel/tests/Browser/admin-user-c
 完整邮箱识别框的组件源码位于 `panel/resources/js/dboard-email-autofill-component.js`，嵌入编译后台的创建用户表单。修改时保持源码与 bundle 同步。回归同时检查完整邮箱拆分、mailto 前缀、首尾空格、无效输入不覆盖原值，以及从批量切回单用户时清理批量参数。
 
 移动端还模拟键盘开关和 visualViewport 平移（包括失焦后收起），校验弹窗贴合可见区域底部、按钮可见、表单可滚动和高度恢复。几何测试不等同于真实手机键盘验证。适配源码位于 resources/js/dboard-drawer-viewport.js，嵌入 bundle；更新后台包时同步保留适配、事件清理及 dboard-admin-overrides.css 中的抽屉样式。
+
+手机共享编辑表单采用实心全屏布局。输入期间隐藏操作栏，顶部“完成输入”收起键盘；操作栏恢复后两个按钮并排显示。新增回归检查完整布局视口的遮挡、输入项可见性、键盘关闭但仍保留焦点、完成输入按钮，以及 Android 同时缩小布局视口的行为。键盘阶段不再要求操作按钮保持可见。

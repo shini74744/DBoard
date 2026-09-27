@@ -136,3 +136,28 @@ html.dboard-marketing-open :is(#root, #content) { overflow: hidden !important; }
 [data-dboard-viewport-drawer][data-vaul-drawer]::after { content: none; display: none; }
 [data-dboard-viewport-drawer] { overflow: hidden; }
 [data-dboard-viewport-drawer] > :last-child { padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px)); }
+
+/* Mobile forms cover the page; editing reserves space for the keyboard, not actions. */
+[data-dboard-mobile-form][data-vaul-drawer] {
+  top: 0 !important; bottom: 0 !important; margin: 0 !important;
+  max-height: none; border-radius: 0; box-sizing: border-box;
+  background: hsl(var(--background)); opacity: 1;
+  transform: none !important; animation: none !important; transition: none !important;
+}
+[data-dboard-mobile-form] > :first-child { display: none; }
+[data-dboard-mobile-form] > [data-dboard-form-header] {
+  position: relative; padding-top: max(1rem, env(safe-area-inset-top, 0px));
+  padding-right: 7rem; min-height: 4rem;
+}
+.dboard-finish-form-input {
+  display: none; position: absolute; right: 1rem; top: max(.6rem, env(safe-area-inset-top, 0px));
+  min-height: 44px; padding: .5rem .75rem; border-radius: .5rem;
+  color: hsl(var(--primary)); background: hsl(var(--muted)); font-size: .875rem;
+}
+[data-dboard-form-editing] .dboard-finish-form-input { display: inline-flex; align-items: center; }
+[data-dboard-form-editing] > [data-dboard-form-footer] { display: none; }
+[data-dboard-form-footer] > div { display: grid; grid-template-columns: 1fr 1fr; }
+[data-dboard-form-footer] > div > div { grid-column: 1 / -1; }
+[data-dboard-mobile-form] > [data-dboard-form-scroll] {
+  overscroll-behavior: contain; scroll-padding-block: 1rem;
+}
