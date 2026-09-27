@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-dboard-theme="{{ $brand_theme }}">
+<html lang="zh-CN" data-dboard-theme="{{ $brand_theme }}">
 
 <head>
   <meta charset="UTF-8" />
