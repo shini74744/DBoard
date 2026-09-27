@@ -87,8 +87,22 @@ async function translate(page) {
           await page.getByRole('button', { name: '创建用户', exact: true }).click();
           const dialog = page.getByRole('dialog');
           await dialog.waitFor();
-          await page.locator('input[name="email_prefix"]').fill(round === 1 ? '' : 'fixture');
-          await page.locator('input[name="email_suffix"]').fill('example.invalid');
+          const fullEmail = dialog.getByLabel('完整邮箱（自动识别）', { exact: true });
+          assert.equal(await fullEmail.inputValue(), '', 'Helper resets when reopened');
+          if (round === 1) {
+            await page.locator('input[name="email_suffix"]').fill('example.invalid');
+          } else {
+            if (round === 2) await page.locator('input[name="generate_count"]').fill('5');
+            await fullEmail.fill(round === 2 ? ' mailto:fixture+tag@example.invalid ' : 'fixture@example.invalid');
+            assert.equal(await page.locator('input[name="email_prefix"]').inputValue(), round === 2 ? 'fixture+tag' : 'fixture');
+            assert.equal(await page.locator('input[name="email_suffix"]').inputValue(), 'example.invalid');
+            await fullEmail.fill('not-an-email');
+            await fullEmail.blur();
+            assert.equal(await fullEmail.getAttribute('aria-invalid'), 'true');
+            assert.equal(await page.locator('input[name="email_suffix"]').inputValue(), 'example.invalid', 'Invalid input never overwrites the form');
+            await fullEmail.fill(round === 2 ? 'mailto:fixture+tag@example.invalid' : 'fixture@example.invalid');
+          }
+          if (process.env.SCREENSHOT_DIR && round === 0) await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, 'email-autofill-' + width + '-' + translated + '.png') });
           if (translated) assert.ok(await translate(page) > 0);
           // Replace the selected value after translation and submit a plan-bearing package.
           await dialog.getByRole('combobox').click();
@@ -102,6 +116,12 @@ async function translate(page) {
           await page.getByText('created-2@example.invalid', { exact: true }).first().waitFor();
           assert.equal(submissions.length, round + 1, 'No duplicate create requests');
           assert.equal(submissions[round].plan_id, 1);
+          assert.equal(submissions[round].email_suffix, 'example.invalid');
+          if (round !== 1) {
+            assert.equal(submissions[round].email_prefix, round === 2 ? 'fixture+tag' : 'fixture');
+            assert.ok(!submissions[round].generate_count, 'Full email selects single-user creation');
+            assert.equal(submissions[round].download_csv, false);
+          }
           assert.ok(!(await page.locator('body').innerText()).includes('removeChild'));
           assert.ok(!(await page.locator('body').innerText()).includes('Something went wrong'));
         }

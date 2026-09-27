@@ -17,3 +17,5 @@ NODE_PATH=/tmp/dboard-ui-deps/node_modules node panel/tests/Browser/admin-user-c
 此前裸文字经 Select Portal 插入触发器，翻译后卸载会发生 `removeChild`；提交按钮在裸文字前插入加载图标时也会发生 `insertBefore`。选中项、占位文字和按钮文字均使用稳定的 React `span` 容器。不要通过改写全局 DOM 删除/插入方法吞掉异常。
 
 当前仓库存放编译后的后台资源。更新上游后台包时，应保留或在源码中重做上述容器处理，以及 i18next 语言变更同步 HTML `lang` 的处理，并重新运行此测试。
+
+完整邮箱识别框的组件源码位于 `panel/resources/js/dboard-email-autofill-component.js`，嵌入编译后台的创建用户表单。修改时保持源码与 bundle 同步。回归同时检查完整邮箱拆分、mailto 前缀、首尾空格、无效输入不覆盖原值，以及从批量切回单用户时清理批量参数。
