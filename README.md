@@ -9,10 +9,12 @@ DBoard 是基于 XBoard 持续二次开发的面板项目，配套用户端、**
 
 两种方式共用同一套持久数据结构，因此可以在独立版与 Docker 版之间迁移。
 
-## 文档导航（2026-09-25 更新）
+## 文档导航（2026-09-27 核对）
 
 | 内容 | 阅读入口 |
 | --- | --- |
+| 从第一步开始，每个安装选项与默认值 | [安装选择与提醒](docs/installation-choices.md) |
+| Docker 默认、1Panel、host、拆分与更新 | [Docker 分方式安装](docs/docker-installation.md) |
 | 用户注册、购买、新开/续费、订单与订阅 | [用户端使用指南](docs/user-guide.md) |
 | 管理后台操作、认证、配置下发、计费处理 | [后台处理流程](docs/admin-workflows.md) |
 | 面板、用户端、DUI、探针、Connector、Agent 逐步安装 | [完整安装指南](docs/installation.md) |
@@ -40,21 +42,15 @@ DBoard/
 
 根安装器负责面板和可选 DUI；不会自动安装整套探针。需要服务器通过探针管理时，请继续完成[完整安装指南](docs/installation.md)中的探针与 Connector 步骤。
 
-新机器推荐直接执行交互式安装器：
+新机器先按[第一步准备](docs/installation-choices.md)登录面板服务器并准备 curl，然后以 root 下载和运行：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/install.sh)
+curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/install.sh -o /root/dboard-install.sh
+bash /root/dboard-install.sh --guide
+bash /root/dboard-install.sh
 ```
 
-安装器会引导选择：
-
-```text
-1. 独立版安装
-2. Docker 版安装
-3. 是否安装 DUI-Gateway
-4. 面板初始化
-5. 服务启动与状态检查
-```
+安装器提供独立版、Docker、仅 DUI、状态四种入口。新装默认直接使用 SQLite 和预设 Redis；需要选择已有数据库时传入 `--database interactive`。先运行 `bash /root/dboard-install.sh --guide` 可只读查看选择说明。逐个问题和失败处理见[安装选择与提醒](docs/installation-choices.md)。
 
 > 安装脚本不会把数据库、密钥或运行日志提交到 GitHub。
 
@@ -208,7 +204,7 @@ journalctl -u dboard-scheduler -f
 - Linux x86_64 / arm64
 - Docker Engine
 - Docker Compose V2
-- 至少开放面板入口端口（默认 7001）
+- 配置可达的 HTTPS 反代；默认 Compose 会向全部宿主接口发布 7001，需按部署网络限制直连范围
 
 官方项目镜像：
 
@@ -271,7 +267,7 @@ php artisan xboard:install
 
 这是为了兼容现有升级逻辑和上游生态，并不代表运行的是上游 XBoard。
 
-初始化过程可选择：
+通过根安装器默认预选 SQLite 与 Redis；传入 `--database interactive` 或手工运行时才出现相关问题。初始化命令支持：
 
 - SQLite（推荐，最容易备份与迁移）
 - MySQL
@@ -484,7 +480,9 @@ DBoard 保留并遵循所使用上游项目及依赖的原始许可证。
 推荐入口：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/install.sh)
+curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/install.sh -o /root/dboard-install.sh
+bash /root/dboard-install.sh --guide
+bash /root/dboard-install.sh
 ```
 
 主菜单：
@@ -500,28 +498,28 @@ bash <(curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/insta
 安装器的核心行为：
 
 - 自动创建并复用 `/opt/dboard/shared`。
-- 已检测到 `INSTALLED=1|true` 时，只做升级和 migration，不重新初始化或清空数据库。
+- 已检测到 `INSTALLED=1|true` 时，复用数据并进入更新路径；Docker 的迁移在容器入口中尝试，失败可能仍启动，必须检查日志与迁移状态。
 - 独立版切换到 Docker 版时，会停用 native systemd 服务，防止重启后抢占端口。
 - Docker 版切换到独立版时，会先停止 DBoard Compose，再启动 native 服务。
 - 两种模式切换时自动调整 `.env` 中的 Redis 地址，但 Redis RDB 与 SQLite 仍保留在同一数据目录。
-- Docker 版优先拉取 GHCR 镜像；镜像不可用时自动从 GitHub main 构建。
-- DUI-Gateway 默认不安装，交互时由用户选择。
-- 安装器不会自动删除 `/opt/dboard/shared`。
+- Docker 版优先拉取 GHCR 镜像；镜像不可用时自动从 GitHub main 构建。拉取成功不保证镜像已经包含最新提交，应核对 Actions 和镜像 revision。
+- DUI-Gateway 默认不安装，交互时由用户选择。根安装器的 DUI 入口执行 install，会重写配置；已有网关普通升级使用 gateway/install.sh upgrade。
+- 安装器不会自动删除 `/opt/dboard/shared`，但没有整套事务回滚；更新前仍需备份。安装步骤会给出阶段提示，失败后先检查当前服务与目录。
 
 常用非交互参数：
 
 ```bash
 # 独立版 + SQLite
-bash install.sh --mode native --database sqlite --admin admin@example.com --no-gateway --yes
+bash /root/dboard-install.sh --mode native --database sqlite --admin admin@example.com --no-gateway --yes
 
 # Docker 版 + SQLite
-bash install.sh --mode docker --database sqlite --admin admin@example.com --no-gateway --yes
+bash /root/dboard-install.sh --mode docker --database sqlite --admin admin@example.com --no-gateway --yes
 
 # 单独安装 Gateway
-bash install.sh --mode gateway --gateway-backend http://127.0.0.1:7001 --gateway-port 3939 --yes
+bash /root/dboard-install.sh --mode gateway --gateway-backend http://127.0.0.1:7001 --gateway-port 3939 --yes
 
 # 查看状态
-bash install.sh --mode status
+bash /root/dboard-install.sh --mode status
 ```
 
-如果需要 MySQL/PostgreSQL 或自定义外部 Redis，建议使用交互安装或手工部署；官方自动化路径以 SQLite + Redis 8.4.2 为基准。
+MySQL/PostgreSQL 使用 --database interactive 并提前准备数据库、账号和 PHP 驱动；自定义外部 Redis 应按手工部署维护，根安装器会使用并在更新时写回模式默认 Redis 配置。自动化路径以 SQLite + Redis 8.4.2 为基准。

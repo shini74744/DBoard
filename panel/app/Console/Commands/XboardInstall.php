@@ -66,14 +66,17 @@ class XboardInstall extends Command
             ) {
                 $securePath = admin_setting('secure_path', admin_setting('frontend_admin_path', hash('crc32b', config('app.key'))));
                 $this->info("访问 http(s)://你的站点/{$securePath} 进入管理面板，你可以在用户中心修改你的密码。");
-                $this->warn("如需重新安装请清空目录下 .env 文件的内容（Docker安装方式不可以删除此文件）");
-                $this->warn("快捷清空.env命令：");
-                note('rm .env && touch .env');
+                $this->warn("当前已安装。升级请使用 xboard:update；不要清空 .env、APP_KEY 或业务数据库。");
+                note('重新部署或恢复数据前先备份，按 docs/operations.md 核对数据目录与密钥。');
                 return;
             }
             if (is_dir(base_path() . '/.env')) {
                 $this->error('😔：安装失败，Docker环境下安装请保留空的 .env 文件');
                 return;
+            }
+            $this->info("[初始化 1/4] 配置数据库；已有业务遇到清空提示时请退出并核对数据目录。");
+            if ($enableSqlite) {
+                $this->info("安装器已预选 SQLite，本次不再询问数据库类型。");
             }
             // 选择数据库类型
             $dbType = $enableSqlite ? 'sqlite' : select(
@@ -98,6 +101,7 @@ class XboardInstall extends Command
                 return; // 用户选择退出安装
             }
             $envConfig['APP_KEY'] = 'base64:' . base64_encode(Encrypter::generateKey('AES-256-CBC'));
+            $this->info("[初始化 2/4] 检查 Redis；安装器预设与手工输入按当前运行环境区分。");
             $isReidsValid = false;
             while (!$isReidsValid) {
                 // Docker can use the embedded Unix-socket Redis. Native installers
@@ -152,6 +156,7 @@ class XboardInstall extends Command
                 abort(500, '复制环境文件失败，请检查目录权限');
             }
             ;
+            $this->info("[初始化 3/4] 设置管理员邮箱；初始密码会自动生成并在安装结束时显示。");
             $email = !empty($adminAccount) ? $adminAccount : text(
                 label: '请输入管理员账号',
                 default: 'admin@demo.com',
@@ -180,7 +185,7 @@ class XboardInstall extends Command
 
             $this->call('config:cache');
             Artisan::call('cache:clear');
-            $this->info('正在导入数据库请稍等...');
+            $this->info('[初始化 4/4] 导入数据库并创建管理员，请等待结果...');
             Artisan::call("migrate", ['--force' => true]);
             $this->info(Artisan::output());
             $this->info('数据库导入完成');
@@ -198,6 +203,7 @@ class XboardInstall extends Command
 
             $defaultSecurePath = hash('crc32b', config('app.key'));
             $this->info("访问 http(s)://你的站点/{$defaultSecurePath} 进入管理面板，你可以在用户中心修改你的密码。");
+            $this->info("请保存凭据并通过 HTTPS 登录修改初始密码；用户端、探针与 Connector 需继续部署。");
             $envConfig['INSTALLED'] = true;
             $this->saveToEnv($envConfig);
             foreach (array_keys($installDriverOverrides) as $key) {

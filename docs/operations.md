@@ -1,6 +1,6 @@
 # 升级、备份、地址迁移与排错
 
-适用基线：2026-09-25 main。安装见[完整步骤](installation.md)，功能行为见[后台处理流程](admin-workflows.md)。
+核对日期：2026-09-27，功能基线 main / e06a583。安装见[完整步骤](installation.md)，功能行为见[后台处理流程](admin-workflows.md)。
 
 ## 1. 先判断需要更新哪一部分
 
@@ -26,6 +26,8 @@ main 是源码；Release 附件是某次发布的构建产物，两者不会自�
 6. 更新用户端 dist/，保留生产 runtime-config.js 与站点定制资源。
 7. 如果涉及探针后台协议，同步更新 probe-dashboard/Connector。
 8. 检查后台、购买报价、订单、节点通道和监控，再结束维护。
+
+开始前可先读[安装选择与失败处理](installation-choices.md)。根安装器会复用模式默认 Redis 配置，并不适用于不经调整的外部 Redis；自定义 Docker Compose 需走[手工更新](docker-installation.md)以免模板覆盖。DUI 的 install 会覆盖配置和 AES key，普通程序升级使用 upgrade。
 
 独立版可重新运行根安装器选择「安装/更新 独立版」。安装器检测到已初始化数据后走更新路径，但不代替业务备份，也不自动更新探针所有组件。
 
@@ -182,6 +184,8 @@ MySQL/PostgreSQL 使用其一致性备份方案，不能套用上面的 SQLite �
 
 | 现象 | 排查顺序 |
 | --- | --- |
+| Docker 容器 Up 但数据库异常 | 检查入口日志中的 xboard:update failed，再检查 migrate:status；启动成功不等于迁移成功 |
+| 手机添加用户后报错或旧布局未更新 | 刷新后台资源，检查实际 JS 版本；先搜索刚创建的邮箱避免重复添加。手机键盘/滚动需在目标浏览器验证 |
 | 首页打开，但无机器 | 先区分访客与管理员；默认机器对访客隐藏，再看 Agent 监控是否在线 |
 | 手动 /dashboard 返回 404 | 新版预期行为；从 DBoard 探针管理进入 |
 | 从 DBoard 也进不去 | 浏览器弹窗拦截 → 探针启用/地址/对接密钥 → 服务端版本 → 一次性授权是否过期 |

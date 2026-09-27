@@ -29,6 +29,75 @@ info() { echo -e "${C_GREEN}[DBoard]${C_RESET} $*"; }
 warn() { echo -e "${C_YELLOW}[WARN]${C_RESET} $*" >&2; }
 die() { echo -e "${C_RED}[ERROR]${C_RESET} $*" >&2; exit 1; }
 
+CURRENT_STAGE="选择安装方式"
+
+stage() {
+  CURRENT_STAGE="$*"
+  info "[$CURRENT_STAGE]" >&2
+}
+
+installation_guide() {
+  cat <<'EOF'
+DBoard 安装前引导（只读，不会安装或修改服务）
+  1 独立版：Ubuntu/Debian + systemd；完整探针对接优先按此路径。
+  2 Docker：面板容器；默认发布 7001 到全部接口，需配置 HTTPS/端口边界。
+  3 仅 DUI：首次安装或重新配置网关；已有 DUI 升级使用 gateway/install.sh upgrade。
+  4 状态：只读查看面板/DUI；探针与实际代理连接另行验收。
+  0 退出。
+
+新装默认 SQLite + 内置/本机 Redis，只会继续询问管理员邮箱。
+选择已有 MySQL/PostgreSQL：启动时加 --database interactive。
+--yes 采用确认项默认值；不会自动完成外部数据库问题，新装需 --admin。
+更新应使用原数据目录，已有系统先备份；切换模式会停原服务。
+根安装器不部署 HTTPS、独立用户端、探针后台、Connector 或节点 Agent。
+
+逐项选择、默认值、故障处理：
+https://github.com/shini74744/DBoard/blob/main/docs/installation-choices.md
+完整系统安装：
+https://github.com/shini74744/DBoard/blob/main/docs/installation.md
+EOF
+}
+
+show_plan() {
+  info "安装模式: $MODE；持久数据目录: $DATA_DIR"
+  if is_installed; then
+    info "已识别 INSTALLED 标记：更新现有面板，保留管理员与业务数据。"
+    warn "更新前完成备份；模式切换会停止原服务。脚本不提供完整自动回滚。"
+  else
+    info "未识别到已安装标记：将进入新装初始化。"
+    warn "若这里原有业务，请先核对 --data-dir 和 .env；不要以清空数据库解决问题。"
+  fi
+  if [[ "$DB_MODE" == "sqlite" ]]; then
+    info "数据库默认 SQLite，不会出现数据库类型选择；需自选数据库请用 --database interactive。"
+  else
+    info "将进入数据库选择；MySQL/PostgreSQL 须已准备好服务、账号与 PHP 驱动。"
+  fi
+  info "Redis 使用安装器预设；外部 Redis 请按手工部署指南配置。"
+}
+
+next_steps() {
+  cat <<'EOF'
+
+面板本机安装步骤已完成，接下来：
+  1. 保存管理员凭据和实际后台路径，配置 HTTPS 反向代理并登录。
+  2. 部署独立用户端，核对直连 API 或 DUI 配置。
+  3. 需要整合探针时，继续部署 Dashboard、下载文件与 Connector。
+  4. 安装第一台 Agent，确认监控、节点通道及实际代理业务。
+  5. 配置备份与证书续期。
+本机 HTTP 成功不等于整套系统已验收。
+逐步指南：https://github.com/shini74744/DBoard/blob/main/docs/installation.md
+EOF
+}
+
+installation_failed() {
+  local code="$1" line="$2"
+  trap - ERR
+  warn "阶段 [$CURRENT_STAGE] 失败，退出码 $code，脚本行 $line。"
+  warn "请保留并脱敏上方错误；先查服务/端口/数据目录，不要清空 .env 或业务数据库。"
+  warn "中途可能已停服务或切换 current；恢复步骤见 docs/operations.md。"
+  exit "$code"
+}
+
 usage() {
   cat <<'EOF'
 DBoard 安装器
@@ -45,13 +114,15 @@ DBoard 安装器
   --no-gateway
   --gateway-backend URL
   --gateway-port PORT
-  --yes
+  --yes                         采用确认项默认值；新装需 --admin
+  --guide                       只读安装选择引导，无需 root
   -h, --help
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --guide) installation_guide; exit 0 ;;
     --mode) MODE="$2"; shift 2 ;;
     --data-dir) DATA_DIR="$2"; shift 2 ;;
     --admin) ADMIN_ACCOUNT="$2"; shift 2 ;;
@@ -97,15 +168,17 @@ select_mode() {
 
 DBoard 安装管理
 ────────────────────────────
-1. 安装/更新 独立版
-2. 安装/更新 Docker 版
-3. 仅安装 DUI-Gateway
-4. 查看 DBoard 状态
+1. 安装/更新 独立版（完整探针对接推荐；Ubuntu/Debian + systemd）
+2. 安装/更新 Docker 版（面板容器；需确认反代与 Connector 网络）
+3. 仅安装 DUI-Gateway（首次安装/重配；已有网关升级请用 upgrade）
+4. 查看 DBoard 状态（只读，不代表探针/业务验收）
 0. 退出
 ────────────────────────────
 EOF
   local choice
-  read -r -p "请选择: " choice
+  info "默认新装使用 SQLite；选其它数据库请 Ctrl+C 后加 --database interactive 重启。"
+  info "已有业务先备份，模式切换会停止原服务；完整系统还需部署用户端与探针。"
+  read -r -p "请选择 [0-4]: " choice
   case "$choice" in
     1) MODE="native" ;;
     2) MODE="docker" ;;
@@ -568,17 +641,21 @@ quiesce_native_apps() {
 }
 
 install_native() {
+  stage "独立版 1/6：数据目录与部署模式"
   detect_os
+  show_plan
   init_shared
 
   local installed_before="no"
   is_installed && installed_before="yes"
 
   stop_docker_if_needed
+  stage "独立版 2/6：安装 PHP、Swoole、Redis 依赖"
   apt_install_native_deps
   install_swoole
   install_redis_runtime
 
+  stage "独立版 3/6：暂停旧应用并准备发布目录"
   quiesce_native_apps
 
   local app
@@ -591,12 +668,15 @@ install_native() {
   systemctl enable --now dboard-redis.service
 
   [[ "$installed_before" == "yes" ]] && configure_native_env
+  stage "独立版 4/6：初始化或更新数据库"
   native_initialize_or_update "$installed_before"
 
+  stage "独立版 5/6：启动服务与本机 HTTP 检查"
   systemctl enable --now     dboard-octane.service     dboard-horizon.service     dboard-ws.service     dboard-scheduler.service
 
   wait_http "http://127.0.0.1:7001/api/v1/guest/comm/config"
   info "独立版安装/更新完成。"
+  stage "独立版 6/6：准备 HTTPS 与后续组件"
   print_native_proxy_hint
 }
 install_basic_tools() {
@@ -688,7 +768,9 @@ print_docker_proxy_hint() {
   cat <<'EOF'
 
 Docker 版默认入口：
-  HTTP + WebSocket: 127.0.0.1:7001
+  本机 HTTP + WebSocket 检查地址: 127.0.0.1:7001
+  默认 Compose 为 7001:7001，实际向宿主机全部接口发布。
+  仅宿主反代时可改为 127.0.0.1:7001:7001；下次安装器会重写 Compose。
 
 容器内 Caddy 已自动分流 /ws。
 生产环境建议由宿主机 Nginx/OpenResty/Caddy 提供 HTTPS，
@@ -697,26 +779,36 @@ EOF
 }
 
 install_docker() {
+  stage "Docker 1/5：数据目录与部署模式"
+  show_plan
   init_shared
   local installed_before="no"
   is_installed && installed_before="yes"
 
   stop_native_if_needed
+  stage "Docker 2/5：检查 Docker Engine 与 Compose"
   ensure_docker
+  stage "Docker 3/5：默认 Compose 与镜像"
+  warn "此步骤会重写 /opt/dboard/docker/compose.yaml 和 .env；请先保留定制配置。"
   prepare_docker_compose
   ensure_docker_image
   [[ "$installed_before" == "yes" ]] && configure_docker_env
+  stage "Docker 4/5：初始化或复用现有数据"
   docker_initialize "$installed_before"
 
   cd "$DOCKER_DIR"
+  stage "Docker 5/5：启动容器与本机 HTTP 检查"
   docker compose up -d
 
   wait_http "http://127.0.0.1:7001/api/v1/guest/comm/config"
   info "Docker 版安装/更新完成。"
+  warn "请继续检查 docker compose logs 与 migrate:status；容器启动不保证迁移成功。"
   info "Compose 文件: $DOCKER_DIR/compose.yaml"
   print_docker_proxy_hint
 }
 install_gateway() {
+  stage "DUI 1/3：确认网关后端与配置范围"
+  warn "此入口执行 install，会重写 gateway.env 并生成 AES key；已有网关普通升级请使用 gateway/install.sh upgrade。"
   local backend="$GATEWAY_BACKEND"
 
   if [[ -z "$backend" ]]; then
@@ -730,16 +822,19 @@ install_gateway() {
   [[ "$GATEWAY_PORT" =~ ^[0-9]+$ ]] ||
     die "Gateway 端口无效: $GATEWAY_PORT"
 
+  stage "DUI 2/3：下载并运行网关安装器"
   local script="/tmp/dui-gateway-install-$$.sh"
   info "安装 DUI-Gateway..."
   curl -fsSL "$RAW_BASE/gateway/install.sh" -o "$script"
   bash "$script" install     --backend "$backend"     --port "$GATEWAY_PORT"
   rm -f "$script"
 
+  stage "DUI 3/3：HTTPS 与前端配置"
   cat <<EOF
 
 DUI-Gateway 已安装。
-本地监听端口: $GATEWAY_PORT
+默认监听所有 IPv4 接口，端口: $GATEWAY_PORT
+请限制公网直连；将安装输出的 AES key 配套填写到用户端。
 请使用 HTTPS 域名反向代理到 127.0.0.1:$GATEWAY_PORT。
 EOF
 }
@@ -754,7 +849,8 @@ maybe_install_gateway() {
     return
   fi
 
-  if confirm "是否同时安装 DUI-Gateway 中间加密层？" no; then
+  info "DUI 是可选用户 API 层；已有正常网关选 N，普通升级使用 gateway/install.sh upgrade。"
+  if confirm "是否首次安装或重新配置 DUI-Gateway（会写入配置/AES key）？" no; then
     install_gateway
   fi
 }
@@ -812,16 +908,19 @@ show_status() {
   fi
 }
 
+trap 'installation_failed "$?" "$LINENO"' ERR
 select_mode
 
 case "$MODE" in
   native)
     install_native
     maybe_install_gateway
+    next_steps
     ;;
   docker)
     install_docker
     maybe_install_gateway
+    next_steps
     ;;
   gateway)
     install_gateway

@@ -1,17 +1,17 @@
 # 从零安装：面板、用户端、DUI 与整合探针
 
-本文以 **Ubuntu 24.04 + systemd + 独立版面板 + 同机 Connector** 为完整操作路径，适用于 2026-09-25 main 源码。命令中的 example.com、邮箱和文件来源均须换成自己的配置。
+本文以 **Ubuntu 24.04 + systemd + 独立版面板 + 同机 Connector** 为完整操作路径，核对至 2026-09-27 main / e06a583 及本次安装提示。命令中的 example.com、邮箱和文件来源均须换成自己的配置。
 
-[用户使用](user-guide.md) · [后台流程](admin-workflows.md) · [升级备份](operations.md)
+[安装每一步怎么选](installation-choices.md) · [Docker 各种方式](docker-installation.md) · [用户使用](user-guide.md) · [后台流程](admin-workflows.md) · [升级备份](operations.md)
 
 ## 0. 先分清版本与安装范围
 
 | 项目 | 本文基线 |
 | --- | --- |
-| 面板与探针后台 | main 已包含 fe5079e 的后台入口限制、删除/排序同步、显示 ID |
+| 面板与探针后台 | 包含后台入口限制、删除/排序同步、显示 ID；面板还含 TG 套餐筛选与手机创建用户修复 |
 | 已发布整合 Agent | v0.2.1 |
 | v0.2.1 Release 中的 probe-dashboard | 早于上述后台入口等修复；需要从当前源码构建新版后台 |
-| 本次文档更新 | 不自动重新发布 Release 二进制 |
+| 本次文档更新 | 不自动重新发布 Release 二进制；面板镜像由 Actions 另行构建，需检查完成状态 |
 | 根目录 install.sh | 安装/更新面板，可选安装 DUI；不会自动部署整合探针全部组件 |
 | probe/install-agent.sh | 安装节点机器上的整合 Agent，不是面板或监控后台安装器 |
 
@@ -48,14 +48,14 @@
 
 ## 2. 安装独立版面板
 
-在面板服务器：
+在面板服务器以 root 执行（普通 sudo 用户先 sudo -i）。Ubuntu/Debian 缺少 curl 时先安装 ca-certificates、curl；已有业务先备份并核对原数据目录。
 
 ~~~bash
 curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/install.sh -o /root/dboard-install.sh
 bash /root/dboard-install.sh
 ~~~
 
-选择「安装/更新 独立版」，按向导配置数据库与管理员账号。默认路径使用 SQLite + Redis，数据保存在 /opt/dboard/shared。
+选择「安装/更新 独立版」。默认直接使用 SQLite + 本机 Redis，按提示填写管理员邮箱；数据库类型不会再次询问。需要 MySQL/PostgreSQL 时，用 --database interactive 启动并预先准备服务、账号和驱动。数据保存在 /opt/dboard/shared；完整问题表见[逐项安装引导](installation-choices.md)。
 
 也可明确指定：
 
@@ -109,6 +109,8 @@ location / {
 curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/gateway/install.sh -o /root/dui-install.sh
 bash /root/dui-install.sh install --backend 'https://panel.example.com'
 ~~~
+
+以上是首次安装命令，会重写 gateway.env 并生成 AES key；已有 DUI 只升级程序时改用 bash /root/dui-install.sh upgrade。
 
 同机时 backend 可使用 http://127.0.0.1:7001。保存安装器生成的 AES key，在 api.example.com 配置 TLS 并反代到 3939。详细配置见 [gateway/README.md](../gateway/README.md)。
 
@@ -182,9 +184,22 @@ location / {
 
 ## 5. 构建当前探针服务端
 
+若跳过了第 4 步的独立用户端，仍需先取得 /opt/dboard-source 源码；根安装器的临时 clone 不会保留这份目录。执行 git clone --depth 1 https://github.com/shini74744/DBoard.git /opt/dboard-source，并记录 git rev-parse HEAD；已有源码目录先核对版本，不重复覆盖。
+
 以下在 Linux 构建机运行。探针后台依赖 Go 1.26.6（以 go.mod 为准）、C 编译工具、Python 3，以及下载 Go 依赖和固定前端资源的网络。
 
 在与探针服务器相同架构的 Linux 环境构建服务端；Dashboard 使用 SQLite CGO，跨架构不能仅替换 GOARCH 就假定可运行。
+
+Ubuntu 24.04 构建机先准备工具（已有匹配 Go 时可保留现有工具链）：
+
+~~~bash
+apt-get update
+apt-get install -y ca-certificates curl git build-essential pkg-config python3 golang-go
+cd /opt/dboard-source/probe/dashboard
+GOTOOLCHAIN=auto go version
+~~~
+
+Ubuntu 24.04 的 Go 可作为引导工具链，GOTOOLCHAIN=auto 会按模块需要取得新版；输出应满足 go.mod 的 1.26.6 要求。若当前系统 Go 早于 1.21 或自动下载失败，按 [Go 工具链说明](https://go.dev/doc/toolchain)先准备匹配版本再继续。不要用旧 Go 忽略编译报错。下方构建沿用默认 auto；若机器此前设置过 GOTOOLCHAIN=local，先在本次 shell 执行 export GOTOOLCHAIN=auto。
 
 ~~~bash
 cd /opt/dboard-source
@@ -282,6 +297,8 @@ systemctl is-active nezha-dashboard
 
 使用 Cloudflare 橙云时，域名必须启用 gRPC，入口为 TLS 443 且支持 HTTP/2/ALPN，SSL 模式至少 Full，建议有效源站证书配合 Full (strict)。WebSocket 也要可用。参考 [Cloudflare gRPC](https://developers.cloudflare.com/network/grpc-connections/) 和 [WebSockets](https://developers.cloudflare.com/network/websockets/) 官方要求。
 
+Cloudflare 橙云不等于 Cloudflare Tunnel：官方当前不支持通过 Tunnel 公共 hostname 转发 gRPC，不能用此路径替代这里的源站 443 方案；详见上面的 gRPC 官方说明。
+
 证书续期要同时保证源站有效、复制到正确位置并重载实际 Web 服务。不要以浏览器能打开首页代替 gRPC 和节点通道验收。
 
 ## 9. 在探针准备 Agent 下载文件
@@ -359,7 +376,7 @@ Connector 配置包含控制密钥和面板连接密钥，不上传仓库。确�
 
 ## 12. Docker 版的范围
 
-只安装面板可选择根安装器的 Docker 菜单，或参考 [README](../README.md) 和 Compose 示例。拉取的镜像必须包含所需代码；main 已更新不代表旧缓存镜像已经更新。
+从第一个命令开始的自动 Docker、手工 bridge、1Panel、host 和拆分方案见 [Docker 分方式安装](docker-installation.md)。根安装器只自动采用默认 Compose，不会选择高级子类型。拉取的镜像必须包含所需代码；main 已更新不代表旧缓存镜像已经更新。
 
 完整探针对接要求面板实际收到的 REMOTE_ADDR 为 127.0.0.1 或 ::1。普通 Docker bridge 的宿主端口映射可能让面板看到桥接地址，Connector 即使填写 127.0.0.1 也不一定满足条件。
 

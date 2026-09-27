@@ -68,7 +68,7 @@ curl -fsSL https://raw.githubusercontent.com/shini74744/DBoard/main/gateway/inst
   --backend 'https://backend.example.com'
 ```
 
-安装器会自动生成 16 字符 AES key，并在安装完成后显示一次。
+安装器会自动生成 16 字符 AES key，并在安装完成后显示一次。该 install 命令用于首次安装或明确重配，会重写 gateway.env；已有网关普通升级使用 `bash /root/dui-install.sh upgrade`（先下载同一脚本到该路径），保留原 AES key、来源限制与后端配置。逐项选择见[安装引导](../docs/installation-choices.md)。
 
 指定 key：
 
@@ -127,6 +127,7 @@ TLS 由 Nginx / 宝塔负责。
 Axios 示例：
 
 ```js
+import axios from 'axios';
 import { createAxiosGatewayInterceptor } from './dui-gateway.js';
 
 axios.interceptors.request.use(
@@ -141,10 +142,13 @@ axios.interceptors.request.use(
 如果前端本身已经支持 JC/EZ 这种 Middleware 配置，可以直接使用：
 
 ```js
-API_MIDDLEWARE_ENABLED: true,
-API_MIDDLEWARE_URL: 'https://gateway.example.com',
-API_MIDDLEWARE_KEY: '0123456789abcdef',
-API_MIDDLEWARE_PATH: '/dui/gw',
+window.EZ_CONFIG = {
+  ...(window.EZ_CONFIG || {}),
+  API_MIDDLEWARE_ENABLED: true,
+  API_MIDDLEWARE_URL: 'https://gateway.example.com',
+  API_MIDDLEWARE_KEY: 'REPLACE_WITH_YOUR_GATEWAY_AES_KEY',
+  API_MIDDLEWARE_PATH: '/dui/gw'
+};
 ```
 
 DUI-Gateway 的加密 URL 格式与这一模式兼容。

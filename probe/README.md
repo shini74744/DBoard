@@ -4,13 +4,14 @@
 
 ## 文档入口
 
+- [每步安装选项与提醒](../docs/installation-choices.md)。
 - [一步一步安装](../docs/installation.md)：从面板到用户端、DUI、监控后台、Connector、第一台 Agent。
 - [后台处理流程](../docs/admin-workflows.md)：创建/删除/排序、授权入口、节点配置、流量与订单。
 - [升级与运维](../docs/operations.md)：版本、接管、域名迁移、备份和故障恢复。
 - [实现与验收记录](IMPLEMENTATION.md)。
 - [用户端使用流程](../docs/user-guide.md)。
 
-## 当前版本边界（2026-09-25）
+## 当前版本边界（2026-09-27 核对）
 
 main 已包含服务器删除同步、排序同步、显示 ID，以及只能从 DBoard 管理员入口授权进入探针后台的修改，功能基线为 fe5079e。
 
