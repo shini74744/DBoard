@@ -132,6 +132,10 @@ class OrderController extends Controller
         if (!$order) {
             return $this->fail([400, __('Order does not exist or has been paid')]);
         }
+        if ($order->paymentExpired()) {
+            (new OrderService($order))->cancel(onlyExpired: true);
+            return $this->fail([400, '订单已超时，预留名额已释放，请重新下单。']);
+        }
         if ($order->total_amount < 0) {
             return $this->fail([400, __('Order amount is invalid')]);
         }

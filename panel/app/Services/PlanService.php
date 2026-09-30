@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Plan;
+use App\Models\Order;
+use Illuminate\Support\Facades\DB;
 use App\Models\User;
 use App\Exceptions\ApiException;
 use Illuminate\Database\Eloquent\Collection;
@@ -60,7 +62,7 @@ class PlanService
     {
         // 如果是续费
         if ($user->plan_id === $plan->id) {
-            return $plan->renew;
+            return $plan->renew && ($this->occupiesCapacity($user, $plan) || $this->hasCapacity($plan));
         }
 
         // 如果是新购
@@ -86,7 +88,7 @@ class PlanService
             return;
         }
 
-        if ($user->plan_id !== $this->plan->id && !$this->hasCapacity($this->plan)) {
+        if (!$this->occupiesCapacity($user, $this->plan) && !$this->hasCapacity($this->plan)) {
             throw new ApiException(__('Current product is sold out'));
         }
 
@@ -163,7 +165,57 @@ class PlanService
         }
     }
 
-    /** Remaining subscription slots, using the same expiry rule as purchase admission. */
+    /** Call at the start of a transaction, before reading stock or account data. */
+    public static function lockCapacity(int $planId): ?Plan
+    {
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            // SQLite ignores FOR UPDATE. Acquire its writer lock before any
+            // snapshot reads, otherwise two buyers can both see the last slot.
+            DB::table('v2_plan')->where('id', $planId)
+                ->update(['capacity_limit' => DB::raw('capacity_limit')]);
+        }
+        return Plan::whereKey($planId)->lockForUpdate()->first();
+    }
+
+    private function occupiesCapacity(User $user, Plan $plan): bool
+    {
+        return (int) $user->plan_id === (int) $plan->id
+            && ($user->expired_at === null || $user->expired_at >= time());
+    }
+
+    /**
+     * Reservations are derived from orders, so cancellation cannot refund a slot
+     * twice. Expired pending orders stop occupying stock even if a worker is late.
+     * Processing orders retain their slot until activation commits.
+     */
+    public static function reservedCapacity(Plan $plan): int
+    {
+        return Order::where('plan_id', $plan->id)
+            ->whereNotIn('period', [Plan::PERIOD_RESET_TRAFFIC, 'reset_price'])
+            ->where(function ($query) {
+                $query->where('status', Order::STATUS_PROCESSING)
+                    ->orWhere(fn ($pending) => $pending->where('status', Order::STATUS_PENDING)
+                        ->where('created_at', '>', time() - Order::PAYMENT_TIMEOUT_SECONDS));
+            })
+            ->where(function ($query) {
+                $query->whereIn('type', [
+                    Order::TYPE_NEW_PURCHASE, Order::TYPE_ADDITIONAL, Order::TYPE_UPGRADE,
+                ])->orWhere(function ($renewal) {
+                    // If an existing package expires before renewal is paid,
+                    // its occupied slot becomes the renewal order's reservation.
+                    $renewal->where('type', Order::TYPE_RENEWAL)
+                        ->whereNotExists(function ($user) {
+                            $user->selectRaw('1')->from('v2_user as capacity_user')
+                                ->whereRaw('capacity_user.id = COALESCE(v2_order.subscription_user_id, v2_order.user_id)')
+                                ->whereColumn('capacity_user.plan_id', 'v2_order.plan_id')
+                                ->where(fn ($expiry) => $expiry->whereNull('capacity_user.expired_at')
+                                    ->orWhere('capacity_user.expired_at', '>=', time()));
+                        });
+                });
+            })->count();
+    }
+
+    /** Available slots = configured capacity - active packages - reservations. */
     public static function remainingCapacity(Plan $plan): ?int
     {
         if ($plan->capacity_limit === null) return null;
@@ -171,7 +223,7 @@ class PlanService
         if ($used === null) {
             $used = $plan->users()->where(fn ($q) => $q->where('expired_at', '>=', time())->orWhereNull('expired_at'))->count();
         }
-        return max(0, (int) $plan->capacity_limit - (int) $used);
+        return max(0, (int) $plan->capacity_limit - (int) $used - self::reservedCapacity($plan));
     }
 
     public function hasCapacity(Plan $plan): bool

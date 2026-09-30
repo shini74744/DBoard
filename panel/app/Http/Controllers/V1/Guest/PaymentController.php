@@ -37,10 +37,13 @@ class PaymentController extends Controller
     {
         $order = Order::where('trade_no', $tradeNo)->first();
         if (!$order) {
-            return $this->fail([400202, 'order is not found']);
+            return false;
         }
-        if ($order->status !== Order::STATUS_PENDING)
-            return true;
+        if (in_array((int) $order->status, [
+            Order::STATUS_PROCESSING, Order::STATUS_COMPLETED, Order::STATUS_DISCOUNTED,
+        ], true)) return true;
+        // Cancelled/expired orders must not silently acknowledge a late payment.
+        // paid() rejects them and leaves a reconciliation error in the log.
         $orderService = new OrderService($order);
         if (!$orderService->paid($callbackNo)) {
             return false;

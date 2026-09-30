@@ -343,17 +343,17 @@
 
               class="btn-purchase glassmorphism"
 
-              :class="{ 'btn-disabled': plan.capacity_limit === 0 || !getDisplayPriceType(plan) }"
+              :class="{ 'btn-disabled': isPlanSoldOut(plan) || !getDisplayPriceType(plan) }"
 
               @click="purchasePlan(plan)"
 
-              :disabled="plan.capacity_limit === 0 || !getDisplayPriceType(plan)"
+              :disabled="isPlanSoldOut(plan) || !getDisplayPriceType(plan)"
 
             >
 
               <IconShoppingCart class="btn-icon" />
 
-              <span class="btn-text">{{ plan.capacity_limit === 0 ? $t('shop.plan.sold_out_btn') : $t('shop.plan.purchase') }}</span>
+              <span class="btn-text">{{ isPlanSoldOut(plan) ? $t('shop.plan.sold_out_btn') : $t('shop.plan.purchase') }}</span>
 
             </button>
 
@@ -806,6 +806,7 @@ export default {
 
 
 
+    const isPlanSoldOut = plan => getPlanStock(plan).count === 0;
     const getStockBadgeClass = plan => getPlanStock(plan, SHOP_CONFIG.lowStockThreshold).className;
     const getPlanStockText = plan => {
       const stock = getPlanStock(plan, SHOP_CONFIG.lowStockThreshold);
@@ -955,7 +956,7 @@ export default {
 
     const purchasePlan = (plan) => {
 
-      if (plan.capacity_limit === 0) {
+      if (isPlanSoldOut(plan)) {
 
         showToast(t('shop.plan.stock.sold_out'), 'error');
 
@@ -1141,6 +1142,7 @@ export default {
 
 
     return {
+      isPlanSoldOut,
       getStockBadgeClass,
       getPlanStockText,
 

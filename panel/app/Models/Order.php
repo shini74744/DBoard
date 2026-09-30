@@ -60,6 +60,14 @@ class Order extends Model
         'custom_expired_at' => 'integer'
     ];
 
+    // A pending order reserves stock for two hours from creation.
+    const PAYMENT_TIMEOUT_SECONDS = 7200;
+
+    public function paymentExpired(): bool
+    {
+        return (int) $this->created_at <= time() - self::PAYMENT_TIMEOUT_SECONDS;
+    }
+
     const STATUS_PENDING = 0; // 待支付
     const STATUS_PROCESSING = 1; // 开通中
     const STATUS_CANCELLED = 2; // 已取消

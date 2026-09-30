@@ -35,6 +35,8 @@ class OrderService
 
     private function lockCurrentOrder(): ?Order
     {
+        // Use the same lock order as checkout: plan, order, account/package.
+        PlanService::lockCapacity((int) $this->order->plan_id);
         return Order::whereKey($this->order->id)
             ->lockForUpdate()
             ->first();
@@ -42,6 +44,7 @@ class OrderService
 
     private function lockCurrentOrderWhenStatus(int $status): ?Order
     {
+        PlanService::lockCapacity((int) $this->order->plan_id);
         return Order::whereKey($this->order->id)
             ->where('status', $status)
             ->lockForUpdate()
@@ -99,6 +102,9 @@ class OrderService
         HookManager::call('order.create.before', [$user, $plan, $period, $couponCode]);
 
         return DB::transaction(function () use ($user, $plan, $period, $couponCode, $userService, $subscriptionAction, $subscriptionUserId, $purchaseSource) {
+            // Serialize buyers of the same plan before counting available slots.
+            $plan = PlanService::lockCapacity((int) $plan->id);
+            if (!$plan) throw new ApiException('订阅不存在');
             $user = User::lockForUpdate()->find($user->id);
             if (!$user) {
                 throw new ApiException(__('The user does not exist'));
@@ -110,7 +116,6 @@ class OrderService
 
             // Resolve the quote again under the account/package locks. An admin
             // may have changed a negotiated price while checkout was opening.
-            $plan=Plan::findOrFail($plan->id);
             $pricingUser=$subscriptionAction==='add' ? new User(['plan_id'=>null]) : $user;
             if ($subscriptionAction==='renew') {
                 $pricingUser=User::lockForUpdate()->findOrFail($subscriptionUserId);
@@ -159,7 +164,7 @@ class OrderService
             HookManager::call('order.after_create', $order);
 
             return $order;
-        });
+        }, 5);
     }
 
     public function open(): void
@@ -265,7 +270,7 @@ class OrderService
                 SubscriptionActivityService::record($account,$this->user,$action,$activityBefore,$order->admin_actor_id,$order);
             }
             return $order;
-        });
+        }, 5);
 
         if (!$openedOrder) {
             return;
@@ -452,8 +457,16 @@ class OrderService
                 if (!$order) {
                     throw new \RuntimeException('Order not found.');
                 }
+                if ((int) $order->status === Order::STATUS_CANCELLED) {
+                    throw new \RuntimeException('订单已取消；如已扣款，请核对支付流水并处理退款。');
+                }
                 if ((int) $order->status !== Order::STATUS_PENDING) {
                     return [$order, false];
+                }
+                if ($order->paymentExpired()) {
+                    // Its reservation has already expired. Never reopen it and
+                    // consume a slot now reserved by another buyer.
+                    throw new \RuntimeException('订单支付已超时；如已扣款，请核对支付流水并处理退款。');
                 }
 
                 $order->status = Order::STATUS_PROCESSING;
@@ -465,7 +478,7 @@ class OrderService
                 }
 
                 return [$order, true];
-            });
+            }, 5);
 
             $this->order = $order;
 
@@ -479,12 +492,16 @@ class OrderService
         return true;
     }
 
-    public function cancel(): bool
+    public function cancel(bool $onlyExpired = false): bool
     {
         try {
-            $cancelledOrder = DB::transaction(function () {
+            $cancelledOrder = DB::transaction(function () use ($onlyExpired) {
                 $order = $this->lockCurrentOrderWhenStatus(Order::STATUS_PENDING);
                 if (!$order) {
+                    return null;
+                }
+
+                if ($onlyExpired && !$order->paymentExpired()) {
                     return null;
                 }
 
@@ -502,7 +519,7 @@ class OrderService
                 }
 
                 return $order;
-            });
+            }, 5);
 
             if (!$cancelledOrder) {
                 return false;
